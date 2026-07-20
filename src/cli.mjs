@@ -79,7 +79,7 @@ async function cmdScreenshots(flags) {
   }
   console.log(`zdymak screenshots • ${cfg.devices.length} device group(s)`);
   for (const device of cfg.devices) {
-    const written = await buildDeviceScreenshots({ device, brand: cfg.brand, theme: device.theme ?? cfg.theme, outDir });
+    const written = await buildDeviceScreenshots({ device, brand: cfg.brand, theme: device.theme ?? cfg.stillTheme ?? cfg.theme, outDir });
     console.log(`  • ${device.name}: ${written.length} shot(s)${written[0] ? ` (${written[0].W}×${written[0].H}…)` : ' — no captures found, skipped'}`);
   }
   console.log('Done.');
@@ -103,7 +103,7 @@ async function cmdBuild(flags) {
       }
     }
     if (device.screenshots.length) {
-      const written = await buildDeviceScreenshots({ device, brand: cfg.brand, theme: device.theme ?? cfg.theme, outDir });
+      const written = await buildDeviceScreenshots({ device, brand: cfg.brand, theme: device.theme ?? cfg.stillTheme ?? cfg.theme, outDir });
       console.log(`  • ${device.name} screenshots: ${written.length}${written.length ? '' : ' — no captures found, skipped'}`);
     }
   }

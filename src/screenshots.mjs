@@ -27,8 +27,10 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir }) {
     const spec = IMAGE_TARGETS[shot.target];
     if (!spec) throw new Error(`Unknown image target "${shot.target}" (device: ${device.name})`);
     const [W, H] = targetSize(spec, shot.size);
-    const style = shot.style || 'premium';
     const frame = shot.frame || inferFrame(shot.target); // device bezel for the `framed` style
+    // Infer the style from the target: a framed device (phone/tablet/watch) → 'framed'; a frameless
+    // target (Mac/desktop) → 'premium' (window on the matte). Overridable per shot (e.g. Watch → 'bleed').
+    const style = shot.style || (frame ? 'framed' : 'premium');
 
     // Feature graphic (Play banner) is a single branded image, not a per-scene shot.
     if (spec.graphic) {

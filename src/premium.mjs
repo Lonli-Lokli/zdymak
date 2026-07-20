@@ -45,6 +45,8 @@ const DEFAULT_THEME = {
   cutHard: 0.05, // dissolve seconds when adjacent screens share a palette (≈ hard cut)
   cutSoft: 0.24, // dissolve seconds at a palette shift
   cutThreshold: 42, // RGB-distance above which a boundary counts as a palette shift
+  captionAnchor: 'bottom', // 'top' places the caption above the device (the bright store-shot layout)
+  fit: 'cover', // screenLayer image fit: 'cover' (fill + crop) | 'contain' (whole capture, matte margins)
 };
 
 /** Average RGB of a canvas (coarse grid sample) — used to decide hard-cut vs dissolve. */
@@ -110,8 +112,10 @@ function drawLabel(ctx, W, H, caption, th, alpha) {
   const titleSize = Math.round(Math.min(W, H * 0.9) * 0.05);
   const subSize = Math.round(Math.min(W, H * 0.9) * 0.033);
   const cx = W / 2;
-  // Anchor higher on wide (landscape) aspects so the pill + subtitle clear the app's own bottom UI.
-  let y = (W > H ? 0.7 : 0.82) * H;
+  // Bottom by default (anchored higher on wide/landscape so the pill clears the app's own bottom UI);
+  // captionAnchor:'top' puts it above the device — the bright store-shot layout.
+  const topCaption = th.captionAnchor === 'top';
+  let y = topCaption ? H * 0.085 : (W > H ? 0.7 : 0.82) * H;
 
   if (caption.title && th.label) {
     ctx.font = font(titleSize, 'bold');
@@ -167,12 +171,29 @@ export function resolvePremiumTheme(brand, theme) {
   return th;
 }
 
-/** The floating, inset, rounded, shadowed app-screen layer on its own transparent canvas. */
+/** The floating, inset, rounded, shadowed app-screen layer on its own transparent canvas.
+ *  fit 'cover' fills the inset box (crops overflow); fit 'contain' shows the WHOLE capture — the card
+ *  shrinks to the capture's aspect and floats with matte margins (correct for a Mac window on the matte,
+ *  where a cover-crop would slice off the title bar / traffic lights). */
 function screenLayer(W, H, img, th) {
-  const insetW = Math.round(W * th.inset);
-  const insetH = Math.round(H * th.inset);
-  const insetX = Math.round((W - insetW) / 2);
-  const insetY = Math.round((H - insetH) / 2);
+  // Reserve headroom for a top caption so the window floats BELOW it (else it covers the headline).
+  const topCaption = th.captionAnchor === 'top';
+  const bandTop = topCaption ? H * 0.18 : 0;
+  const bandH = (topCaption ? 0.8 : 1) * H;
+  const boxW = Math.round(W * th.inset);
+  const boxH = Math.round(bandH * th.inset);
+  const ia = img.height / img.width;
+  let dw = boxW;
+  let dh = boxH;
+  if (th.fit === 'contain') {
+    dh = boxW * ia; // fit width, then clamp height so the whole capture fits the box
+    if (dh > boxH) {
+      dh = boxH;
+      dw = boxH / ia;
+    }
+  }
+  const dx = Math.round((W - dw) / 2);
+  const dy = Math.round(bandTop + (bandH - dh) / 2);
   const radius = Math.round(W * th.radius);
   const layer = createCanvas(W, H);
   const lctx = layer.getContext('2d');
@@ -180,14 +201,15 @@ function screenLayer(W, H, img, th) {
   lctx.shadowColor = `rgba(0,0,0,${th.shadow})`;
   lctx.shadowBlur = Math.round(W * 0.05);
   lctx.shadowOffsetY = Math.round(W * 0.012);
-  roundRectPath(lctx, insetX, insetY, insetW, insetH, radius);
+  roundRectPath(lctx, dx, dy, dw, dh, radius);
   lctx.fillStyle = '#000';
   lctx.fill();
   lctx.restore();
   lctx.save();
-  roundRectPath(lctx, insetX, insetY, insetW, insetH, radius);
+  roundRectPath(lctx, dx, dy, dw, dh, radius);
   lctx.clip();
-  lctx.drawImage(coverCanvas(img, insetW, insetH), insetX, insetY);
+  // The card now matches the draw aspect, so cover here fills it exactly (no crop for 'contain').
+  lctx.drawImage(coverCanvas(img, dw, dh), dx, dy);
   lctx.restore();
   return layer;
 }
@@ -196,17 +218,22 @@ function screenLayer(W, H, img, th) {
  *  drawn inside a device bezel floating on the matte; otherwise it's the plain rounded inset. */
 export function premiumStill({ W, H, img, caption, brand, theme, frame }) {
   const th = resolvePremiumTheme(brand, theme);
+  // Store-shot smart defaults (each overridable via `theme`): headline sits ON TOP; a frameless window
+  // (e.g. Mac) shows the WHOLE capture instead of cropping its title bar.
+  if (theme?.captionAnchor === undefined) th.captionAnchor = 'top';
+  if (!frame && theme?.fit === undefined) th.fit = 'contain';
   const c = createCanvas(W, H);
   const ctx = c.getContext('2d');
   paintMatte(ctx, W, H, th);
 
+  const topCaption = th.captionAnchor === 'top';
   const drawFrame = frame ? frameFor(frame) : null;
   if (drawFrame) {
-    const cy = H * 0.42; // sit high so the framed body clears the bottom label
+    const cy = H * (topCaption ? 0.57 : 0.42); // drop the device when the caption sits on top
     if (frame === 'watch') {
       drawFrame(ctx, img, W / 2, cy, Math.min(W, H) * 0.6);
     } else {
-      const budgetH = H * 0.64; // vertical room for the device body
+      const budgetH = H * (topCaption ? 0.66 : 0.64); // vertical room for the device body
       const screenW = Math.min(budgetH / (img.height / img.width), W * 0.8);
       drawFrame(ctx, img, W / 2, cy, screenW);
     }

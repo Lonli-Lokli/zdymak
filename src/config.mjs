@@ -88,7 +88,8 @@ export async function loadConfig(configPath) {
     sceneDur: raw.sceneDur ?? 3.1,
     xfade: raw.xfade ?? 0.32,
     timing: raw.timing, // reel-mode timeline override { coldOpen, scene, endCard, xfade }
-    theme: raw.theme, // premium-technique styling override (matte, vignette, label, cuts) — defaults apply
+    theme: raw.theme, // premium-technique styling override for VIDEOS (matte, vignette, label, cuts)
+    stillTheme: raw.stillTheme, // screenshot-only matte override; falls back to `theme` when unset
     out: path.resolve(baseDir, raw.out || 'store-assets'),
     baseDir,
   };
