@@ -9,6 +9,7 @@ import path from 'node:path';
 import { renderStill } from './still.mjs';
 import { rgbPngBuffer } from './png.mjs';
 import { IMAGE_TARGETS } from './specs.mjs';
+import { inferFrame } from './frames.mjs';
 
 /** Resolve a concrete [w,h] for a screenshot target: explicit override → spec w/h → first accepted size. */
 export function targetSize(spec, override) {
@@ -26,6 +27,7 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir }) {
     if (!spec) throw new Error(`Unknown image target "${shot.target}" (device: ${device.name})`);
     const [W, H] = targetSize(spec, shot.size);
     const style = shot.style || 'premium';
+    const frame = shot.frame || inferFrame(shot.target); // device bezel for the `framed` style
     const dir = path.join(outDir, shot.target);
     fs.mkdirSync(dir, { recursive: true });
 
@@ -39,6 +41,7 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir }) {
         caption: { title: scene.title || '', sub: scene.sub || '' },
         brand,
         theme: shot.theme || theme,
+        frame,
       });
       const file = path.join(dir, `${String(n).padStart(2, '0')}-${scene.id || n}.png`);
       fs.writeFileSync(file, rgbPngBuffer(still));

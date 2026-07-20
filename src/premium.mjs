@@ -20,6 +20,7 @@ import path from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { font, hexA, hexRgb, springSeries, roundRectPath, fillVerticalGradient, radialGlow, wrapLines } from './canvas.mjs';
 import { spawnEncoder } from './encode.mjs';
+import { frameFor } from './frames.mjs';
 
 const smooth = (t) => t * t * (3 - 2 * t);
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -109,7 +110,8 @@ function drawLabel(ctx, W, H, caption, th, alpha) {
   const titleSize = Math.round(Math.min(W, H * 0.9) * 0.05);
   const subSize = Math.round(Math.min(W, H * 0.9) * 0.033);
   const cx = W / 2;
-  let y = H * 0.82;
+  // Anchor higher on wide (landscape) aspects so the pill + subtitle clear the app's own bottom UI.
+  let y = (W > H ? 0.7 : 0.82) * H;
 
   if (caption.title && th.label) {
     ctx.font = font(titleSize, 'bold');
@@ -123,7 +125,7 @@ function drawLabel(ctx, W, H, caption, th, alpha) {
     ctx.fill();
     ctx.fillStyle = th.labelColor;
     ctx.fillText(caption.title, cx, y + 1);
-    y += pillH / 2 + subSize * 1.4;
+    y += pillH / 2 + subSize * 1.05;
   } else if (caption.title) {
     ctx.font = font(titleSize, 'bold');
     ctx.fillStyle = th.labelColor;
@@ -190,13 +192,28 @@ function screenLayer(W, H, img, th) {
   return layer;
 }
 
-/** Render ONE premium still (a store screenshot in the premium style) → canvas. Static, no motion. */
-export function premiumStill({ W, H, img, caption, brand, theme }) {
+/** Render ONE premium still → canvas. Static, no motion. With `frame` (phone|ipad|watch) the screen is
+ *  drawn inside a device bezel floating on the matte; otherwise it's the plain rounded inset. */
+export function premiumStill({ W, H, img, caption, brand, theme, frame }) {
   const th = resolvePremiumTheme(brand, theme);
   const c = createCanvas(W, H);
   const ctx = c.getContext('2d');
   paintMatte(ctx, W, H, th);
-  ctx.drawImage(screenLayer(W, H, img, th), 0, 0);
+
+  const drawFrame = frame ? frameFor(frame) : null;
+  if (drawFrame) {
+    const cy = H * 0.42; // sit high so the framed body clears the bottom label
+    if (frame === 'watch') {
+      drawFrame(ctx, img, W / 2, cy, Math.min(W, H) * 0.6);
+    } else {
+      const budgetH = H * 0.64; // vertical room for the device body
+      const screenW = Math.min(budgetH / (img.height / img.width), W * 0.8);
+      drawFrame(ctx, img, W / 2, cy, screenW);
+    }
+  } else {
+    ctx.drawImage(screenLayer(W, H, img, th), 0, 0);
+  }
+
   drawLabel(ctx, W, H, caption, th, 1);
   paintVignette(ctx, W, H, th.vignette);
   drawHandle(ctx, W, H, th.handle, th.labelColor);

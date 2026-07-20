@@ -53,9 +53,10 @@ function bleedStill({ W, H, img, caption, brand }) {
   return c;
 }
 
-/** Render one still to a canvas. `style`: premium | bleed | framed(→bleed for now). */
-export async function renderStill(style, { W, H, imgPath, caption, brand, theme }) {
+/** Render one still to a canvas. `style`: premium | framed (device bezel) | bleed. */
+export async function renderStill(style, { W, H, imgPath, caption, brand, theme, frame }) {
   const img = await loadImage(imgPath);
+  if (style === 'framed') return premiumStill({ W, H, img, caption, brand, theme, frame: frame || 'phone' });
   if (style === 'premium') return premiumStill({ W, H, img, caption, brand, theme });
   return bleedStill({ W, H, img, caption, brand });
 }
