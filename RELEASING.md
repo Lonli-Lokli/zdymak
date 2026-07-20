@@ -29,6 +29,18 @@ gh release create "v$(node -p "require('./package.json').version")" --generate-n
 Creating the GitHub **Release** fires `.github/workflows/publish.yml`, which runs `npm publish` over OIDC.
 The Release step is your human approval gate.
 
+## Local publish (escape hatch)
+
+For the **first** publish, or publishing without CI, one command bumps + publishes + pushes the tag (npm
+prompts for your 2FA OTP — no stored token):
+
+```sh
+npm run release:patch      # or release:minor / release:major
+```
+
+`scripts/release.mjs` refuses to run on a dirty tree. Provenance is only generated on the CI/OIDC path, so
+prefer the GitHub Release flow for regular releases.
+
 ## Notes
 
 - **npm v12 install-time security**: lifecycle scripts are off by default now, but zdymak's only dependency

@@ -15,7 +15,10 @@
     "SKILL.md"
   ],
   "scripts": {
-    "example": "node bin/zdymak.mjs video --config examples/asilak.config.mjs"
+    "example": "node bin/zdymak.mjs video --config examples/asilak.config.mjs",
+    "release:patch": "node scripts/release.mjs patch",
+    "release:minor": "node scripts/release.mjs minor",
+    "release:major": "node scripts/release.mjs major"
   },
   "engines": {
     "node": ">=18"

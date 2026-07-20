@@ -124,9 +124,17 @@ devices: {
   watch:  { capturesDir: './shots/watch',   suffix: '',
             scenes: [{ id: '01-study' }, { id: '02-answer' }],   // per-device scene override (raw, no caption)
             screenshots: [{ target: 'appstore-watch', style: 'bleed', size: [422, 514] }] },
+  android:{ capturesDir: './shots/android', suffix: '', screenshots: [
+            { target: 'play-phone', style: 'framed' },           // Android punch-hole frame
+            { target: 'play-tablet', style: 'premium' },
+            { target: 'play-feature-graphic' } ] },              // the 1024×500 Play banner (not per-scene)
   // a device may also carry `videos: [{ target: 'premium-reel', size: [2064, 2752] }]` at its own dimensions
 },
 ```
+
+The **`framed`** style picks the right bezel per target — iPhone (Dynamic Island), Android (punch-hole),
+iPad/tablet, or Watch ring — and Mac stays plain (its captures are already windowed). **`play-feature-graphic`**
+is special: one 1024×500 brand banner (logo + tagline + a tilted hero device), not a per-scene screenshot.
 
 Commands:
 

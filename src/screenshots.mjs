@@ -10,6 +10,7 @@ import { renderStill } from './still.mjs';
 import { rgbPngBuffer } from './png.mjs';
 import { IMAGE_TARGETS } from './specs.mjs';
 import { inferFrame } from './frames.mjs';
+import { buildFeatureGraphic } from './graphic.mjs';
 
 /** Resolve a concrete [w,h] for a screenshot target: explicit override → spec w/h → first accepted size. */
 export function targetSize(spec, override) {
@@ -28,6 +29,17 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir }) {
     const [W, H] = targetSize(spec, shot.size);
     const style = shot.style || 'premium';
     const frame = shot.frame || inferFrame(shot.target); // device bezel for the `framed` style
+
+    // Feature graphic (Play banner) is a single branded image, not a per-scene shot.
+    if (spec.graphic) {
+      const hero = device.scenes.find((s) => fs.existsSync(s.image));
+      if (!hero) continue;
+      const outFile = path.join(outDir, `${shot.target}.png`);
+      await buildFeatureGraphic({ W, H, brand, theme: shot.theme || theme, heroPath: hero.image, outFile, frame: frame || 'android' });
+      written.push({ file: outFile, W, H, style: 'graphic' });
+      continue;
+    }
+
     const dir = path.join(outDir, shot.target);
     fs.mkdirSync(dir, { recursive: true });
 

@@ -54,6 +54,40 @@ export function drawPhoneFrame(ctx, img, cx, cy, screenW) {
   return { bodyH };
 }
 
+/** Android (Pixel-neutral): dark unibody, uniform bezel, centred punch-hole camera. */
+export function drawAndroidPhoneFrame(ctx, img, cx, cy, screenW) {
+  const screenH = screenW * (img.height / img.width);
+  const bezel = Math.round(screenW * 0.035);
+  const bodyW = screenW + bezel * 2;
+  const bodyH = screenH + bezel * 2;
+  const bodyX = Math.round(cx - bodyW / 2);
+  const bodyY = Math.round(cy - bodyH / 2);
+  const sx = bodyX + bezel;
+  const sy = bodyY + bezel;
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.4)';
+  ctx.shadowBlur = Math.round(screenW * 0.09);
+  ctx.shadowOffsetY = Math.round(screenW * 0.035);
+  roundRectPath(ctx, bodyX, bodyY, bodyW, bodyH, Math.round(screenW * 0.13));
+  ctx.fillStyle = '#0b0b0a';
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  roundRectPath(ctx, sx, sy, screenW, screenH, Math.round(screenW * 0.105));
+  ctx.clip();
+  drawInto(ctx, img, sx, sy, screenW, screenH);
+  ctx.restore();
+
+  // Centred punch-hole camera near the top edge.
+  ctx.beginPath();
+  ctx.arc(sx + screenW / 2, sy + bezel * 1.6, Math.round(screenW * 0.018), 0, Math.PI * 2);
+  ctx.fillStyle = '#050505';
+  ctx.fill();
+  return { bodyH };
+}
+
 /** iPad: dark unibody, tight even bezel, gentler corners, no island. */
 export function drawIpadFrame(ctx, img, cx, cy, screenW) {
   const screenH = screenW * (img.height / img.width);
@@ -116,16 +150,19 @@ export function drawWatchFrame(ctx, img, cx, cy, diameter) {
 
 /** Dispatch by frame id → the draw fn (null for unsupported → caller falls back to a plain still). */
 export function frameFor(id) {
-  if (id === 'phone' || id === 'iphone') return drawPhoneFrame;
-  if (id === 'ipad') return drawIpadFrame;
-  if (id === 'watch') return drawWatchFrame;
-  return null; // 'mac' etc. → no added frame
+  return {
+    phone: drawPhoneFrame, iphone: drawPhoneFrame,
+    android: drawAndroidPhoneFrame,
+    ipad: drawIpadFrame, tablet: drawIpadFrame,
+    watch: drawWatchFrame,
+  }[id] || null; // 'mac' etc. → no added frame
 }
 
-/** Infer a frame id from a screenshot target id. */
+/** Infer a frame id from a screenshot target id (order matters: play-phone → android before → phone). */
 export function inferFrame(target) {
-  if (/iphone|phone/.test(target)) return 'phone';
+  if (/watch|wear/.test(target)) return 'watch';
   if (/ipad|tablet/.test(target)) return 'ipad';
-  if (/watch/.test(target)) return 'watch';
+  if (/play.*phone|android/.test(target)) return 'android';
+  if (/iphone|phone/.test(target)) return 'phone';
   return null;
 }
