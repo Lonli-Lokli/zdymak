@@ -101,7 +101,7 @@ async function captureIos(flags) {
     }
     const states = flags.states.split(',').map((s) => s.trim()).filter(Boolean);
     const suffix = flags.suffix || '';
-    const settle = Number(flags.settle || 3);
+    const settle = Number(flags.settle || 4);
     const udid = bootIosSim(flags);
 
     if (flags.build !== undefined) {
@@ -190,7 +190,7 @@ async function captureAndroid(flags) {
       }
       const states = flags.states.split(',').map((s) => s.trim()).filter(Boolean);
       const suffix = flags.suffix || '';
-      const settle = Number(flags.settle || 3);
+      const settle = Number(flags.settle || 4);
       console.log(`▶︎ Driving ${states.length} screens via "--es ${flags.arg} <id>" on ${flags.component}…`);
       for (const st of states) {
         sh('adb', ['shell', 'am', 'start', '-n', flags.component, '--es', flags.arg, st]);
