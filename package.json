@@ -1,0 +1,37 @@
+{
+  "name": "store-preview",
+  "version": "0.1.0",
+  "description": "Generate premium, spec-compliant App Store & Google Play preview videos (and store assets) from screenshots — one config-driven CLI across all your projects.",
+  "type": "module",
+  "bin": {
+    "store-preview": "bin/store-preview.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "assets"
+  ],
+  "scripts": {
+    "example": "node bin/store-preview.mjs video --config examples/asilak.config.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.60"
+  },
+  "keywords": [
+    "app-store",
+    "google-play",
+    "app-preview",
+    "screenshots",
+    "aso",
+    "marketing",
+    "video",
+    "ffmpeg"
+  ],
+  "license": "MIT"
+}
