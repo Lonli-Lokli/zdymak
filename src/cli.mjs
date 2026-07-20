@@ -125,7 +125,10 @@ Usage:
   zdymak video       [--config <path>] [--target <ids>] [--out <dir>]
   zdymak screenshots [--config <path>] [--out <dir>]
   zdymak specs
-  zdymak capture --platform ios|android --name <screen> [--record] [--out <dir>]
+  zdymak capture  --platform ios --bundle <id> --arg <handle> --states <a,b,c> [--suffix -light]
+                  [--build --project <.xcodeproj> --scheme <name>] [--device <sim>] [--out <dir>]
+                  # full workflow: start the app, drive each screen by a launch handle, snap store-ready PNGs
+  zdymak capture  --platform ios|android --name <screen>          # single snapshot of the booted device
   zdymak help
 
 Defaults: --config ${DEFAULT_CONFIG}. Needs ffmpeg on PATH (or $FFMPEG).

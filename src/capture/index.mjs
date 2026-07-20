@@ -1,16 +1,19 @@
 /**
- * Capture mode (mode B) — for devs who'd rather grab frames from a running app than hand-manage a
- * screenshots folder. Project-agnostic on purpose: it does NOT build your app (that's your toolchain).
- * It snapshots or screen-records whatever is on the BOOTED simulator / connected device, strips the
- * alpha channel (Apple & Play reject transparency on screenshots), and writes store-ready PNGs you then
- * reference from your config's `scenes`.
+ * Capture mode (mode B) — grab store-ready PNGs from a running app instead of hand-managing a folder.
+ * Strips the alpha channel (Apple & Play reject transparency) and writes into your `capturesDir`, so the
+ * capture → compose (`build`/`screenshots`) chain is one pipeline.
  *
- *   zdymak capture --platform ios      --name welcome            # snap the booted iOS simulator
- *   zdymak capture --platform android  --name welcome            # snap the connected device/emulator
- *   zdymak capture --platform ios      --record --out shots/rec  # screen-record (stop with Ctrl-C)
+ * FULL WORKFLOW (start app → drive by a handle → snap each screen):
+ *   zdymak capture --platform ios --bundle com.x.app --arg -marketingScreen \
+ *     --states welcome,today,study,answer --suffix -light \
+ *     --build --project App.xcodeproj --scheme App --out marketing/ios/captures
+ *   → boots a sim, (optionally builds+installs), then for each state relaunches the app with
+ *     `<arg> <state>` and screenshots it. The app just needs a launch-arg "handle" that routes to a
+ *     seeded screen (e.g. reads `-marketingScreen <id>` from UserDefaults). Then `zdymak build` composes.
  *
- * The two-mode contract: capture writes PNGs; the video engine consumes PNGs. So capture output drops
- * straight into `screenshotsDir`, and mode A (bring-your-own-screenshots) and mode B share one pipeline.
+ * Simpler modes:
+ *   zdymak capture --platform ios|android --name welcome         # single snapshot of the booted device
+ *   zdymak capture --platform ios --record --out shots/rec       # screen-record (stop with Ctrl-C)
  */
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -29,9 +32,40 @@ async function stripAlpha(file) {
 }
 
 function sh(cmd, args) {
-  const r = spawnSync(cmd, args, { encoding: 'utf8' });
+  const r = spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} failed: ${(r.stderr || r.stdout || '').trim()}`);
   return r.stdout;
+}
+const out2 = (cmd, args) => (spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).stdout || '');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const udidRe = /\(([0-9A-Fa-f-]{36})\)/;
+
+/** Boot (or reuse/create) an iOS simulator → UDID. Prefers --udid, then an already-booted sim, then a
+ *  device matching --device (default iPhone 16 Pro Max), creating one if needed. */
+function bootIosSim(flags) {
+  if (flags.udid) {
+    spawnSync('xcrun', ['simctl', 'boot', flags.udid], { stdio: 'ignore' });
+    spawnSync('xcrun', ['simctl', 'bootstatus', flags.udid, '-b'], { stdio: 'ignore' });
+    return flags.udid;
+  }
+  if (!flags.device) {
+    const booted = out2('xcrun', ['simctl', 'list', 'devices', 'booted']).match(udidRe);
+    if (booted) return booted[1];
+  }
+  const name = flags.device || 'iPhone 16 Pro Max';
+  let udid = out2('xcrun', ['simctl', 'list', 'devices', 'available'])
+    .split('\n').find((l) => l.includes(name) && udidRe.test(l))?.match(udidRe)?.[1];
+  if (!udid) {
+    const devtype = out2('xcrun', ['simctl', 'list', 'devicetypes']).split('\n')
+      .find((l) => l.includes(name))?.match(/(com\.apple[^\s)]+)/)?.[1];
+    const runtime = out2('xcrun', ['simctl', 'list', 'runtimes', 'ios']).split('\n').reverse()
+      .find((l) => /com\.apple[^\s)]+/.test(l))?.match(/(com\.apple[^\s)]+)/)?.[1];
+    if (!devtype || !runtime) throw new Error(`Could not resolve a simulator for "${name}".`);
+    udid = sh('xcrun', ['simctl', 'create', 'zdymak-capture', devtype, runtime]).trim();
+  }
+  spawnSync('xcrun', ['simctl', 'boot', udid], { stdio: 'ignore' });
+  spawnSync('xcrun', ['simctl', 'bootstatus', udid, '-b'], { stdio: 'ignore' });
+  return udid;
 }
 
 async function captureIos(flags) {
@@ -50,6 +84,49 @@ async function captureIos(flags) {
     return;
   }
 
+  // FULL WORKFLOW: drive the app through screens by a launch-arg HANDLE, capturing each.
+  //   zdymak capture --platform ios --bundle com.x.app --arg -screen --states a,b,c --suffix -light
+  //     [--build --project X.xcodeproj --scheme S] [--device "iPhone 16 Pro Max"] [--settle 3]
+  if (flags.states) {
+    if (!flags.bundle || !flags.arg) {
+      throw new Error('state capture needs --bundle <id> and --arg <launch-handle> (e.g. -marketingScreen).');
+    }
+    const states = flags.states.split(',').map((s) => s.trim()).filter(Boolean);
+    const suffix = flags.suffix || '';
+    const settle = Number(flags.settle || 3);
+    const udid = bootIosSim(flags);
+
+    if (flags.build !== undefined) {
+      if (!flags.project || !flags.scheme) throw new Error('--build needs --project <.xcodeproj> and --scheme <name>.');
+      const dd = path.join(outDir, '.dd');
+      console.log(`▶︎ Building ${flags.scheme} for the simulator (this is the slow step)…`);
+      sh('xcodebuild', ['build', '-project', flags.project, '-scheme', flags.scheme, '-configuration', 'Debug',
+        '-destination', `id=${udid}`, '-derivedDataPath', dd, '-allowProvisioningUpdates']);
+      const app = out2('bash', ['-lc', `ls -dt "${dd}"/Build/Products/Debug-iphonesimulator/*.app 2>/dev/null | head -1`]).trim();
+      if (!app) throw new Error(`No .app under ${dd}/Build/Products/Debug-iphonesimulator`);
+      console.log(`▶︎ Installing ${path.basename(app)}…`);
+      sh('xcrun', ['simctl', 'install', udid, app]);
+    }
+
+    // Pin the canonical 9:41 marketing status bar (best-effort).
+    spawnSync('xcrun', ['simctl', 'status_bar', udid, 'override', '--time', '9:41',
+      '--batteryState', 'charging', '--batteryLevel', '100', '--cellularBars', '4', '--wifiBars', '3'], { stdio: 'ignore' });
+
+    console.log(`▶︎ Driving ${states.length} screens via "${flags.arg} <id>" on ${flags.bundle}…`);
+    for (const st of states) {
+      spawnSync('xcrun', ['simctl', 'terminate', udid, flags.bundle], { stdio: 'ignore' });
+      sh('xcrun', ['simctl', 'launch', udid, flags.bundle, flags.arg, st]);
+      await sleep(settle * 1000);
+      const out = path.join(outDir, `${st}${suffix}.png`);
+      sh('xcrun', ['simctl', 'io', udid, 'screenshot', out]);
+      await stripAlpha(out);
+      console.log(`   ✓ ${st}${suffix}.png`);
+    }
+    console.log(`Done → ${outDir}`);
+    return;
+  }
+
+  // Single snapshot of whatever is on the booted sim.
   const out = path.join(outDir, `${flags.name || 'shot'}.png`);
   sh('xcrun', ['simctl', 'io', 'booted', 'screenshot', out]);
   await stripAlpha(out);
