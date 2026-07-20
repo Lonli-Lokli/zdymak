@@ -35,6 +35,20 @@ export const VIDEO_TARGETS = {
     slot: 'Play does NOT take a file: upload this to YouTube, then paste the URL in Play Console → Main store listing → Preview video.',
     // Google: https://support.google.com/googleplay/android-developer/answer/9866151
   },
+  'social-reel': {
+    store: 'Web / Social',
+    label: 'Device-framed promo reel (1080×1920) — website, X/IG/TikTok, or YouTube for Play',
+    w: 1080,
+    h: 1920,
+    fps: 30,
+    codec: 'h264',
+    profile: 'high',
+    level: '4.1',
+    minSec: null,
+    maxSec: null,
+    style: 'reel', // ← device bezel + brand background + logo bookends (buildReel, not buildVideo)
+    slot: 'For your website, X / Instagram / TikTok, or YouTube (Play listing). NOT the App Store App Preview slot — the device bezel is rejected there.',
+  },
 };
 
 /** Screenshot / graphic targets that produce still images (v0.2 — dimensions locked in now). */

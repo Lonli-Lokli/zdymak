@@ -17,7 +17,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const DEFAULT_BRAND = { ink: '#0b0b0a', title: '#F5F5F4', sub: '#BBF7D0', fontPaths: [] };
+const DEFAULT_BRAND = {
+  ink: '#0b0b0a', title: '#F5F5F4', sub: '#BBF7D0', fontPaths: [],
+  // Reel-mode fields (device-framed marketing reel) — optional; only used by the `social-reel` target.
+  name: 'App', tagline: '', endline: '', endsub: '', logo: null, reel: {},
+};
 
 export async function loadConfig(configPath) {
   const abs = path.resolve(configPath);
@@ -36,6 +40,7 @@ export async function loadConfig(configPath) {
 
   const brand = { ...DEFAULT_BRAND, ...(raw.brand || {}) };
   brand.fontPaths = (brand.fontPaths || []).map((p) => path.resolve(baseDir, p));
+  if (brand.logo) brand.logo = path.resolve(baseDir, brand.logo); // reel-mode logo (cold-open / end-card)
 
   const screenshotsDir = raw.screenshotsDir ? path.resolve(baseDir, raw.screenshotsDir) : baseDir;
   const suffix = raw.suffix ?? '';
@@ -59,6 +64,7 @@ export async function loadConfig(configPath) {
     targets: raw.targets?.length ? raw.targets : ['appstore-preview'],
     sceneDur: raw.sceneDur ?? 3.1,
     xfade: raw.xfade ?? 0.32,
+    timing: raw.timing, // reel-mode timeline override { coldOpen, scene, endCard, xfade }
     out: path.resolve(baseDir, raw.out || 'store-assets'),
     baseDir,
   };

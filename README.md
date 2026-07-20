@@ -95,6 +95,8 @@ navigation.
 |---|---|
 | `brand.ink` / `.title` / `.sub` | Hex colours for the caption scrim + title + subtitle. |
 | `brand.fontPaths` | Optional custom TTFs (else: system font — San Francisco on macOS). |
+| `brand.name` / `.tagline` / `.endline` / `.endsub` / `.logo` | **Reel target only** — wordmark, cold-open tagline, end-card lines, and the icon PNG for the device-framed `social-reel` bookends. |
+| `brand.reel` | **Reel target only** — optional palette overrides (`bgTop`, `bgBottom`, `glowLight`, `matteTop`, `matteBottom`, `glowDark`, `titleColor`, `subColor`, `bookendTitle`, `bookendSub`). |
 | `screenshotsDir` + `suffix` | Resolve `scene.id` → `${screenshotsDir}/${id}${suffix}.png`. |
 | `scenes[]` | `{ id \| image, title, sub, move }`. `image` overrides the id lookup. |
 | `scenes[].move` | `pushIn` · `pushInSlow` · `pullBack` · `pullBackSlow` · `driftUp` · `driftDown` · `driftLeft` · `driftRight` · `still`. Omit to auto-vary. |
@@ -111,6 +113,14 @@ navigation.
   alone are a valid submission.
 - **Google Play** — Play takes a **YouTube URL**, not a file. Upload `play-promo.mp4` to YouTube, then
   paste the link in Play Console → Main store listing → **Preview video**.
+- **Web / social** — `social-reel.mp4` is the **device-framed** style: an iPhone bezel on a brand
+  background with a logo cold-open + end-card. For your website, X / Instagram / TikTok, or YouTube.
+  **Never** put it in the App Store App Preview slot — Apple rejects device bezels there; that's what the
+  full-bleed `appstore-preview` is for.
+
+> **Two styles, one config.** `appstore-preview` / `play-promo` are **full-bleed** (the screen fills the
+> frame — required for App Previews). `social-reel` is **device-framed** with brand bookends (a marketing
+> reel). Both read the same `scenes`; you pick per target in `targets`.
 
 <br>
 

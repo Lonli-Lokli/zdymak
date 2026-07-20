@@ -10,6 +10,14 @@ export default {
     title: '#F5F5F4', // caption title colour
     sub: '#9ae6b4', // caption subtitle colour
     // fontPaths: ['./assets/MyBrand-Bold.ttf', './assets/MyBrand-Regular.ttf'],
+
+    // Reel-mode branding (only the device-framed `social-reel` target uses these):
+    name: 'My App', // wordmark on the cold-open / end-card
+    tagline: 'Your one-line promise.', // cold-open sub
+    endline: 'The closing line.', // end-card title
+    endsub: 'Free to try · Buy once', // end-card sub
+    logo: './assets/icon-512.png', // icon for the bookends (optional)
+    // reel: { bgTop: '#FAFAF9', bgBottom: '#DCFCE7', glowLight: '#BBF7D0' },  // optional palette overrides
   },
 
   // Where your screenshots live, and an optional suffix appended to each scene `id`.
@@ -29,7 +37,8 @@ export default {
   ],
 
   // Which videos to build. `store-preview specs` lists every target.
-  targets: ['appstore-preview', 'play-promo'],
+  //   appstore-preview / play-promo → full-bleed (App Store / Play);  social-reel → device-framed (web/social).
+  targets: ['appstore-preview', 'play-promo', 'social-reel'],
 
   sceneDur: 3.1, // seconds per scene
   xfade: 0.32, //  cross-dissolve seconds

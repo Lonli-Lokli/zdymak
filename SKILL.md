@@ -68,8 +68,13 @@ on the roadmap (dimensions are in `store-preview specs`) and the video flow is w
 - **Feels flat?** Ensure adjacent scenes use *different* moves; the spring dolly is what makes it premium.
 - **Too long/short?** Total = `scenes × sceneDur − (scenes−1) × xfade`. App Store wants 15–30s.
 
+## Two styles
+- **Full-bleed** (`appstore-preview`, `play-promo`) — the screen fills the frame; required for App
+  Previews. **Device-framed** (`social-reel`) — an iPhone bezel + brand background + logo cold-open/end-card
+  for web/social/YouTube. Both read the same `scenes`; the reel also needs `brand.name/tagline/endline/logo`.
+
 ## Guardrails
-- Never add a **device bezel/frame** to an App Preview — Apple rejects it (that's why the engine is
-  full-bleed). Framed marketing reels are a *different* asset (web/socials), not the App Preview slot.
+- Never submit the **device-framed** `social-reel` as an App Preview — Apple rejects device bezels there.
+  Use the full-bleed `appstore-preview` for the App Store slot; `social-reel` is web/social/YouTube only.
 - Keep any music **commercially licensed**; the engine is silent by default (previews autoplay muted).
 - Don't fabricate UI or overstate features in captions — App Review checks the preview matches the app.

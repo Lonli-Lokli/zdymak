@@ -10,6 +10,7 @@ import path from 'node:path';
 import { registerFonts } from './fonts.mjs';
 import { loadConfig } from './config.mjs';
 import { buildVideo } from './video.mjs';
+import { buildReel } from './reel.mjs';
 import { VIDEO_TARGETS, IMAGE_TARGETS, videoTarget } from './specs.mjs';
 import { runCapture } from './capture/index.mjs';
 
@@ -38,14 +39,16 @@ async function cmdVideo(flags) {
   for (const id of targets) {
     const spec = videoTarget(id);
     const outFile = path.join(outDir, `${id}.mp4`);
-    process.stdout.write(`  • ${id} (${spec.w}×${spec.h}) … `);
-    const { totalDur, warnings } = await buildVideo({
+    const build = spec.style === 'reel' ? buildReel : buildVideo;
+    process.stdout.write(`  • ${id} (${spec.w}×${spec.h}${spec.style === 'reel' ? ', framed reel' : ''}) … `);
+    const { totalDur, warnings } = await build({
       scenes: cfg.scenes,
       spec,
       brand: cfg.brand,
       outFile,
       sceneDur: cfg.sceneDur,
       xfade: cfg.xfade,
+      timing: cfg.timing,
     });
     console.log(`${totalDur.toFixed(1)}s → ${path.relative(process.cwd(), outFile)}`);
     for (const w of warnings) console.warn(`    ⚠︎ ${w}`);
