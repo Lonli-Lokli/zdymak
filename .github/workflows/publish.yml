@@ -1,0 +1,31 @@
+# Publish zdymak to npm via TRUSTED PUBLISHING (OIDC) — no NPM_TOKEN secret.
+#
+# One-time setup (see RELEASING.md):
+#   1. npmjs.com → the `zdymak` package → Settings → Trusted Publishers → add:
+#        provider = GitHub Actions · repo = <you>/zdymak · workflow = publish.yml
+#   2. First publish creates the package (a single manual `npm publish` with 2FA), then step 1.
+#
+# Release flow: bump the version + create a GitHub Release → this workflow publishes it.
+#   npm version patch   &&   git push --follow-tags   &&   gh release create "v$(node -p "require('./package.json').version")" --generate-notes
+name: publish
+
+on:
+  release:
+    types: [published] # the Release is the human approval gate (aligns with npm staged publishing)
+
+permissions:
+  contents: read
+  id-token: write # REQUIRED: lets the job mint the OIDC token npm trades for publish access
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@latest # trusted publishing needs npm ≥ 11.5.1
+      - run: npm ci
+      - run: npm publish --provenance --access public

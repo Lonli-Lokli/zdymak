@@ -12,7 +12,7 @@
   "files": [
     "bin",
     "src",
-    "assets"
+    "SKILL.md"
   ],
   "scripts": {
     "example": "node bin/zdymak.mjs video --config examples/asilak.config.mjs"
