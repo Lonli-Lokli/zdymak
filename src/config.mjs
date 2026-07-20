@@ -23,6 +23,17 @@ const DEFAULT_BRAND = {
   name: 'App', tagline: '', endline: '', endsub: '', logo: null, reel: {},
 };
 
+/** Map raw scenes → resolved scenes with absolute image paths (`${dir}/${id}${suffix}.png` or explicit). */
+function resolveScenes(rawScenes, baseDir, dir, suffix) {
+  return (rawScenes || []).map((s, i) => {
+    if (!s.image && !s.id) throw new Error(`Config error: scene[${i}] needs an "id" or an "image".`);
+    const image = s.image ? path.resolve(baseDir, s.image) : path.join(dir, `${s.id}${suffix}.png`);
+    return { id: s.id || String(i + 1), image, title: s.title || '', sub: s.sub || '', move: s.move };
+  });
+}
+
+const asList = (arr) => (arr || []).map((x) => (typeof x === 'string' ? { target: x } : x));
+
 export async function loadConfig(configPath) {
   const abs = path.resolve(configPath);
   if (!fs.existsSync(abs)) {
@@ -45,22 +56,34 @@ export async function loadConfig(configPath) {
   const screenshotsDir = raw.screenshotsDir ? path.resolve(baseDir, raw.screenshotsDir) : baseDir;
   const suffix = raw.suffix ?? '';
 
-  if (!Array.isArray(raw.scenes) || raw.scenes.length === 0) {
-    throw new Error('Config error: `scenes` must be a non-empty array.');
+  // Top-level scenes are required UNLESS a `devices` map supplies its own per-device scenes.
+  if (!raw.devices && (!Array.isArray(raw.scenes) || raw.scenes.length === 0)) {
+    throw new Error('Config error: `scenes` must be a non-empty array (or use a `devices` map).');
   }
-  const scenes = raw.scenes.map((s, i) => {
-    const image = s.image
-      ? path.resolve(baseDir, s.image)
-      : path.join(screenshotsDir, `${s.id}${suffix}.png`);
-    if (!s.image && !s.id) {
-      throw new Error(`Config error: scene[${i}] needs an "id" or an "image".`);
-    }
-    return { image, title: s.title || '', sub: s.sub || '', move: s.move };
+  const scenes = resolveScenes(raw.scenes, baseDir, screenshotsDir, suffix);
+
+  // Optional music bed shared by every video target — path is relative to the config file.
+  const music = raw.music?.path ? { ...raw.music, path: path.resolve(baseDir, raw.music.path) } : undefined;
+
+  // Modular per-device config. An app lists ONLY the devices it ships; each has its own captures dir,
+  // optional scene overrides, screenshot targets (+ style) and video targets. Missing captures skip cleanly.
+  const devices = Object.entries(raw.devices || {}).map(([name, d]) => {
+    const dir = d.capturesDir ? path.resolve(baseDir, d.capturesDir) : screenshotsDir;
+    const suf = d.suffix ?? suffix;
+    return {
+      name,
+      scenes: resolveScenes(d.scenes || raw.scenes, baseDir, dir, suf),
+      screenshots: asList(d.screenshots),
+      videos: asList(d.videos),
+      theme: d.theme,
+    };
   });
 
   return {
     brand,
     scenes,
+    devices,
+    music,
     targets: raw.targets?.length ? raw.targets : ['appstore-preview'],
     sceneDur: raw.sceneDur ?? 3.1,
     xfade: raw.xfade ?? 0.32,

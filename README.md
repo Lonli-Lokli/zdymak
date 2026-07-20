@@ -100,9 +100,44 @@ navigation.
 | `screenshotsDir` + `suffix` | Resolve `scene.id` → `${screenshotsDir}/${id}${suffix}.png`. |
 | `scenes[]` | `{ id \| image, title, sub, move }`. `image` overrides the id lookup. |
 | `scenes[].move` | `pushIn` · `pushInSlow` · `pullBack` · `pullBackSlow` · `driftUp` · `driftDown` · `driftLeft` · `driftRight` · `still`. Omit to auto-vary. |
-| `targets[]` | Which videos to build (`zdymak specs` lists them). |
+| `targets[]` | Which videos to build from the top-level scenes (`zdymak specs` lists them). |
 | `sceneDur` / `xfade` | Seconds per scene / cross-dissolve. Tune total length to the store's 15–30s window. |
+| `theme` | Premium-technique styling (matte, `vignette`, `inset`, `handle`, cut timings). Brand-driven defaults. |
+| `music` | Optional bed for **every** video: `{ path, offset, fadeIn, fadeOut, volume }` (silent if omitted). |
+| `devices` | Per-device **screenshots + reels** (see below). Configure only the devices you ship. |
 | `out` | Output directory. |
+
+<br>
+
+## Screenshots & multiple devices
+
+Videos are only half the set. `zdymak build` also renders **store screenshots** for each device you
+configure, in the same styles (premium / bleed), at each store's exact dimensions, as **no-alpha PNGs**
+(App Store & Play reject alpha). Each device points at its own captures; scenes with no matching capture
+are **skipped cleanly**, so an app lists only the devices it actually ships:
+
+```js
+devices: {
+  iphone: { capturesDir: './shots/iphone', suffix: '', screenshots: [{ target: 'appstore-iphone-6.9', style: 'premium' }] },
+  ipad:   { capturesDir: './shots/ipad',   suffix: '', screenshots: [{ target: 'appstore-ipad-13',    style: 'premium' }] },
+  mac:    { capturesDir: './shots/mac',     suffix: '', screenshots: [{ target: 'appstore-mac',        style: 'premium' }] },
+  watch:  { capturesDir: './shots/watch',   suffix: '',
+            scenes: [{ id: '01-study' }, { id: '02-answer' }],   // per-device scene override (raw, no caption)
+            screenshots: [{ target: 'appstore-watch', style: 'bleed', size: [422, 514] }] },
+  // a device may also carry `videos: [{ target: 'premium-reel', size: [2064, 2752] }]` at its own dimensions
+},
+```
+
+Commands:
+
+```sh
+zdymak build          # EVERYTHING: top-level videos + every device's screenshots (+ device videos)
+zdymak screenshots    # just the per-device screenshots
+zdymak video          # just the top-level video targets
+```
+
+`zdymak specs` lists every image target and its exact dimensions. A device that only ships iPhone simply
+omits the others — that's the "use only part of it" contract.
 
 <br>
 
@@ -154,11 +189,14 @@ await buildVideo({ scenes: cfg.scenes, spec: videoTarget('appstore-preview'), br
 
 ## Roadmap
 
-- [x] Premium video engine (spring motion, parallax captions), App Store + Play targets, two input modes.
-- [ ] **Image targets** — framed & plain store screenshots (dimensions already locked in `specs`), Play
-      feature graphic, watch/iPad sets.
-- [ ] Optional licensed music bed + J-cut.
-- [ ] Per-locale caption sets (drive captions from a localized strings file).
+- [x] Video engine — three styles (full-bleed, device-framed, premium), App Store + Play + social targets.
+- [x] **Multi-device screenshots** — iPhone / iPad / Mac / Watch, no-alpha PNG, modular `devices` config.
+- [x] **Music bed** — `{ path, offset, fadeIn, fadeOut, volume }` across every video.
+- [x] Automated publishing — npm trusted publishing (OIDC), see `RELEASING.md`.
+- [ ] **Device-framed stills** — iPhone/iPad bezel, Mac window, Watch ring for the `framed` screenshot style
+      (premium/bleed already cover every device).
+- [ ] Capture: **Playwright (web)** driver (adb / iOS-sim snapshot already ship).
+- [ ] Play feature graphic (1024×500) + per-locale caption sets.
 
 See **SKILL.md** if you drive this with Claude Code.
 

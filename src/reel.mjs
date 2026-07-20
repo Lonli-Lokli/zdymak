@@ -8,11 +8,11 @@
  * gentle alternating Ken-Burns + cross-dissolves, bookended by a logo cold-open and end-card on a dark
  * matte. Silent by default (commercial-music licensing is a hard rule).
  */
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { font, hexA, roundRectPath, fillVerticalGradient, radialGlow, drawCaption, measureCaption } from './canvas.mjs';
+import { spawnEncoder } from './encode.mjs';
 
 const DEVICE_ASPECT = 2.165; // iPhone screen height/width (~19.5:9); screenshots are cover-fit into it.
 
@@ -179,7 +179,7 @@ function renderEndCard(W, H, logo, brand, p, S) {
 }
 
 /** Build one device-framed reel. Mirrors buildVideo's signature; `spec` carries w/h/fps/profile/level. */
-export async function buildReel({ scenes, spec, brand, outFile, timing }) {
+export async function buildReel({ scenes, spec, brand, outFile, timing, music }) {
   if (!scenes?.length) throw new Error('buildReel: no scenes');
   const { w: W, h: H, fps } = spec;
   const S = W / 1320; // scale the ported (1320-wide) type/stroke constants to any width
@@ -211,19 +211,7 @@ export async function buildReel({ scenes, spec, brand, outFile, timing }) {
   const fctx = frame.getContext('2d');
 
   fs.mkdirSync(path.dirname(outFile), { recursive: true });
-  const args = [
-    '-y', '-loglevel', 'error',
-    '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${W}x${H}`, '-r', String(fps), '-i', '-',
-    '-c:v', 'libx264', '-profile:v', spec.profile, '-level:v', spec.level,
-    '-pix_fmt', 'yuv420p', '-crf', '17', '-maxrate', '12M', '-bufsize', '12M',
-    '-preset', 'slow', '-r', String(fps), '-movflags', '+faststart', '-an',
-    outFile,
-  ];
-  const proc = spawn(process.env.FFMPEG || 'ffmpeg', args, { stdio: ['pipe', 'inherit', 'inherit'] });
-  const done = new Promise((res, rej) => {
-    proc.on('close', (code) => (code === 0 ? res() : rej(new Error(`ffmpeg exited ${code}`))));
-    proc.on('error', (e) => rej(new Error(`ffmpeg failed to start (${e.message}). Is ffmpeg on PATH or $FFMPEG set?`)));
-  });
+  const { proc, done } = spawnEncoder({ W, H, fps, spec, outFile, music, totalDur });
 
   for (let k = 0; k < totalFrames; k++) {
     const t2 = k / fps;

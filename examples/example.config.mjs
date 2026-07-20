@@ -55,5 +55,18 @@ export default {
 
   sceneDur: 3.1, // seconds per scene
   xfade: 0.32, //  cross-dissolve seconds (full-bleed / reel styles)
+
+  // Optional music bed for EVERY video (silent if omitted). Same knobs across all styles.
+  // music: { path: './assets/bed.mp3', offset: 0, fadeIn: 0.6, fadeOut: 0.8, volume: 0.9 },
+
+  // Per-device store screenshots (+ optional per-device reels). Configure ONLY the devices you ship;
+  // scenes with no matching capture skip cleanly. Run `zdymak build` or `zdymak screenshots`.
+  devices: {
+    iphone: { capturesDir: './screenshots', suffix: '', screenshots: [{ target: 'appstore-iphone-6.9', style: 'premium' }] },
+    // ipad:  { capturesDir: './screenshots-ipad', screenshots: [{ target: 'appstore-ipad-13', style: 'premium' }] },
+    // watch: { capturesDir: './screenshots-watch', scenes: [{ id: '01' }, { id: '02' }],
+    //          screenshots: [{ target: 'appstore-watch', style: 'bleed', size: [422, 514] }] },
+  },
+
   out: './store-assets', // output dir (created if missing)
 };

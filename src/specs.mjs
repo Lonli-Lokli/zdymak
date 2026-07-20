@@ -71,6 +71,7 @@ export const IMAGE_TARGETS = {
   'appstore-iphone-6.5': { store: 'App Store', accepts: [[1242, 2688], [1284, 2778]], alpha: false, format: 'png', label: 'iPhone 6.5" (accepts 1242×2688 or 1284×2778)' },
   'appstore-ipad-13': { store: 'App Store', w: 2064, h: 2752, alpha: false, format: 'png', label: 'iPad 13" (largest iPad class)' },
   'appstore-watch': { store: 'App Store', accepts: [[422, 514], [410, 502], [416, 496], [396, 484], [368, 448], [312, 390]], alpha: false, format: 'png', label: 'Apple Watch (any one accepted size; alpha NOT allowed)' },
+  'appstore-mac': { store: 'Mac App Store', w: 2880, h: 1800, alpha: false, format: 'png', label: 'Mac (2880×1800, 16:10 landscape — largest required class)' },
   'play-phone': { store: 'Google Play', w: 1080, h: 1920, alpha: false, format: 'png', label: 'Play phone (9:16, min 1080px, no alpha)' },
   'play-feature-graphic': { store: 'Google Play', w: 1024, h: 500, alpha: false, format: 'png', label: 'Play feature graphic (no alpha)' },
   'play-icon': { store: 'Google Play', w: 512, h: 512, alpha: true, format: 'png', label: 'Play app icon (32-bit PNG, alpha OK)' },

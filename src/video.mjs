@@ -11,10 +11,10 @@
  * Output is full-bleed (no device bezel — Apple rejects bezels in App Previews) at the target's exact
  * resolution, H.264 High @ the target's level, yuv420p, faststart, silent.
  */
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
+import { spawnEncoder } from './encode.mjs';
 
 const smooth = (t) => t * t * (3 - 2 * t);
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -139,9 +139,6 @@ function hexA(hex, a) {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
 }
 
-function resolveFfmpeg() {
-  return process.env.FFMPEG || 'ffmpeg';
-}
 
 /**
  * Build one preview video.
@@ -154,7 +151,7 @@ function resolveFfmpeg() {
  * @param {number}  [o.xfade=0.32]    cross-dissolve seconds
  * @returns {Promise<{outFile, totalDur, frames, warnings}>}
  */
-export async function buildVideo({ scenes, spec, brand, outFile, sceneDur = 3.1, xfade = 0.32 }) {
+export async function buildVideo({ scenes, spec, brand, outFile, sceneDur = 3.1, xfade = 0.32, music }) {
   if (!scenes?.length) throw new Error('buildVideo: no scenes');
   const { w: W, h: H, fps } = spec;
   const warnings = [];
@@ -200,19 +197,7 @@ export async function buildVideo({ scenes, spec, brand, outFile, sceneDur = 3.1,
   const fctx = frame.getContext('2d');
 
   fs.mkdirSync(path.dirname(outFile), { recursive: true });
-  const args = [
-    '-y', '-loglevel', 'error',
-    '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${W}x${H}`, '-r', String(fps), '-i', '-',
-    '-c:v', 'libx264', '-profile:v', spec.profile, '-level:v', spec.level,
-    '-pix_fmt', 'yuv420p', '-crf', '17', '-maxrate', '12M', '-bufsize', '12M',
-    '-preset', 'slow', '-r', String(fps), '-movflags', '+faststart', '-an',
-    outFile,
-  ];
-  const proc = spawn(resolveFfmpeg(), args, { stdio: ['pipe', 'inherit', 'inherit'] });
-  const done = new Promise((res, rej) => {
-    proc.on('close', (code) => (code === 0 ? res() : rej(new Error(`ffmpeg exited ${code}`))));
-    proc.on('error', (e) => rej(new Error(`ffmpeg failed to start (${e.message}). Is ffmpeg on PATH or $FFMPEG set?`)));
-  });
+  const { proc, done } = spawnEncoder({ W, H, fps, spec, outFile, music, totalDur });
 
   for (let k = 0; k < totalFrames; k++) {
     const t = k / fps;

@@ -15,11 +15,11 @@
  * Output is full-bleed frame at the target resolution (the app screen itself is inset on the matte, but no
  * device bezel), H.264 High @ the target level, yuv420p, silent.
  */
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { font, hexA, hexRgb, springSeries, roundRectPath, fillVerticalGradient, radialGlow, wrapLines } from './canvas.mjs';
+import { spawnEncoder } from './encode.mjs';
 
 const smooth = (t) => t * t * (3 - 2 * t);
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -104,10 +104,12 @@ function drawLabel(ctx, W, H, caption, th, alpha) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  const titleSize = Math.round(W * 0.05);
-  const subSize = Math.round(W * 0.033);
+  // Scale type to the SHORTER edge so landscape (Mac) doesn't get huge text, and anchor high enough that
+  // the pill + subtitle never clip the bottom on wide aspects.
+  const titleSize = Math.round(Math.min(W, H * 0.9) * 0.05);
+  const subSize = Math.round(Math.min(W, H * 0.9) * 0.033);
   const cx = W / 2;
-  let y = H * 0.855;
+  let y = H * 0.82;
 
   if (caption.title && th.label) {
     ctx.font = font(titleSize, 'bold');
@@ -152,8 +154,57 @@ function drawHandle(ctx, W, H, text, color) {
   ctx.restore();
 }
 
+/** Resolve theme defaults against the brand (shared by the video + still renderers). */
+export function resolvePremiumTheme(brand, theme) {
+  const th = { ...DEFAULT_THEME, ...(theme || {}) };
+  th.glow = th.glow || brand.sub;
+  th.pillFill = th.pillFill || brand.ink;
+  th.labelColor = th.labelColor || brand.title;
+  th.subColor = th.subColor || brand.sub;
+  th.handle = th.handle ?? brand.handle ?? null;
+  return th;
+}
+
+/** The floating, inset, rounded, shadowed app-screen layer on its own transparent canvas. */
+function screenLayer(W, H, img, th) {
+  const insetW = Math.round(W * th.inset);
+  const insetH = Math.round(H * th.inset);
+  const insetX = Math.round((W - insetW) / 2);
+  const insetY = Math.round((H - insetH) / 2);
+  const radius = Math.round(W * th.radius);
+  const layer = createCanvas(W, H);
+  const lctx = layer.getContext('2d');
+  lctx.save();
+  lctx.shadowColor = `rgba(0,0,0,${th.shadow})`;
+  lctx.shadowBlur = Math.round(W * 0.05);
+  lctx.shadowOffsetY = Math.round(W * 0.012);
+  roundRectPath(lctx, insetX, insetY, insetW, insetH, radius);
+  lctx.fillStyle = '#000';
+  lctx.fill();
+  lctx.restore();
+  lctx.save();
+  roundRectPath(lctx, insetX, insetY, insetW, insetH, radius);
+  lctx.clip();
+  lctx.drawImage(coverCanvas(img, insetW, insetH), insetX, insetY);
+  lctx.restore();
+  return layer;
+}
+
+/** Render ONE premium still (a store screenshot in the premium style) → canvas. Static, no motion. */
+export function premiumStill({ W, H, img, caption, brand, theme }) {
+  const th = resolvePremiumTheme(brand, theme);
+  const c = createCanvas(W, H);
+  const ctx = c.getContext('2d');
+  paintMatte(ctx, W, H, th);
+  ctx.drawImage(screenLayer(W, H, img, th), 0, 0);
+  drawLabel(ctx, W, H, caption, th, 1);
+  paintVignette(ctx, W, H, th.vignette);
+  drawHandle(ctx, W, H, th.handle, th.labelColor);
+  return c;
+}
+
 /** Build one premium-technique video. Signature mirrors buildVideo/buildReel. */
-export async function buildPremium({ scenes, spec, brand, theme, outFile, sceneDur = 3.0 }) {
+export async function buildPremium({ scenes, spec, brand, theme, outFile, sceneDur = 3.0, music }) {
   if (!scenes?.length) throw new Error('buildPremium: no scenes');
   const { w: W, h: H, fps } = spec;
   const th = { ...DEFAULT_THEME, ...(theme || {}) };
@@ -211,19 +262,7 @@ export async function buildPremium({ scenes, spec, brand, theme, outFile, sceneD
   const fctx = frame.getContext('2d');
 
   fs.mkdirSync(path.dirname(outFile), { recursive: true });
-  const args = [
-    '-y', '-loglevel', 'error',
-    '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${W}x${H}`, '-r', String(fps), '-i', '-',
-    '-c:v', 'libx264', '-profile:v', spec.profile, '-level:v', spec.level,
-    '-pix_fmt', 'yuv420p', '-crf', '17', '-maxrate', '12M', '-bufsize', '12M',
-    '-preset', 'slow', '-r', String(fps), '-movflags', '+faststart', '-an',
-    outFile,
-  ];
-  const proc = spawn(process.env.FFMPEG || 'ffmpeg', args, { stdio: ['pipe', 'inherit', 'inherit'] });
-  const done = new Promise((res, rej) => {
-    proc.on('close', (code) => (code === 0 ? res() : rej(new Error(`ffmpeg exited ${code}`))));
-    proc.on('error', (e) => rej(new Error(`ffmpeg failed to start (${e.message}). Is ffmpeg on PATH or $FFMPEG set?`)));
-  });
+  const { proc, done } = spawnEncoder({ W, H, fps, spec, outFile, music, totalDur });
 
   for (let k = 0; k < totalFrames; k++) {
     const t = k / fps;

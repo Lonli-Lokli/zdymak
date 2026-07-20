@@ -1,9 +1,11 @@
 /**
  * zdymak CLI.
  *
- *   zdymak video   [--config <path>] [--target <ids>] [--out <dir>]
- *   zdymak specs                       # print the store spec matrix
- *   zdymak capture ...                 # capture screenshots from a running app (see capture/)
+ *   zdymak build       [--config <path>] [--out <dir>]   # EVERYTHING in the config: videos + screenshots
+ *   zdymak video       [--config <path>] [--target <ids>] [--out <dir>]
+ *   zdymak screenshots [--config <path>] [--out <dir>]   # per-device store screenshots
+ *   zdymak specs                                          # print the store spec matrix
+ *   zdymak capture --platform ios|android --name <screen> [--record] [--out <dir>]
  *   zdymak help
  */
 import path from 'node:path';
@@ -12,6 +14,7 @@ import { loadConfig } from './config.mjs';
 import { buildVideo } from './video.mjs';
 import { buildReel } from './reel.mjs';
 import { buildPremium } from './premium.mjs';
+import { buildDeviceScreenshots } from './screenshots.mjs';
 import { VIDEO_TARGETS, IMAGE_TARGETS, videoTarget } from './specs.mjs';
 import { runCapture } from './capture/index.mjs';
 
@@ -28,34 +31,74 @@ function parseFlags(argv) {
 
 const DEFAULT_CONFIG = 'zdymak.config.mjs';
 
-async function cmdVideo(flags) {
-  const configPath = flags.config || DEFAULT_CONFIG;
-  const cfg = await loadConfig(configPath);
+async function open(flags) {
+  const cfg = await loadConfig(flags.config || DEFAULT_CONFIG);
   registerFonts(cfg.brand.fontPaths);
-
-  const targets = flags.target ? flags.target.split(',').map((s) => s.trim()) : cfg.targets;
   const outDir = flags.out ? path.resolve(flags.out) : cfg.out;
+  return { cfg, outDir };
+}
 
-  console.log(`zdymak • ${cfg.scenes.length} scenes → ${targets.join(', ')}`);
+/** Build one video target (optionally at an overridden device size / scene set / theme). */
+async function buildVideoTarget({ id, scenes, brand, cfg, outFile, size, theme }) {
+  const base = videoTarget(id);
+  const spec = size ? { ...base, w: size[0], h: size[1] } : base;
+  const build = spec.style === 'reel' ? buildReel : spec.style === 'premium' ? buildPremium : buildVideo;
+  const tag = spec.style ? `, ${spec.style}` : '';
+  process.stdout.write(`  • ${id} (${spec.w}×${spec.h}${tag}${cfg.music ? ', ♪' : ''}) … `);
+  const { totalDur, warnings } = await build({
+    scenes, spec, brand, outFile,
+    sceneDur: cfg.sceneDur, xfade: cfg.xfade, timing: cfg.timing,
+    theme: theme ?? cfg.theme, music: cfg.music,
+  });
+  console.log(`${totalDur.toFixed(1)}s → ${path.relative(process.cwd(), outFile)}`);
+  for (const w of warnings) console.warn(`    ⚠︎ ${w}`);
+}
+
+async function cmdVideo(flags) {
+  const { cfg, outDir } = await open(flags);
+  const targets = flags.target ? flags.target.split(',').map((s) => s.trim()) : cfg.targets;
+  console.log(`zdymak video • ${cfg.scenes.length} scenes → ${targets.join(', ')}`);
   for (const id of targets) {
-    const spec = videoTarget(id);
-    const outFile = path.join(outDir, `${id}.mp4`);
-    const build = spec.style === 'reel' ? buildReel : spec.style === 'premium' ? buildPremium : buildVideo;
-    const styleTag = spec.style === 'reel' ? ', framed reel' : spec.style === 'premium' ? ', premium' : '';
-    process.stdout.write(`  • ${id} (${spec.w}×${spec.h}${styleTag}) … `);
-    const { totalDur, warnings } = await build({
-      scenes: cfg.scenes,
-      spec,
-      brand: cfg.brand,
-      outFile,
-      sceneDur: cfg.sceneDur,
-      xfade: cfg.xfade,
-      timing: cfg.timing,
-      theme: cfg.theme,
-    });
-    console.log(`${totalDur.toFixed(1)}s → ${path.relative(process.cwd(), outFile)}`);
-    for (const w of warnings) console.warn(`    ⚠︎ ${w}`);
-    console.log(`    ↳ ${spec.slot}`);
+    await buildVideoTarget({ id, scenes: cfg.scenes, brand: cfg.brand, cfg, outFile: path.join(outDir, `${id}.mp4`) });
+  }
+  console.log('Done.');
+}
+
+async function cmdScreenshots(flags) {
+  const { cfg, outDir } = await open(flags);
+  if (!cfg.devices.length) {
+    console.warn('No `devices` in the config — nothing to screenshot. (See README: devices map.)');
+    return;
+  }
+  console.log(`zdymak screenshots • ${cfg.devices.length} device group(s)`);
+  for (const device of cfg.devices) {
+    const written = await buildDeviceScreenshots({ device, brand: cfg.brand, theme: device.theme ?? cfg.theme, outDir });
+    console.log(`  • ${device.name}: ${written.length} shot(s)${written[0] ? ` (${written[0].W}×${written[0].H}…)` : ' — no captures found, skipped'}`);
+  }
+  console.log('Done.');
+}
+
+async function cmdBuild(flags) {
+  const { cfg, outDir } = await open(flags);
+  // 1) shared (phone) video targets from the top-level scenes
+  if (cfg.targets.length && cfg.scenes.length) {
+    console.log('zdymak build • videos');
+    for (const id of cfg.targets) {
+      await buildVideoTarget({ id, scenes: cfg.scenes, brand: cfg.brand, cfg, outFile: path.join(outDir, `${id}.mp4`) });
+    }
+  }
+  // 2) per-device videos + screenshots
+  for (const device of cfg.devices) {
+    if (device.videos.length) {
+      console.log(`zdymak build • ${device.name} videos`);
+      for (const v of device.videos) {
+        await buildVideoTarget({ id: v.target, scenes: device.scenes, brand: cfg.brand, cfg, size: v.size, theme: device.theme, outFile: path.join(outDir, `${device.name}-${v.target}.mp4`) });
+      }
+    }
+    if (device.screenshots.length) {
+      const written = await buildDeviceScreenshots({ device, brand: cfg.brand, theme: device.theme ?? cfg.theme, outDir });
+      console.log(`  • ${device.name} screenshots: ${written.length}${written.length ? '' : ' — no captures found, skipped'}`);
+    }
   }
   console.log('Done.');
 }
@@ -66,7 +109,7 @@ function cmdSpecs() {
     const dur = s.minSec ? `${s.minSec}–${s.maxSec}s` : 'any length';
     console.log(`  ${id.padEnd(20)} ${s.w}×${s.h} @${s.fps}  H.264 ${s.profile}@${s.level}  ${dur}  — ${s.store}`);
   }
-  console.log('\nIMAGE targets (dimensions locked; generation is on the roadmap):');
+  console.log('\nIMAGE targets (store screenshots — `zdymak screenshots` / `build`):');
   for (const [id, s] of Object.entries(IMAGE_TARGETS)) {
     const dim = s.accepts ? s.accepts.map((a) => a.join('×')).join(' | ') : `${s.w}×${s.h}`;
     console.log(`  ${id.padEnd(24)} ${dim}${s.alpha === false ? '  (no alpha)' : ''}  — ${s.store}`);
@@ -75,16 +118,18 @@ function cmdSpecs() {
 }
 
 function cmdHelp() {
-  console.log(`zdymak — premium App Store & Google Play previews from screenshots
+  console.log(`zdymak — premium App Store, Google Play & social videos + screenshots, from your captures
 
 Usage:
-  zdymak video   [--config <path>] [--target <ids>] [--out <dir>]
+  zdymak build       [--config <path>] [--out <dir>]   # everything: videos + per-device screenshots
+  zdymak video       [--config <path>] [--target <ids>] [--out <dir>]
+  zdymak screenshots [--config <path>] [--out <dir>]
   zdymak specs
   zdymak capture --platform ios|android --name <screen> [--record] [--out <dir>]
   zdymak help
 
-Defaults: --config ${DEFAULT_CONFIG}. Targets & output come from the config unless overridden.
-Needs ffmpeg on PATH (or $FFMPEG). See README.md for the config format, SKILL.md for agent use.`);
+Defaults: --config ${DEFAULT_CONFIG}. Needs ffmpeg on PATH (or $FFMPEG).
+README.md documents the config (brand, scenes, targets, theme, music, devices); SKILL.md is for agents.`);
 }
 
 export async function run(argv = process.argv.slice(2)) {
@@ -92,7 +137,9 @@ export async function run(argv = process.argv.slice(2)) {
   const { flags, rest } = parseFlags(rest0);
   try {
     switch (cmd) {
+      case 'build': await cmdBuild(flags); break;
       case 'video': await cmdVideo(flags); break;
+      case 'screenshots': await cmdScreenshots(flags); break;
       case 'specs': cmdSpecs(); break;
       case 'capture': await runCapture(flags, rest); break;
       case 'help': case undefined: case '--help': case '-h': cmdHelp(); break;
