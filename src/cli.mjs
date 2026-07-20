@@ -23,8 +23,15 @@ function parseFlags(argv) {
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a.startsWith('--')) flags[a.slice(2)] = argv[++i];
-    else rest.push(a);
+    if (a.startsWith('--')) {
+      const next = argv[i + 1];
+      // Boolean flag when followed by nothing or another --flag (e.g. `--build --project …`); else it
+      // takes the next token as its value. Single-dash values like `-marketingScreen` ARE values.
+      if (next === undefined || next.startsWith('--')) flags[a.slice(2)] = true;
+      else flags[a.slice(2)] = argv[++i];
+    } else {
+      rest.push(a);
+    }
   }
   return { flags, rest };
 }
