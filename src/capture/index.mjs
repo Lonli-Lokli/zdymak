@@ -19,8 +19,9 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
+import { rgbPngBuffer } from '../png.mjs';
 
-/** Flatten alpha over black and rewrite as an opaque PNG (App Store & Play reject alpha on screenshots). */
+/** Flatten over black and rewrite as a NO-ALPHA RGB PNG (App Store & Play reject alpha on screenshots). */
 async function stripAlpha(file) {
   const img = await loadImage(file);
   const c = createCanvas(img.width, img.height);
@@ -28,7 +29,7 @@ async function stripAlpha(file) {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, img.width, img.height);
   ctx.drawImage(img, 0, 0);
-  fs.writeFileSync(file, c.toBuffer('image/png'));
+  fs.writeFileSync(file, rgbPngBuffer(c)); // colour-type-2 PNG, no alpha channel
 }
 
 function sh(cmd, args) {
@@ -115,9 +116,10 @@ async function captureIos(flags) {
       sh('xcrun', ['simctl', 'install', udid, app]);
     }
 
-    // Pin the canonical 9:41 marketing status bar (best-effort).
+    // Pin Apple's canonical marketing status bar: 9:41, full signal/wifi, FULL battery but NOT charging
+    // (a charging bolt reads as a simulator override; Apple's own shots show an unplugged full battery).
     spawnSync('xcrun', ['simctl', 'status_bar', udid, 'override', '--time', '9:41',
-      '--batteryState', 'charging', '--batteryLevel', '100', '--cellularBars', '4', '--wifiBars', '3'], { stdio: 'ignore' });
+      '--batteryState', 'discharging', '--batteryLevel', '100', '--cellularBars', '4', '--wifiBars', '3'], { stdio: 'ignore' });
 
     console.log(`▶︎ Driving ${states.length} screens via "${flags.arg} <id>" on ${flags.bundle}…`);
     for (const st of states) {
@@ -140,6 +142,20 @@ async function captureIos(flags) {
   console.log(`✓ ${out}  (alpha stripped, store-ready)`);
 }
 
+/** Toggle Android SystemUI Demo Mode → a clean, Play-native status bar (Google's own convention):
+ *  pinned clock, full battery UNPLUGGED (no charging), full signal/wifi, notifications hidden. */
+function androidDemo(on, flags) {
+  const b = (...args) => spawnSync('adb', ['shell', 'am', 'broadcast', '-a', 'com.android.systemui.demo', ...args], { stdio: 'ignore' });
+  if (!on) return void b('-e', 'command', 'exit');
+  spawnSync('adb', ['shell', 'settings', 'put', 'global', 'sysui_demo_allowed', '1'], { stdio: 'ignore' });
+  b('-e', 'command', 'enter');
+  b('-e', 'command', 'clock', '-e', 'hhmm', (flags.time || '09:41').replace(':', ''));
+  b('-e', 'command', 'battery', '-e', 'level', '100', '-e', 'plugged', 'false'); // full, NOT charging
+  b('-e', 'command', 'network', '-e', 'wifi', 'show', '-e', 'level', '4');
+  b('-e', 'command', 'network', '-e', 'mobile', 'show', '-e', 'datatype', 'none', '-e', 'level', '4');
+  b('-e', 'command', 'notifications', '-e', 'visible', 'false');
+}
+
 async function captureAndroid(flags) {
   if (spawnSync('adb', ['version'], { stdio: 'ignore' }).status !== 0) {
     throw new Error('adb not found — install Android platform-tools and connect a device/emulator.');
@@ -158,13 +174,40 @@ async function captureAndroid(flags) {
     return;
   }
 
-  const name = flags.name || 'shot';
-  const out = path.join(outDir, `${name}.png`);
-  const buf = spawnSync('adb', ['exec-out', 'screencap', '-p'], { maxBuffer: 64 * 1024 * 1024 });
-  if (buf.status !== 0) throw new Error(`adb screencap failed: ${buf.stderr}`);
-  fs.writeFileSync(out, buf.stdout);
-  await stripAlpha(out);
-  console.log(`✓ ${out}  (alpha stripped, store-ready)`);
+  const grab = async (file) => {
+    const b = spawnSync('adb', ['exec-out', 'screencap', '-p'], { maxBuffer: 64 * 1024 * 1024 });
+    if (b.status !== 0) throw new Error(`adb screencap failed: ${b.stderr}`);
+    fs.writeFileSync(file, b.stdout);
+    await stripAlpha(file);
+  };
+
+  androidDemo(true, flags); // clean marketing status bar (Google convention)
+  try {
+    // Full workflow: drive the app through screens via an intent-extra HANDLE (--component + --arg).
+    if (flags.states) {
+      if (!flags.component || !flags.arg) {
+        throw new Error('android state capture needs --component <pkg/activity> and --arg <extra-key>.');
+      }
+      const states = flags.states.split(',').map((s) => s.trim()).filter(Boolean);
+      const suffix = flags.suffix || '';
+      const settle = Number(flags.settle || 3);
+      console.log(`▶︎ Driving ${states.length} screens via "--es ${flags.arg} <id>" on ${flags.component}…`);
+      for (const st of states) {
+        sh('adb', ['shell', 'am', 'start', '-n', flags.component, '--es', flags.arg, st]);
+        await sleep(settle * 1000);
+        const out = path.join(outDir, `${st}${suffix}.png`);
+        await grab(out);
+        console.log(`   ✓ ${st}${suffix}.png`);
+      }
+      console.log(`Done → ${outDir}`);
+    } else {
+      const out = path.join(outDir, `${flags.name || 'shot'}.png`);
+      await grab(out);
+      console.log(`✓ ${out}  (alpha stripped, store-ready)`);
+    }
+  } finally {
+    androidDemo(false, flags);
+  }
 }
 
 export async function runCapture(flags) {
