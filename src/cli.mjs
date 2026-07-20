@@ -74,7 +74,7 @@ function cmdHelp() {
 Usage:
   store-preview video   [--config <path>] [--target <ids>] [--out <dir>]
   store-preview specs
-  store-preview capture --platform ios  --scheme <SCHEME> --states <a,b,c> [--out <dir>]
+  store-preview capture --platform ios|android --name <screen> [--record] [--out <dir>]
   store-preview help
 
 Defaults: --config ${DEFAULT_CONFIG}. Targets & output come from the config unless overridden.
