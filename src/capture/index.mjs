@@ -68,9 +68,16 @@ function bootIosSim(flags) {
   return udid;
 }
 
+const simctlOk = () => spawnSync('xcrun', ['simctl', 'help'], { stdio: 'ignore' }).status === 0;
+
 async function captureIos(flags) {
-  if (spawnSync('xcrun', ['simctl', 'help'], { stdio: 'ignore' }).status !== 0) {
-    throw new Error('xcrun/simctl not found — install Xcode command-line tools.');
+  if (!simctlOk()) {
+    // Common when xcode-select points at the CommandLineTools (no simctl): fall back to Xcode.app.
+    const xc = '/Applications/Xcode.app/Contents/Developer';
+    if (!process.env.DEVELOPER_DIR && fs.existsSync(xc)) process.env.DEVELOPER_DIR = xc;
+    if (!simctlOk()) {
+      throw new Error('xcrun/simctl unavailable — point DEVELOPER_DIR at Xcode (e.g. xcode-select -s /Applications/Xcode.app).');
+    }
   }
   const outDir = path.resolve(flags.out || 'shots');
   fs.mkdirSync(outDir, { recursive: true });
