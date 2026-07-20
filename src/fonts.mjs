@@ -36,7 +36,7 @@ export function registerFonts(fontPaths = []) {
     }
   }
   if (!any) {
-    console.warn('[store-preview] No brand/system font found — captions use the canvas default. Pass brand.fontPaths to fix.');
+    console.warn('[zdymak] No brand/system font found — captions use the canvas default. Pass brand.fontPaths to fix.');
   }
   return any;
 }

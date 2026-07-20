@@ -1,16 +1,17 @@
 /**
- * store-preview CLI.
+ * zdymak CLI.
  *
- *   store-preview video   [--config <path>] [--target <ids>] [--out <dir>]
- *   store-preview specs                       # print the store spec matrix
- *   store-preview capture ...                 # capture screenshots from a running app (see capture/)
- *   store-preview help
+ *   zdymak video   [--config <path>] [--target <ids>] [--out <dir>]
+ *   zdymak specs                       # print the store spec matrix
+ *   zdymak capture ...                 # capture screenshots from a running app (see capture/)
+ *   zdymak help
  */
 import path from 'node:path';
 import { registerFonts } from './fonts.mjs';
 import { loadConfig } from './config.mjs';
 import { buildVideo } from './video.mjs';
 import { buildReel } from './reel.mjs';
+import { buildPremium } from './premium.mjs';
 import { VIDEO_TARGETS, IMAGE_TARGETS, videoTarget } from './specs.mjs';
 import { runCapture } from './capture/index.mjs';
 
@@ -25,7 +26,7 @@ function parseFlags(argv) {
   return { flags, rest };
 }
 
-const DEFAULT_CONFIG = 'store-preview.config.mjs';
+const DEFAULT_CONFIG = 'zdymak.config.mjs';
 
 async function cmdVideo(flags) {
   const configPath = flags.config || DEFAULT_CONFIG;
@@ -35,12 +36,13 @@ async function cmdVideo(flags) {
   const targets = flags.target ? flags.target.split(',').map((s) => s.trim()) : cfg.targets;
   const outDir = flags.out ? path.resolve(flags.out) : cfg.out;
 
-  console.log(`store-preview • ${cfg.scenes.length} scenes → ${targets.join(', ')}`);
+  console.log(`zdymak • ${cfg.scenes.length} scenes → ${targets.join(', ')}`);
   for (const id of targets) {
     const spec = videoTarget(id);
     const outFile = path.join(outDir, `${id}.mp4`);
-    const build = spec.style === 'reel' ? buildReel : buildVideo;
-    process.stdout.write(`  • ${id} (${spec.w}×${spec.h}${spec.style === 'reel' ? ', framed reel' : ''}) … `);
+    const build = spec.style === 'reel' ? buildReel : spec.style === 'premium' ? buildPremium : buildVideo;
+    const styleTag = spec.style === 'reel' ? ', framed reel' : spec.style === 'premium' ? ', premium' : '';
+    process.stdout.write(`  • ${id} (${spec.w}×${spec.h}${styleTag}) … `);
     const { totalDur, warnings } = await build({
       scenes: cfg.scenes,
       spec,
@@ -49,6 +51,7 @@ async function cmdVideo(flags) {
       sceneDur: cfg.sceneDur,
       xfade: cfg.xfade,
       timing: cfg.timing,
+      theme: cfg.theme,
     });
     console.log(`${totalDur.toFixed(1)}s → ${path.relative(process.cwd(), outFile)}`);
     for (const w of warnings) console.warn(`    ⚠︎ ${w}`);
@@ -72,13 +75,13 @@ function cmdSpecs() {
 }
 
 function cmdHelp() {
-  console.log(`store-preview — premium App Store & Google Play previews from screenshots
+  console.log(`zdymak — premium App Store & Google Play previews from screenshots
 
 Usage:
-  store-preview video   [--config <path>] [--target <ids>] [--out <dir>]
-  store-preview specs
-  store-preview capture --platform ios|android --name <screen> [--record] [--out <dir>]
-  store-preview help
+  zdymak video   [--config <path>] [--target <ids>] [--out <dir>]
+  zdymak specs
+  zdymak capture --platform ios|android --name <screen> [--record] [--out <dir>]
+  zdymak help
 
 Defaults: --config ${DEFAULT_CONFIG}. Targets & output come from the config unless overridden.
 Needs ffmpeg on PATH (or $FFMPEG). See README.md for the config format, SKILL.md for agent use.`);

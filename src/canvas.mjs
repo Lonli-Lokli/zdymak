@@ -8,6 +8,28 @@ export function hexA(hex, a) {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
 }
 
+/** #rrggbb → [r,g,b]. */
+export function hexRgb(hex) {
+  const n = parseInt(String(hex).replace('#', ''), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** Numerically integrated damped spring 0→1 (semi-implicit Euler) → per-frame lookup. Over-damped configs
+ *  glide and settle (camera dolly); lighter damping gives a small overshoot. */
+export function springSeries(frames, fps, { stiffness = 55, damping = 24, mass = 1.5 } = {}) {
+  const dt = 1 / fps;
+  let x = 0;
+  let v = 0;
+  const out = new Array(frames);
+  for (let f = 0; f < frames; f++) {
+    const a = (stiffness * (1 - x) - damping * v) / mass;
+    v += a * dt;
+    x += v * dt;
+    out[f] = x;
+  }
+  return out;
+}
+
 /** Rounded-rectangle subpath (no fill/stroke). */
 export function roundRectPath(ctx, x, y, w, h, r) {
   const rr = Math.min(r, w / 2, h / 2);

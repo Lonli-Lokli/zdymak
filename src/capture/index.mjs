@@ -5,9 +5,9 @@
  * alpha channel (Apple & Play reject transparency on screenshots), and writes store-ready PNGs you then
  * reference from your config's `scenes`.
  *
- *   store-preview capture --platform ios      --name welcome            # snap the booted iOS simulator
- *   store-preview capture --platform android  --name welcome            # snap the connected device/emulator
- *   store-preview capture --platform ios      --record --out shots/rec  # screen-record (stop with Ctrl-C)
+ *   zdymak capture --platform ios      --name welcome            # snap the booted iOS simulator
+ *   zdymak capture --platform android  --name welcome            # snap the connected device/emulator
+ *   zdymak capture --platform ios      --record --out shots/rec  # screen-record (stop with Ctrl-C)
  *
  * The two-mode contract: capture writes PNGs; the video engine consumes PNGs. So capture output drops
  * straight into `screenshotsDir`, and mode A (bring-your-own-screenshots) and mode B share one pipeline.
@@ -64,7 +64,7 @@ async function captureAndroid(flags) {
   fs.mkdirSync(outDir, { recursive: true });
 
   if (flags.record !== undefined) {
-    const remote = '/sdcard/store-preview-rec.mp4';
+    const remote = '/sdcard/zdymak-rec.mp4';
     const out = path.join(outDir, `${flags.name || 'recording'}.mp4`);
     console.log(`▶︎ Recording the device → ${out}\n  Interact with the app, then press Ctrl-C to stop.`);
     const proc = spawn('adb', ['shell', 'screenrecord', remote], { stdio: 'inherit' });

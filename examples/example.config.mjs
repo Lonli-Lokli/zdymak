@@ -1,6 +1,6 @@
 /**
- * store-preview config — copy to your project root as `store-preview.config.mjs` and edit.
- * All paths are relative to THIS file. Run:  store-preview video
+ * zdymak config — copy to your project root as `zdymak.config.mjs` and edit.
+ * All paths are relative to THIS file. Run:  zdymak video
  */
 export default {
   // Brand palette for the caption scrim + text (hex). `fontPaths` is optional — omit to use the system
@@ -36,11 +36,24 @@ export default {
     { id: 'offer', title: 'The honest offer.', sub: 'Price / trial, plainly.', move: 'pullBackSlow' },
   ],
 
-  // Which videos to build. `store-preview specs` lists every target.
-  //   appstore-preview / play-promo → full-bleed (App Store / Play);  social-reel → device-framed (web/social).
-  targets: ['appstore-preview', 'play-promo', 'social-reel'],
+  // Which videos to build. `zdymak specs` lists every target.
+  //   appstore-preview / play-promo → full-bleed (App Store / Play)
+  //   social-reel   → device-framed (bezel + logo bookends)
+  //   premium-reel  → the Apple editing-vocabulary preset (matte + vignette + label pills + palette cuts)
+  targets: ['appstore-preview', 'play-promo', 'premium-reel'],
+
+  // Premium technique styling — ALL optional; brand-driven defaults apply if you omit `theme` entirely.
+  theme: {
+    bgTop: '#17161c', // matte gradient top
+    bgBottom: '#0b0b0a', // matte gradient bottom
+    glowAlpha: 0.16, // brand-colour radial glow strength
+    vignette: 0.3, // edge darkening (0..1)
+    inset: 0.955, // how much of the frame the app screen fills (thin matte border)
+    // handle: '@myapp',   // optional persistent top handle
+    // cutHard: 0.05, cutSoft: 0.24, cutThreshold: 42,  // palette-aware cut tuning
+  },
 
   sceneDur: 3.1, // seconds per scene
-  xfade: 0.32, //  cross-dissolve seconds
+  xfade: 0.32, //  cross-dissolve seconds (full-bleed / reel styles)
   out: './store-assets', // output dir (created if missing)
 };

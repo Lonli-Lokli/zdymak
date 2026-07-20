@@ -49,6 +49,20 @@ export const VIDEO_TARGETS = {
     style: 'reel', // ← device bezel + brand background + logo bookends (buildReel, not buildVideo)
     slot: 'For your website, X / Instagram / TikTok, or YouTube (Play listing). NOT the App Store App Preview slot — the device bezel is rejected there.',
   },
+  'premium-reel': {
+    store: 'Web / Social',
+    label: 'Premium Apple-style reel (1080×1920) — matte + vignette + label pills + palette-aware cuts',
+    w: 1080,
+    h: 1920,
+    fps: 30,
+    codec: 'h264',
+    profile: 'high',
+    level: '4.1',
+    minSec: null,
+    maxSec: null,
+    style: 'premium', // ← the Apple editing-vocabulary preset (buildPremium); themeable via `theme`
+    slot: 'The "one device, many apps" marketing reel for web/social/YouTube. Full-bleed screens on a brand matte (no bezel) — but the label pill/matte make it a marketing asset, not an App Store App Preview.',
+  },
 };
 
 /** Screenshot / graphic targets that produce still images (v0.2 — dimensions locked in now). */

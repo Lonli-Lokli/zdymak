@@ -1,5 +1,5 @@
 /**
- * Config loading + normalization. A project's `store-preview.config.mjs` (or .json) is the ONLY
+ * Config loading + normalization. A project's `zdymak.config.mjs` (or .json) is the ONLY
  * project-specific input; everything else lives in this reusable package.
  *
  * Shape (all paths are relative to the config file):
@@ -65,6 +65,7 @@ export async function loadConfig(configPath) {
     sceneDur: raw.sceneDur ?? 3.1,
     xfade: raw.xfade ?? 0.32,
     timing: raw.timing, // reel-mode timeline override { coldOpen, scene, endCard, xfade }
+    theme: raw.theme, // premium-technique styling override (matte, vignette, label, cuts) — defaults apply
     out: path.resolve(baseDir, raw.out || 'store-assets'),
     baseDir,
   };

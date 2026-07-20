@@ -1,4 +1,4 @@
-# store-preview
+# zdymak
 
 **Premium App Store & Google Play preview videos — from your screenshots, in one command.**
 
@@ -20,7 +20,7 @@ small config per project; the engine lives here, shared across all your apps.
 | ✅ **Store-compliant** | Full-bleed (no bezel — Apple rejects bezels), exact resolution, H.264 High @ the right level, yuv420p, faststart. |
 | 🍎 **App Store + 🤖 Play** | One 886×1920 file fills both iPhone App Preview slots; a 1080×1920 file is ready for a Play/YouTube promo. |
 | 🧩 **Two input modes** | **Bring your own** screenshots, *or* **capture** them from a booted simulator / device. |
-| ⚙️ **Config-driven** | Everything project-specific is one `store-preview.config.mjs`. The tool is otherwise generic. |
+| ⚙️ **Config-driven** | Everything project-specific is one `zdymak.config.mjs`. The tool is otherwise generic. |
 
 <br>
 
@@ -30,17 +30,17 @@ Needs **Node ≥18** and **ffmpeg** on your `PATH` (`brew install ffmpeg`).
 
 ```sh
 # from a checkout (until published to npm):
-npm i --prefix /path/to/store-preview
-npm link --prefix /path/to/store-preview        # gives you the `store-preview` command
+npm i --prefix /path/to/zdymak
+npm link --prefix /path/to/zdymak        # gives you the `zdymak` command
 # …or just call it directly:
-node /path/to/store-preview/bin/store-preview.mjs <command>
+node /path/to/zdymak/bin/zdymak.mjs <command>
 ```
 
 <br>
 
 ## Quickstart
 
-**1. Add a config** to your project root (copy `examples/example.config.mjs` → `store-preview.config.mjs`):
+**1. Add a config** to your project root (copy `examples/example.config.mjs` → `zdymak.config.mjs`):
 
 ```js
 export default {
@@ -60,12 +60,12 @@ export default {
 **2. Build:**
 
 ```sh
-store-preview video
+zdymak video
 # → store-assets/appstore-preview.mp4   (886×1920, upload to App Store Connect)
 # → store-assets/play-promo.mp4         (1080×1920, upload to YouTube, link in Play Console)
 ```
 
-That's it. `store-preview specs` prints every target and its exact dimensions.
+That's it. `zdymak specs` prints every target and its exact dimensions.
 
 <br>
 
@@ -79,9 +79,9 @@ screen, and snap it. The tool strips the alpha channel (stores reject transparen
 store-ready PNG straight into your screenshots folder:
 
 ```sh
-store-preview capture --platform ios      --name welcome --out ./screenshots
-store-preview capture --platform android  --name welcome --out ./screenshots
-store-preview capture --platform ios      --record       --out ./screenshots   # screen-record; Ctrl-C to stop
+zdymak capture --platform ios      --name welcome --out ./screenshots
+zdymak capture --platform android  --name welcome --out ./screenshots
+zdymak capture --platform ios      --record       --out ./screenshots   # screen-record; Ctrl-C to stop
 ```
 
 It does **not** build your app — that's your toolchain. It captures whatever's on screen, so you drive the
@@ -100,7 +100,7 @@ navigation.
 | `screenshotsDir` + `suffix` | Resolve `scene.id` → `${screenshotsDir}/${id}${suffix}.png`. |
 | `scenes[]` | `{ id \| image, title, sub, move }`. `image` overrides the id lookup. |
 | `scenes[].move` | `pushIn` · `pushInSlow` · `pullBack` · `pullBackSlow` · `driftUp` · `driftDown` · `driftLeft` · `driftRight` · `still`. Omit to auto-vary. |
-| `targets[]` | Which videos to build (`store-preview specs` lists them). |
+| `targets[]` | Which videos to build (`zdymak specs` lists them). |
 | `sceneDur` / `xfade` | Seconds per scene / cross-dissolve. Tune total length to the store's 15–30s window. |
 | `out` | Output directory. |
 
@@ -113,23 +113,28 @@ navigation.
   alone are a valid submission.
 - **Google Play** — Play takes a **YouTube URL**, not a file. Upload `play-promo.mp4` to YouTube, then
   paste the link in Play Console → Main store listing → **Preview video**.
-- **Web / social** — `social-reel.mp4` is the **device-framed** style: an iPhone bezel on a brand
-  background with a logo cold-open + end-card. For your website, X / Instagram / TikTok, or YouTube.
-  **Never** put it in the App Store App Preview slot — Apple rejects device bezels there; that's what the
-  full-bleed `appstore-preview` is for.
+- **Web / social** — `social-reel.mp4` (**device-framed**: iPhone bezel + logo bookends) or
+  `premium-reel.mp4` (**premium**: matte + vignette + label pills). For your website, X / Instagram /
+  TikTok, or YouTube. **Never** put either in the App Store App Preview slot — the bezel/label make them
+  marketing assets, not App Previews; that's what the full-bleed `appstore-preview` is for.
 
-> **Two styles, one config.** `appstore-preview` / `play-promo` are **full-bleed** (the screen fills the
-> frame — required for App Previews). `social-reel` is **device-framed** with brand bookends (a marketing
-> reel). Both read the same `scenes`; you pick per target in `targets`.
+> **Three styles, one config.** Every target reads the same `scenes`; the style is fixed per target:
+> - **full-bleed** (`appstore-preview`, `play-promo`) — the screen fills the frame; required for App Previews.
+> - **device-framed** (`social-reel`) — an iPhone bezel + brand background + logo cold-open/end-card.
+> - **premium** (`premium-reel`) — the **Apple editing-vocabulary** preset: every screen floats on a brand
+>   matte with a soft glow + vignette, a motion-then-freeze spring dolly, **palette-aware cuts** (hard cut
+>   within a palette, dissolve only at a shift), and a bottom title **pill**. Tune it with the optional
+>   `theme` block (matte colours, `vignette`, `inset`, `handle`, cut timings) — brand-driven defaults apply
+>   if you omit it.
 
 <br>
 
 ## Programmatic use
 
 ```js
-import { buildVideo, loadConfig, registerFonts, videoTarget } from 'store-preview';
+import { buildVideo, loadConfig, registerFonts, videoTarget } from 'zdymak';
 
-const cfg = await loadConfig('store-preview.config.mjs');
+const cfg = await loadConfig('zdymak.config.mjs');
 registerFonts(cfg.brand.fontPaths);
 await buildVideo({ scenes: cfg.scenes, spec: videoTarget('appstore-preview'), brand: cfg.brand, outFile: 'out.mp4' });
 ```
