@@ -210,9 +210,33 @@ async function captureAndroid(flags) {
   }
 }
 
+/**
+ * Platform dispatch. NOTE — there is intentionally NO `--platform macos` capture:
+ *
+ * macOS has no `simctl io screenshot` / `adb screencap` equivalent for snapshotting a *driven* app.
+ * Reading a specific native window's pixels requires a macOS TCC permission grant — either **Screen
+ * Recording** (for the `screencapture` CLI, which otherwise returns black frames) or **Accessibility**
+ * (to drive the UI + use XCUITest's own screenshot). Neither is a clean one-command capture like the
+ * mobile SDKs give us.
+ *
+ * The robust, TCC-correct way to capture a Mac app's marketing screens is an **XCUITest** run on the
+ * native-macOS build that drives the same launch-arg handle (`-marketingScreen <id>`) and saves each
+ * screen as an **XCTAttachment** — the sandboxed Mac test-runner can't write PNGs into your repo — then
+ * exports them from the `.xcresult`. That lives project-side (see Asilak's `Scripts/capture-mac.sh`,
+ * which already owns the one-time Accessibility grant + signing). zdymak still **composes** the Mac
+ * screenshots/reels from those captures (premium/bleed at 2880×1800, etc.).
+ *
+ * Folding that xcodebuild-test + xcresult-export flow into zdymak would just wrap an app-specific test
+ * with no real gain; a `screencapture` path would need a *second* TCC grant and is fragile. So Mac
+ * capture is deliberately left to the project's XCUITest script; zdymak captures iOS/Android (clean CLI)
+ * and composes every platform. (Web/Playwright capture is on the roadmap.)
+ */
 export async function runCapture(flags) {
   const platform = flags.platform;
   if (platform === 'ios') return captureIos(flags);
   if (platform === 'android') return captureAndroid(flags);
-  throw new Error('capture needs --platform ios|android. Boot a simulator/emulator (or connect a device) first, navigate to the screen, then run capture --name <screen>.');
+  if (platform === 'macos' || platform === 'mac') {
+    throw new Error('macOS capture is intentionally out of scope (see the note above runCapture): use an XCUITest capture (e.g. Scripts/capture-mac.sh) that drives the launch-arg handle + exports .xcresult attachments, then `zdymak build` composes the Mac assets.');
+  }
+  throw new Error('capture needs --platform ios|android. Boot a simulator/emulator (or connect a device) first, then run a single --name <screen> or the full-workflow form (--bundle --arg --states).');
 }
