@@ -257,7 +257,7 @@ rejects bezels here, which is why `social-reel` must never go in this slot.
 | Tablet screenshots | 2560×1440 (16:9) | recommended for large-screen | `play-tablet` |
 | Wear OS screenshots | 1080×1080 (**1:1**, 384–3840) | **required** for Wear listings | `play-wear` |
 | Feature graphic | **1024×500** | **required** | `play-feature-graphic` |
-| App icon | 512×512, ≤1 MB | **required** | `play-icon` |
+| App icon | 512×512, ≤1 MB, alpha OK | **required** | `play-icon` (from `brand.logo`) |
 
 **JPEG or 24-bit PNG · no alpha** (the icon is the one exception — 32-bit with alpha). The feature
 graphic is what carries the promo video: when a video is set, it plays over the graphic at the top of
@@ -499,20 +499,22 @@ Use `auto` for a deterministic rotation that stays mostly plain, or name one you
 | `soft-zoom-punch` | 0.30s | Fast scale punch — energy on the beat |
 | `frame-fill` | 0.50s | The incoming frame scales up to fill |
 | `push` | 0.42s | Push — navigation within the app |
+| `push-up` | 0.42s | Push upward - a feed or story advancing |
 | `page-slide` | 0.50s | The incoming page slides over the outgoing one |
 | `warp-slide` | 0.45s | Slide with a stretch — speed you can feel |
 | `whip-pan` | 0.34s | Whip pan — a blurred swing between subjects |
 | `polaroid-drop` | 0.55s | The incoming frame drops in and settles |
+| `blur-dissolve` | 0.55s | Defocus out, focus in - the premium app-ad standard |
+| `zoom-punch` | 0.40s | Radial zoom-blur through the cut - the beat-drop cut |
 | `clean-line-wipe` | 0.45s | Hard-edged linear wipe |
 | `edge-wipe-soft` | 0.50s | Soft-edged wipe — the seam is feathered |
-| `clean-circle-wipe` | 0.50s | Circular wipe from the centre |
 | `iris-circle` | 0.55s | Iris — the incoming frame opens from a point |
 | `iris-split` | 0.55s | Two irises open and meet |
 | `mirror-split` | 0.50s | The outgoing frame splits apart down the middle |
 | `heart-wipe` | 0.60s | Heart-shaped reveal |
 | `flip` | 0.50s | Card flip — same object, other side |
 | `spin-3d` | 0.55s | Spin — the frame swings past the camera and the next swings in |
-| `page-peel` | 0.60s | The outgoing page peels away on a diagonal |
+| `page-peel` | 0.60s | The outgoing page peels away from the corner |
 | `tearing-paper` | 0.65s | The outgoing frame tears in two and parts |
 | `light-leak-wipe` | 0.60s | A warm light leak sweeps the cut |
 | `glare-sweep` | 0.50s | A lens-flare streak crosses the cut |
@@ -536,7 +538,7 @@ shots to show the interface unaltered, so grade your ads, not your listing.
 | `duotone` | grade + overlay | Duotone |
 | `vignette` | overlay | Vignette — darkens the corners |
 | `soft-glow` | overlay | Soft glow — light blooms out of the highlights |
-| `dreamy-haze` | grade + overlay | Dreamy haze |
+| `dreamy-haze` | grade + overlay | Dreamy haze - soft-focus bloom |
 | `bokeh` | overlay | Bokeh — drifting out-of-focus lights |
 | `glare` | overlay | Glare — a static lens streak |
 | `floodlight` | overlay | Floodlight — a warm pool of stage light |
@@ -544,6 +546,8 @@ shots to show the interface unaltered, so grade your ads, not your listing.
 | `film-grain` | overlay | Film grain |
 | `scanlines` | overlay | Scanlines — CRT texture |
 | `dust-scratches` | overlay | Dust & scratches — projected-print wear |
+| `camera-shake` | overlay | Camera shake - handheld energy |
+| `letterbox` | overlay | Letterbox - cinematic bars |
 | `falling-snow` | overlay | Falling snow |
 | `sparkles-fireflies` | overlay | Sparkles / fireflies |
 | `heart-drift` | overlay | Drifting hearts |

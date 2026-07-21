@@ -75,3 +75,33 @@ export async function buildFeatureGraphic({ W = 1024, H = 500, brand, theme, her
   fs.writeFileSync(outFile, rgbPngBuffer(c));
   return { outFile, W, H };
 }
+
+
+/**
+ * The Play app icon — 512×512, 32-bit PNG, alpha allowed (the ONE store asset where it is).
+ *
+ * This is a branded graphic, not a per-scene screenshot: it renders `brand.logo` on the brand ground,
+ * which is why the target carries `graphic: true`. If no logo is configured we refuse rather than emit a
+ * blank square — a silently-empty icon is worse than a clear error at build time.
+ */
+export async function buildAppIcon({ W = 512, H = 512, brand, theme, outFile }) {
+  const th = { ...DEFAULT, ...(theme || {}) };
+  if (!brand.logo || !fs.existsSync(brand.logo)) {
+    throw new Error(
+      "play-icon needs `brand.logo` — a square PNG of your app icon. Set it, or drop the 'play-icon' target " +
+      '(Play also accepts the icon uploaded straight to the Console, so this target is a convenience).',
+    );
+  }
+  const c = createCanvas(W, H);
+  const ctx = c.getContext('2d');
+  const logo = await loadImage(brand.logo);
+  // Fill the square: Play shows the icon masked to its own shape, so bleed to the edges and let the
+  // store apply the mask. Any transparency in the source logo is preserved (alpha is legal here).
+  const a = logo.height / logo.width;
+  let dw = W;
+  let dh = W * a;
+  if (dh < H) { dh = H; dw = H / a; }
+  ctx.drawImage(logo, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  fs.writeFileSync(outFile, c.toBuffer('image/png')); // RGBA — do NOT route through rgbPngBuffer
+  return { outFile, W, H };
+}

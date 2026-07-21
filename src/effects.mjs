@@ -59,6 +59,9 @@ function particles(ctx, { W, H, t }, { count, seed = 0, speed, size, drift = 0.4
   }
 }
 
+/** Accent colour for effects that tint: the consuming project's brand, not zdymak's own greens. */
+const accent = (o, fallback = '#ffffff') => o?.brand?.sub || fallback;
+
 export const EFFECTS = {
   none: { label: 'No effect' },
 
@@ -114,14 +117,14 @@ export const EFFECTS = {
   },
 
   'dreamy-haze': {
-    label: 'Dreamy haze',
+    label: 'Dreamy haze - soft-focus bloom',
     filter: 'brightness(1.04) saturate(1.05)',
-    overlay(ctx, { W, H }) {
-      blended(ctx, 'screen', 0.22, (c) => {
-        c.fillStyle = radial(c, W / 2, H * 0.5, Math.hypot(W, H) * 0.55, [
-          [0, 'rgba(255,240,255,0.8)'], [1, 'rgba(255,240,255,0)'],
-        ]);
-        c.fillRect(0, 0, W, H);
+    overlay(ctx) {
+      // A real soft focus, not a second radial white wash: `soft-glow` already owns that, and two ids
+      // rendering the same overlay is how a library gets padded rather than useful.
+      blended(ctx, 'screen', 0.2, (c) => {
+        c.filter = 'blur(26px)';
+        c.drawImage(c.canvas, 0, 0);
       });
     },
   },
@@ -133,7 +136,7 @@ export const EFFECTS = {
       particles(c, o, {
         count: 18, seed: 11, speed: -6, size: o.W * 0.05, drift: 1,
         draw: (cc, x, y, r, s) => {
-          cc.fillStyle = hexA(s % 3 === 0 ? '#bbf7d0' : '#ffffff', 0.5 + rnd(s) * 0.4);
+          cc.fillStyle = hexA(s % 3 === 0 ? accent(o) : '#ffffff', 0.5 + rnd(s) * 0.4);
           cc.beginPath();
           cc.arc(x, y, r, 0, Math.PI * 2);
           cc.fill();
@@ -225,6 +228,31 @@ export const EFFECTS = {
     },
   },
 
+  'camera-shake': {
+    label: 'Camera shake - handheld energy',
+    overlay(ctx, { t }) {
+      // Deterministic per frame index, so a re-render is identical. The one energy tool every ad editor
+      // reaches for, and the only obvious hole in this set.
+      const f = Math.round(t * 60);
+      const dx = (rnd(f) - 0.5) * ctx.canvas.width * 0.012;
+      const dy = (rnd(f + 51) - 0.5) * ctx.canvas.width * 0.012;
+      ctx.save();
+      ctx.globalCompositeOperation = 'copy';
+      ctx.drawImage(ctx.canvas, dx, dy);
+      ctx.restore();
+    },
+  },
+
+  letterbox: {
+    label: 'Letterbox - cinematic bars',
+    overlay: (ctx, { W, H }) => blended(ctx, 'source-over', 1, (c) => {
+      const bar = Math.round(H * 0.055);
+      c.fillStyle = '#000000';
+      c.fillRect(0, 0, W, bar);
+      c.fillRect(0, H - bar, W, bar);
+    }),
+  },
+
   // ── Particles ──────────────────────────────────────────────────────────────────────────────────
   'falling-snow': {
     label: 'Falling snow',
@@ -274,7 +302,7 @@ export const EFFECTS = {
     overlay: (ctx, o) => blended(ctx, 'source-over', 0.9, (c) => particles(c, o, {
       count: 40, seed: 61, speed: 42, size: o.W * 0.012, drift: 1.8,
       draw: (cc, x, y, r, s) => {
-        const colours = ['#22c55e', '#f59e0b', '#38bdf8', '#f472b6', '#facc15'];
+        const colours = [accent(o, '#22c55e'), '#f59e0b', '#38bdf8', '#f472b6', '#facc15'];
         cc.save();
         cc.translate(x, y);
         cc.rotate(rnd(s + 9) * Math.PI * 2 + o.t * 2);

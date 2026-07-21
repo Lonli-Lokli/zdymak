@@ -192,7 +192,7 @@ function buildScene(W, H, screen, caption, p, S, { frame, effect, scroll } = {})
     subColor: p.subColor,
   });
 
-  return { plate, content, draw, screenW, cy, fx, scroll, travel: Math.max(0, contentH - Math.round(sr.h)) };
+  return { plate, content, draw, screenW, cy, fx, scroll, brand: p, travel: Math.max(0, contentH - Math.round(sr.h)) };
 }
 
 /**
@@ -203,7 +203,7 @@ function buildScene(W, H, screen, caption, p, S, { frame, effect, scroll } = {})
  * paint order — body, then clipped screen, then island/punch-hole on top — with no layer surgery.
  */
 function paintScene(ctx, scene, prog, t = 0) {
-  const { plate, content, draw, screenW, cy, travel, fx, scroll } = scene;
+  const { plate, content, draw, screenW, cy, travel, fx, scroll, brand } = scene;
   ctx.drawImage(plate, 0, 0);
   draw(ctx, (c, x, y, w, h) => {
     // STATIC unless the scene opts in with `scroll: true`. Scrolling every screen parks each one at an
@@ -213,7 +213,7 @@ function paintScene(ctx, scene, prog, t = 0) {
     c.drawImage(content, x, y - (reach ? easeInOut(prog) * reach : 0));
   }, ctx.canvas.width / 2, cy, screenW, { aspect: DEVICE_ASPECT });
   // Overlays (grain, vignette, particles, light) sit over the whole finished frame, film-style.
-  fx?.overlay?.(ctx, { W: ctx.canvas.width, H: ctx.canvas.height, t, p: prog });
+  fx?.overlay?.(ctx, { W: ctx.canvas.width, H: ctx.canvas.height, t, p: prog, brand });
 }
 
 function renderColdOpen(W, H, logo, brand, p, S) {

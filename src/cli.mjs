@@ -55,7 +55,10 @@ async function open(flags) {
 
 /** Warn when the audio expectation and the config disagree: a video/reel that should carry a music score
  *  has none (Apple recommends a single score for continuity), or `music` is set where nothing consumes it. */
-function warnAudio({ videoCount, hasMusic, label }) {
+function warnAudio({ videoCount, hasMusic, label, silentByDesign }) {
+  // Never nag about a Play promo: our own guidance is to keep it silent unless the track is cleared,
+  // because a ContentID claim can force ads onto a listing video, which Play forbids.
+  if (silentByDesign) return;
   if (videoCount > 0 && !hasMusic) {
     console.warn(`⚠︎ audio: ${label} ${videoCount === 1 ? 'plays' : 'play'} SILENT — no music. Apple recommends a single music score for continuity; set \`music.path\`.`);
   }

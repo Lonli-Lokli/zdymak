@@ -92,10 +92,10 @@ export type SceneMove =
  * decorative transition at every boundary is the loudest amateur tell. `auto` is a deterministic rotation
  * that stays mostly plain. See the transition table in the README.
  */
-export type CutId = 'cut' | 'dissolve' | 'cinematic-dissolve' | 'match-cut' | 'fade-through-black' | 'dip-to-white' | 'soft-flash' | 'slow-zoom-through' | 'pull-out' | 'soft-zoom-punch' | 'frame-fill' | 'push' | 'page-slide' | 'warp-slide' | 'whip-pan' | 'polaroid-drop' | 'clean-line-wipe' | 'edge-wipe-soft' | 'clean-circle-wipe' | 'iris-circle' | 'iris-split' | 'mirror-split' | 'heart-wipe' | 'flip' | 'spin-3d' | 'page-peel' | 'tearing-paper' | 'light-leak-wipe' | 'glare-sweep' | 'floodlight-sweep' | 'clouds-wipe' | 'glitch-cut' | 'auto';
+export type CutId = 'cut' | 'dissolve' | 'cinematic-dissolve' | 'match-cut' | 'fade-through-black' | 'dip-to-white' | 'soft-flash' | 'slow-zoom-through' | 'pull-out' | 'soft-zoom-punch' | 'frame-fill' | 'push' | 'push-up' | 'page-slide' | 'warp-slide' | 'whip-pan' | 'polaroid-drop' | 'blur-dissolve' | 'zoom-punch' | 'clean-line-wipe' | 'edge-wipe-soft' | 'iris-circle' | 'iris-split' | 'mirror-split' | 'heart-wipe' | 'flip' | 'spin-3d' | 'page-peel' | 'tearing-paper' | 'light-leak-wipe' | 'glare-sweep' | 'floodlight-sweep' | 'clouds-wipe' | 'glitch-cut' | 'clean-circle-wipe' | 'auto';
 
 /** Per-scene look (reel only — never applied to store screenshots). See the effect table in the README. */
-export type EffectId = 'none' | 'bw' | 'sepia' | 'cool' | 'vibrant' | 'soft-faded' | 'warm-film' | 'duotone' | 'vignette' | 'soft-glow' | 'dreamy-haze' | 'bokeh' | 'glare' | 'floodlight' | 'light-leak' | 'film-grain' | 'scanlines' | 'dust-scratches' | 'falling-snow' | 'sparkles-fireflies' | 'heart-drift' | 'confetti-drift' | 'clouds-drift';
+export type EffectId = 'none' | 'bw' | 'sepia' | 'cool' | 'vibrant' | 'soft-faded' | 'warm-film' | 'duotone' | 'vignette' | 'soft-glow' | 'dreamy-haze' | 'bokeh' | 'glare' | 'floodlight' | 'light-leak' | 'film-grain' | 'scanlines' | 'dust-scratches' | 'camera-shake' | 'letterbox' | 'falling-snow' | 'sparkles-fireflies' | 'heart-drift' | 'confetti-drift' | 'clouds-drift';
 
 /** Still-rendering style. Inferred per target (framed device / premium window); override per shot. */
 export type RenderStyle = 'framed' | 'premium' | 'bleed' | 'reel';

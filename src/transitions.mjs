@@ -60,6 +60,20 @@ function veil(ctx, colour, a, W, H) {
   ctx.fillRect(0, 0, W, H);
 }
 
+/**
+ * Dim a turning surface with `multiply`, not an opaque black wash. Flat black at 30-40% over a light
+ * matte reads as a grey smudge sitting ON the frame; multiply darkens what is actually there, which is
+ * what a surface angling away from the light does.
+ */
+function shade(ctx, a, W, H) {
+  if (a <= 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.fillStyle = hexA('#7d8a82', Math.min(1, a));
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
 /** Deterministic pseudo-random in [0,1) — same frame renders identically on every machine. */
 const rnd = (n) => {
   const x = Math.sin(n * 12.9898) * 43758.5453;
@@ -187,6 +201,18 @@ export const TRANSITIONS = {
     },
   },
 
+  'push-up': {
+    dur: 0.42,
+    label: 'Push upward - a feed or story advancing',
+    paint(ctx, prev, next, p, { H }) {
+      // Vertical is the first thing a social author asks for after "slide", and every other movement
+      // transition here is horizontal.
+      const e = easeInOutCubic(p);
+      ctx.drawImage(prev, 0, -H * e);
+      ctx.drawImage(next, 0, H * (1 - e));
+    },
+  },
+
   'page-slide': {
     dur: 0.5,
     label: 'The incoming page slides over the outgoing one',
@@ -231,6 +257,39 @@ export const TRANSITIONS = {
       ctx.drawImage(prev, 0, 0);
       const e = easeOutBack(p);
       transformed(ctx, next, { y: -H * (1 - e), rotate: (1 - e) * 0.05, alpha: smoothstep(Math.min(1, p * 2)), W, H });
+    },
+  },
+
+  'blur-dissolve': {
+    dur: 0.55,
+    label: 'Defocus out, focus in - the premium app-ad standard',
+    paint(ctx, prev, next, p, { W, H }) {
+      // The most common transition in polished app advertising, and the one this table was missing.
+      const b = Math.sin(Math.PI * p) * 22;
+      const f = b > 0.5 ? `blur(${b.toFixed(2)}px)` : undefined;
+      transformed(ctx, prev, { scale: 1 + 0.03 * p, filter: f, W, H });
+      transformed(ctx, next, { scale: 1.03 - 0.03 * p, alpha: smoothstep(p), filter: f, W, H });
+    },
+  },
+
+  'zoom-punch': {
+    dur: 0.4,
+    label: 'Radial zoom-blur through the cut - the beat-drop cut',
+    paint(ctx, prev, next, p, { W, H }) {
+      // Radial blur approximated by stacking scaled, fading copies - Skia has no zoom-blur filter.
+      const amt = Math.sin(Math.PI * p);
+      const layer = p < 0.5 ? prev : next;
+      ctx.drawImage(layer, 0, 0);
+      if (amt > 0.02) {
+        // BLENDED copies, not additive: `lighter` sums channels, and over a light app UI four passes
+        // saturate straight to white instead of reading as a smear.
+        ctx.save();
+        for (let i = 1; i <= 5; i++) {
+          ctx.globalAlpha = 0.3 * amt;
+          transformed(ctx, layer, { scale: 1 + 0.05 * i * amt, W, H });
+        }
+        ctx.restore();
+      }
     },
   },
 
@@ -345,7 +404,7 @@ export const TRANSITIONS = {
       const e = easeInOutCubic(half ? p * 2 : (p - 0.5) * 2);
       const sx = Math.max(0.001, half ? 1 - e : e);
       transformed(ctx, half ? prev : next, { scaleX: sx, pivotY: 0, W, H });
-      veil(ctx, '#000000', 0.28 * (1 - Math.abs(p - 0.5) * 2), W, H);
+      shade(ctx, 0.45 * (1 - Math.abs(p - 0.5) * 2), W, H);
     },
   },
 
@@ -368,7 +427,7 @@ export const TRANSITIONS = {
         x: dir * W * 0.22 * edgeOn,
         W, H,
       });
-      veil(ctx, '#000000', 0.42 * (1 - Math.abs(p - 0.5) * 2), W, H);
+      shade(ctx, 0.6 * (1 - Math.abs(p - 0.5) * 2), W, H);
     },
   },
 

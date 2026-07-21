@@ -338,7 +338,15 @@ export async function buildMontage({ segments, brand, theme, spec, music, sceneD
 
     // 1) composite every segment (a clip, one image, or an image sequence) → an intermediate clip.
     const segClips = [];
-    segments.forEach((seg, i) => {
+    for (const [i, seg] of segments.entries()) {
+    for (const f of [seg.clip, seg.image, ...(seg.images || [])].filter(Boolean)) {
+      if (!fs.existsSync(f)) {
+        throw new Error(`reel segment[${i}]: file not found — ${f}
+  (a missing clip otherwise surfaces as an ffprobe/NaN error deep in the encode)`);
+      }
+    }
+  }
+  segments.forEach((seg, i) => {
       const hasCap = !!(seg.caption && (seg.caption.title || seg.caption.sub));
       const lay = layout(W, H, hasCap, th.inset, th.captionAnchor === 'top');
       const captionPath = path.join(tmp, `cap-${i}.png`);

@@ -10,7 +10,7 @@ import { renderStill } from './still.mjs';
 import { rgbPngBuffer } from './png.mjs';
 import { IMAGE_TARGETS } from './specs.mjs';
 import { inferFrame } from './frames.mjs';
-import { buildFeatureGraphic } from './graphic.mjs';
+import { buildFeatureGraphic, buildAppIcon } from './graphic.mjs';
 
 /**
  * Apply a locale's caption table to a scene list. A scene the locale doesn't translate keeps its base
@@ -67,6 +67,14 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir }) {
     // Infer the style from the target: a framed device (phone/tablet/watch) → 'framed'; a frameless
     // target (Mac/desktop) → 'premium' (window on the matte). Overridable per shot (e.g. Watch → 'bleed').
     const style = shot.style || (frame ? 'framed' : 'premium');
+
+    // The app icon is a branded square built from brand.logo — and the only target that keeps alpha.
+    if (spec.icon) {
+      const outFile = path.join(outDir, `${shot.target}.png`);
+      await buildAppIcon({ W, H, brand, theme: shot.theme || theme, outFile });
+      written.push({ file: outFile, W, H, style: 'icon' });
+      continue;
+    }
 
     // Feature graphic (Play banner) is a single branded image, not a per-scene shot.
     if (spec.graphic) {

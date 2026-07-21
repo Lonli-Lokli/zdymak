@@ -5,8 +5,7 @@
  *   premium — the app screen floats on a brand matte (glow + vignette) with a bottom title pill.
  *   bleed   — the app screen fills the frame, with an optional lower-third caption. Best for Watch (raw).
  *
- * (Device-FRAMED stills — iPhone/iPad bezel, Mac window, Watch ring — are the next addition; `framed`
- *  currently falls back to `bleed`.)
+ *   framed  — the capture inside a device body (iPhone/iPad/Android/Watch), caption on top.
  */
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { premiumStill } from './premium.mjs';

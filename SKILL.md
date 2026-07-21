@@ -130,7 +130,7 @@ mismatch is a routine rejection.
 unless the track is cleared (ContentID → forced ads → Play violation).
 
 ## Store cut vs social-ad cut (per-scene `cut` / `effect`)
-`social-reel` supports **32 transitions** and **23 effects**, chosen per scene:
+`social-reel` supports **34 transitions** and **25 effects**, chosen per scene:
 `{ id: 'study', cut: 'flip', effect: 'warm-film', push: true }`.
 
 - **Store preview → stay plain.** Default `cut` (a one-frame hard cut) carries the rhythm; spend a
