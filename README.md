@@ -6,10 +6,7 @@ Turn a handful of app screenshots into a cinematic, **spec-compliant** store pre
 moves, kinetic captions, and an encode that App Store Connect and Google Play accept without a fight. One
 small config per project; the engine lives here, shared across all your apps.
 
-<p align="center">
-  <img src="docs/demo.gif" alt="zdymak turning three flat app screenshots into a premium reel with motion and captions" width="270"><br>
-  <em>Three flat screenshots → this premium reel, from one <code>zdymak.config.mjs</code> — reproduce it with <code>npm run example</code>. (<a href="docs/demo.mp4">full-quality MP4</a>)</em>
-</p>
+<p align="center"><em>▶︎ <b>See it in action:</b> run <code>npm run example</code> to render the demo reel from three flat screenshots — a hosted preview lands in a later release.</em></p>
 
 > Why it exists: a plain "Ken-Burns zoom over screenshots" reads as amateur, and hand-encoding to each
 > store's exact spec (Apple: 886×1920, H.264 High@4.0, 15–30s, **no device frame**) is fiddly and easy to
