@@ -248,25 +248,38 @@ export async function buildMontage({ segments, brand, theme, spec, music, sceneD
       segClips.push({ file: concatClips(subs, tmp, i), palette: seg.palette ?? null });
     });
 
-    // 2) xfade chain — hard cut by default, soft dissolve only where the palette changes.
+    // 2) assemble. NORMALIZE every segment first (fps / timebase / format / SAR) so VFR `recordVideo`
+    //    clips and image stills mix cleanly. All-hard-cut reels CONCAT end-to-end (robust — no fragile
+    //    near-zero-margin xfade offsets); a palette change uses an xfade dissolve on those boundaries.
     const inputs = [];
     segClips.forEach((s) => inputs.push('-i', s.file));
+    const cutBefore = (i) => (segClips[i - 1].palette && segClips[i].palette && segClips[i - 1].palette !== segClips[i].palette) ? SOFT : HARD;
+    const anySoft = segClips.some((_, i) => i > 0 && cutBefore(i) === SOFT);
+
     let filter = '';
-    let cur = '0:v';
-    let offset = 0;
-    for (let i = 1; i < segClips.length; i++) {
-      const dur = (segClips[i - 1].palette && segClips[i].palette && segClips[i - 1].palette !== segClips[i].palette)
-        ? SOFT : HARD;
-      offset += hold - dur;
-      const out = i === segClips.length - 1 ? 'vout' : `x${i}`;
-      filter += `[${cur}][${i}:v]xfade=transition=fade:duration=${dur.toFixed(3)}:offset=${offset.toFixed(3)}[${out}];`;
-      cur = out;
+    segClips.forEach((_, i) => {
+      filter += `[${i}:v]fps=${fps},format=yuv420p,setsar=1,settb=AVTB,setpts=PTS-STARTPTS[n${i}];`;
+    });
+
+    let totalDur;
+    if (segClips.length === 1) {
+      filter += '[n0]copy[vout];';
+      totalDur = hold;
+    } else if (!anySoft) {
+      filter += `${segClips.map((_, i) => `[n${i}]`).join('')}concat=n=${segClips.length}:v=1[vout];`;
+      totalDur = segClips.length * hold;
+    } else {
+      let cur = 'n0';
+      let offset = 0;
+      for (let i = 1; i < segClips.length; i++) {
+        const dur = cutBefore(i);
+        offset += hold - dur;
+        const out = i === segClips.length - 1 ? 'vout' : `x${i}`;
+        filter += `[${cur}][n${i}]xfade=transition=fade:duration=${dur.toFixed(3)}:offset=${offset.toFixed(3)}[${out}];`;
+        cur = out;
+      }
+      totalDur = segClips.length * hold - segClips.slice(1).reduce((a, _, i) => a + cutBefore(i + 1), 0);
     }
-    if (segClips.length === 1) filter = '[0:v]copy[vout];';
-    const totalDur = hold + (segClips.length - 1) * hold - segClips.slice(1).reduce((a, _, i) => {
-      const dur = (segClips[i].palette && segClips[i + 1].palette && segClips[i].palette !== segClips[i + 1].palette) ? SOFT : HARD;
-      return a + dur;
-    }, 0);
 
     // 3) optional music bed (trim/loop to length, fade, volume).
     const audioArgs = [];
