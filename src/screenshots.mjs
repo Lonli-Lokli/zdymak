@@ -43,11 +43,11 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir }) {
     }
 
     const dir = path.join(outDir, shot.target);
-    fs.mkdirSync(dir, { recursive: true });
 
     let n = 0;
     for (const scene of device.scenes) {
       if (!fs.existsSync(scene.image)) continue; // graceful: this device lacks this scene's capture
+      if (!n) fs.mkdirSync(dir, { recursive: true }); // only once we have something to put in it
       n++;
       const still = await renderStill(style, {
         W, H,

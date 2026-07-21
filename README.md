@@ -162,6 +162,7 @@ devices: {
             screenshots: [{ target: 'appstore-watch', style: 'bleed', size: [422, 514] }] }, // override: raw fill
   android:{ capturesDir: './shots/android', suffix: '', screenshots: [
             { target: 'play-phone' }, { target: 'play-tablet' },
+            { target: 'play-wear' },                             // 1080×1080 square, round watch body
             { target: 'play-feature-graphic' } ] },              // the 1024×500 Play banner (not per-scene)
   // a device may also carry `videos: [{ target: 'premium-reel', size: [2064, 2752] }]` at its own dimensions
 },

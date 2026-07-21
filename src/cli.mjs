@@ -138,11 +138,20 @@ async function cmdBuild(flags) {
     }
   }
   // 2) per-device videos + screenshots
+  let deviceVideos = 0;
   for (const device of cfg.devices) {
+    // A device the app doesn't ship (or hasn't captured yet) skips cleanly — same contract as its
+    // screenshots. Without this, one uncaptured device aborts the whole build for every other one.
+    const captured = device.scenes.filter((s) => fs.existsSync(s.image));
     if (device.videos.length) {
-      console.log(`zdymak build • ${device.name} videos`);
-      for (const v of device.videos) {
-        await buildVideoTarget({ id: v.target, scenes: device.scenes, brand: cfg.brand, cfg, size: v.size, theme: device.theme, outFile: path.join(outDir, `${device.name}-${v.target}.mp4`) });
+      if (!captured.length) {
+        console.log(`  • ${device.name} videos: skipped — no captures found`);
+      } else {
+        console.log(`zdymak build • ${device.name} videos`);
+        for (const v of device.videos) {
+          await buildVideoTarget({ id: v.target, scenes: captured, brand: cfg.brand, cfg, size: v.size, theme: device.theme, outFile: path.join(outDir, `${device.name}-${v.target}.mp4`) });
+          deviceVideos++;
+        }
       }
     }
     if (device.screenshots.length) {
@@ -150,8 +159,7 @@ async function cmdBuild(flags) {
       console.log(`  • ${device.name} screenshots: ${written.length}${written.length ? '' : ' — no captures found, skipped'}`);
     }
   }
-  const videoCount = (cfg.targets.length && cfg.scenes.length ? cfg.targets.length : 0)
-    + cfg.devices.reduce((a, d) => a + d.videos.length, 0);
+  const videoCount = (cfg.targets.length && cfg.scenes.length ? cfg.targets.length : 0) + deviceVideos;
   warnAudio({ videoCount, hasMusic: !!cfg.music, label: 'videos' });
   console.log('Done.');
 }
