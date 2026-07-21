@@ -6,6 +6,11 @@ Turn a handful of app screenshots into a cinematic, **spec-compliant** store pre
 moves, kinetic captions, and an encode that App Store Connect and Google Play accept without a fight. One
 small config per project; the engine lives here, shared across all your apps.
 
+<p align="center">
+  <img src="docs/demo.gif" alt="zdymak turning three flat app screenshots into a premium reel with motion and captions" width="270"><br>
+  <em>Three flat screenshots → this premium reel, from one <code>zdymak.config.mjs</code> — reproduce it with <code>npm run example</code>. (<a href="docs/demo.mp4">full-quality MP4</a>)</em>
+</p>
+
 > Why it exists: a plain "Ken-Burns zoom over screenshots" reads as amateur, and hand-encoding to each
 > store's exact spec (Apple: 886×1920, H.264 High@4.0, 15–30s, **no device frame**) is fiddly and easy to
 > get rejected. This bakes the premium motion and the store rules in.
@@ -26,15 +31,24 @@ small config per project; the engine lives here, shared across all your apps.
 
 ## Install
 
-Needs **Node ≥18** and **ffmpeg** on your `PATH` (`brew install ffmpeg`).
-
 ```sh
-# from a checkout (until published to npm):
-npm i --prefix /path/to/zdymak
-npm link --prefix /path/to/zdymak        # gives you the `zdymak` command
-# …or just call it directly:
-node /path/to/zdymak/bin/zdymak.mjs <command>
+npm i -g zdymak      # global CLI → `zdymak <command>`
+# …or per-project:
+npm i -D zdymak      # → `npx zdymak <command>`
 ```
+
+Also needs **Node ≥18** and **ffmpeg** on your `PATH`:
+
+| Platform | Install ffmpeg |
+|---|---|
+| **macOS** | `brew install ffmpeg` |
+| **Linux** — Debian/Ubuntu | `sudo apt install ffmpeg` |
+| **Linux** — Fedora | `sudo dnf install ffmpeg` |
+| **Windows** | `winget install Gyan.FFmpeg`  ·  or `choco install ffmpeg` / `scoop install ffmpeg` |
+
+zdymak finds ffmpeg on `PATH`, or set `$FFMPEG` to an explicit binary. Video generation is pure Node +
+ffmpeg — no platform SDKs. Screenshot **capture** additionally needs that platform's toolchain: **Xcode**
+for `--platform ios`, the **Android SDK / `adb`** for `--platform android`.
 
 <br>
 

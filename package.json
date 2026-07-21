@@ -25,6 +25,12 @@
   "engines": {
     "node": ">=18"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lonli-Lokli/zdymak.git"
+  },
+  "homepage": "https://github.com/Lonli-Lokli/zdymak#readme",
+  "bugs": "https://github.com/Lonli-Lokli/zdymak/issues",
   "dependencies": {
     "@napi-rs/canvas": "^0.1.60"
   },
