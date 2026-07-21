@@ -1,23 +1,26 @@
 /**
  * LIVE-FOOTAGE reel (montage) — uspamin's ad-video technique, generalized and made source-agnostic.
  *
- * Composite driven video CLIPS (real motion) or IMAGE sequences on a constant brand matte, HARD-CUT on the
- * music beat (a soft dissolve only at a palette shift), with a floating rounded screen + shadow, kinetic
- * caption pill, vignette, and optional ducked music. Unlike the premium/social reels — which Ken-Burns a
- * single static screenshot — this shows REAL motion, so it reads premium.
+ * Composite driven video CLIPS (real motion) or IMAGE sequences on a clean matte — floating rounded screen
+ * + soft shadow, a headline caption above it, and a short cross-DISSOLVE between beats (Apple App-Preview
+ * style; `transition:'cut'` for beat-matched hard cuts). The matte defaults to LIGHT (consistent with the
+ * light store screenshots), and STILLS get a slow never-freezing push-in (a frozen still reads as dead).
+ * Unlike the premium/social reels — which Ken-Burns a single screenshot — this shows real motion + premium
+ * framing. Optional ducked music.
  *
  * Source-agnostic (mirrors zdymak's two screenshot modes): each segment's `clip` / `image` / `images` can be
- * BROUGHT by the user or CAPTURED by `zdymak capture --record`. The engine treats any moving mp4 or still
- * the same way.
+ * BROUGHT by the user or CAPTURED by `zdymak capture --record`.
  *
  * Config (a `reel` block; `sceneDur`/`bpm`/`beatsPerCut` set the beat-matched hold):
  *   reel: {
- *     bpm: 120, beatsPerCut: 4,                 // hold = beatsPerCut × 60/bpm seconds per segment
+ *     bpm: 120, beatsPerCut: 4,                    // hold = beatsPerCut × 60/bpm seconds per segment
+ *     transition: 'dissolve' | 'cut', xfadeDur: 0.3,
+ *     theme: { ... },                              // matte override; defaults LIGHT + caption on top
  *     music: { path, volume, fadeIn, fadeOut, offset },
  *     segments: [
- *       { clip: './rec/study.mov',  caption: { title, sub }, palette: 'a' },   // real motion
- *       { images: ['a.png','b.png'], caption: { title, sub }, palette: 'a' },  // multiple photos / page
- *       { image: './shots/welcome.png', caption: { title, sub } },             // one still
+ *       { clip: './rec/study.mov',   caption: { title, sub } },  // real motion (a recording)
+ *       { images: ['a.png','b.png'], caption: { title, sub } },  // multiple photos / page
+ *       { image: './shots/welcome.png', caption: { title, sub } }, // one still (gets a slow push-in)
  *     ],
  *   }
  */
@@ -27,7 +30,32 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { createCanvas } from '@napi-rs/canvas';
 import { font, hexA, roundRectPath, fillVerticalGradient, radialGlow, wrapLines } from './canvas.mjs';
-import { resolvePremiumTheme } from './premium.mjs';
+
+// The reel matte defaults to LIGHT — consistent with the light store screenshots (a dark matte behind
+// light-theme screens reads as inconsistent). Apple's app marketing favours clean, minimal, untextured
+// backgrounds; the screen floats via a soft SHADOW, not a heavy vignette. Override any key via `reel.theme`.
+const REEL_LIGHT_DEFAULT = {
+  bgTop: '#eef2ef', // soft, faintly cool light
+  bgBottom: '#ffffff',
+  glow: null, // → brand.sub, kept very subtle on light
+  glowAlpha: 0.05,
+  vignette: 0, // no filter-y vignette on a light matte
+  inset: 0.8,
+  radius: 0.05,
+  shadow: 0.24, // the float cue on light
+  label: false, // plain caption text, no pill (matches the light screenshots)
+  pillFill: null,
+  pillOpacity: 0.9,
+  labelColor: '#0b0b0a', // near-black headline
+  subColor: '#52606d', // muted slate subhead
+  captionAnchor: 'top', // headline ON TOP, matching the store screenshots
+};
+function resolveReelTheme(brand, theme) {
+  const th = { ...REEL_LIGHT_DEFAULT, ...(theme || {}) };
+  th.glow = th.glow || brand.sub;
+  th.pillFill = th.pillFill || brand.ink;
+  return th;
+}
 
 const FF = process.env.FFMPEG || 'ffmpeg';
 const FFPROBE = process.env.FFPROBE || 'ffprobe';
@@ -55,14 +83,16 @@ function fit(srcW, srcH, boxW, boxH) {
   return [w % 2 ? w + 1 : w, h % 2 ? h + 1 : h];
 }
 
-/** Vertical layout: reserve a bottom BAND for the caption; the screen floats in the area above it (so the
- *  caption never sits on the app UI). No caption → a thin symmetric matte all round. */
-function layout(W, H, hasCaption, inset) {
-  const topPad = Math.round(H * 0.06);
-  const band = Math.round(H * (hasCaption ? 0.2 : 0.06));
-  const availH = H - topPad - band;
+/** Vertical layout: reserve a BAND for the caption (top or bottom); the screen floats in the remaining
+ *  area, so the caption never sits on the app UI. No caption → a thin symmetric matte all round. */
+function layout(W, H, hasCaption, inset, top) {
+  const capBand = Math.round(H * (hasCaption ? 0.2 : 0.06));
+  const otherPad = Math.round(H * 0.06);
+  const availTop = top ? capBand : otherPad;
+  const availH = H - capBand - otherPad;
   const boxW = Math.round(W * inset);
-  return { availTop: topPad, availH, boxW, capCenterY: H - Math.round(band * 0.56) };
+  const capCenterY = top ? Math.round(H * 0.09) : H - Math.round(capBand * 0.56);
+  return { availTop, availH, boxW, capCenterY };
 }
 
 // ── Canvas furniture (rendered once / per segment, written as PNGs for ffmpeg overlay) ───────────────────
@@ -125,7 +155,8 @@ function captionPng(W, H, caption, th, capCenterY) {
   const subSize = Math.round(Math.min(W, H * 0.9) * 0.033);
   const cx = W / 2;
   let y = capCenterY;
-  if (caption.title) {
+  if (caption.title && th.label) {
+    // pill treatment (dark bed) — only when `label` is on; on a light matte it'd be dark-on-dark
     ctx.font = font(titleSize, 'bold');
     const tw = ctx.measureText(caption.title).width;
     const padX = Math.round(titleSize * 0.7);
@@ -138,6 +169,12 @@ function captionPng(W, H, caption, th, capCenterY) {
     ctx.fillStyle = th.labelColor;
     ctx.fillText(caption.title, cx, y + 1);
     y += pillH / 2 + subSize * 1.15;
+  } else if (caption.title) {
+    // plain bold headline (matches the light store screenshots)
+    ctx.font = font(titleSize, 'bold');
+    ctx.fillStyle = th.labelColor;
+    ctx.fillText(caption.title, cx, y);
+    y += titleSize * 0.62 + subSize * 1.15;
   }
   if (caption.sub) {
     ctx.font = font(subSize, 'regular');
@@ -170,6 +207,14 @@ function compositeSource({ src, dur, W, H, fps, th, tmp, idx, sub, lay, mattePat
   writePng(shadowPng(W, H, x, y, fw, fh, radius, th.shadow), shadowP);
   const out = path.join(tmp, `seg-${tag}.mp4`);
 
+  // A video plays its own motion; a STILL gets a slow, never-freezing push-in (a frozen still reads as
+  // dead — the Ken-Burns trap Apple avoids by keeping the camera always subtly moving).
+  const frames = Math.ceil(dur * fps) + 4;
+  const screenFilter = vid
+    ? `[1:v]scale=${fw}:${fh},setsar=1,format=rgba[s]`
+    : `[1:v]scale=${Math.round(fw * 1.14)}:${Math.round(fh * 1.14)},zoompan=z='min(zoom+0.0008,1.12)':`
+      + `d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${fw}x${fh}:fps=${fps},setsar=1,format=rgba[s]`;
+
   // Inputs: 0 matte(loop) · 1 src(clip loop-still/video) · 2 mask(loop) · 3 shadow(loop) · 4 caption(loop) · 5 vignette(loop)
   const srcIn = vid
     ? ['-i', src]
@@ -183,7 +228,7 @@ function compositeSource({ src, dur, W, H, fps, th, tmp, idx, sub, lay, mattePat
     '-loop', '1', '-i', vignettePath,
     '-filter_complex',
     [
-      `[1:v]scale=${fw}:${fh},setsar=1,format=rgba[s]`,
+      screenFilter,
       `[s][2:v]alphamerge[scr]`, //           round the screen's corners
       `[0:v]scale=${W}:${H},setsar=1[bg]`,
       `[bg][3:v]overlay=0:0[b0]`, //          drop shadow under the screen
@@ -215,14 +260,16 @@ function concatClips(clips, tmp, idx) {
  * Build one live-footage reel. `segments[]` each carry a `clip` | `image` | `images` source + `caption` +
  * optional `palette`. Hard cuts between same-palette neighbours, a short dissolve at a palette change.
  */
-export async function buildMontage({ segments, brand, theme, spec, music, sceneDur, bpm, beatsPerCut, outFile }) {
-  const th = resolvePremiumTheme(brand, theme);
+export async function buildMontage({ segments, brand, theme, spec, music, sceneDur, bpm, beatsPerCut, transition, xfadeDur, outFile }) {
+  const th = resolveReelTheme(brand, theme);
   const W = spec.w;
   const H = spec.h;
   const fps = spec.fps || 30;
   const hold = sceneDur || (bpm ? (beatsPerCut || 4) * 60 / bpm : 3.0);
-  const HARD = Math.max(1 / fps, 0.04); // ~1 frame = a hard cut, done through xfade for one linear chain
-  const SOFT = 0.24; //                    a real dissolve, only at a palette shift
+  // Dissolve by default (Apple App-Preview style — restrained, never a jarring hard cut); `transition:'cut'`
+  // gives beat-matched hard cuts. `tail` extends each segment so the xfade always has overlap material.
+  const D = transition === 'cut' ? 0 : (xfadeDur ?? 0.3);
+  const tail = D > 0 ? D + 0.2 : 0;
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'zdymak-montage-'));
   try {
@@ -235,14 +282,15 @@ export async function buildMontage({ segments, brand, theme, spec, music, sceneD
     const segClips = [];
     segments.forEach((seg, i) => {
       const hasCap = !!(seg.caption && (seg.caption.title || seg.caption.sub));
-      const lay = layout(W, H, hasCap, th.inset);
+      const lay = layout(W, H, hasCap, th.inset, th.captionAnchor === 'top');
       const captionPath = path.join(tmp, `cap-${i}.png`);
       writePng(captionPng(W, H, seg.caption, th, lay.capCenterY), captionPath);
       const sources = seg.images || (seg.clip ? [seg.clip] : seg.image ? [seg.image] : []);
       if (!sources.length) throw new Error(`reel segment[${i}] needs a clip, image, or images`);
       const per = hold / sources.length;
       const subs = sources.map((src, j) => compositeSource({
-        src, dur: per, W, H, fps, th, tmp,
+        // the LAST sub of the segment carries the dissolve tail so the segment has xfade overlap material
+        src, dur: per + (j === sources.length - 1 ? tail : 0), W, H, fps, th, tmp,
         idx: i, sub: sources.length > 1 ? j : null, lay, mattePath, vignettePath, captionPath,
       }));
       segClips.push({ file: concatClips(subs, tmp, i), palette: seg.palette ?? null });
@@ -253,8 +301,6 @@ export async function buildMontage({ segments, brand, theme, spec, music, sceneD
     //    near-zero-margin xfade offsets); a palette change uses an xfade dissolve on those boundaries.
     const inputs = [];
     segClips.forEach((s) => inputs.push('-i', s.file));
-    const cutBefore = (i) => (segClips[i - 1].palette && segClips[i].palette && segClips[i - 1].palette !== segClips[i].palette) ? SOFT : HARD;
-    const anySoft = segClips.some((_, i) => i > 0 && cutBefore(i) === SOFT);
 
     let filter = '';
     segClips.forEach((_, i) => {
@@ -265,20 +311,21 @@ export async function buildMontage({ segments, brand, theme, spec, music, sceneD
     if (segClips.length === 1) {
       filter += '[n0]copy[vout];';
       totalDur = hold;
-    } else if (!anySoft) {
+    } else if (D === 0) {
+      // transition:'cut' → robust end-to-end concat (beat-matched hard cuts)
       filter += `${segClips.map((_, i) => `[n${i}]`).join('')}concat=n=${segClips.length}:v=1[vout];`;
       totalDur = segClips.length * hold;
     } else {
+      // dissolve → xfade chain; each shows solo for `hold`, then a D-second cross-dissolve into the next
       let cur = 'n0';
       let offset = 0;
       for (let i = 1; i < segClips.length; i++) {
-        const dur = cutBefore(i);
-        offset += hold - dur;
+        offset += hold;
         const out = i === segClips.length - 1 ? 'vout' : `x${i}`;
-        filter += `[${cur}][n${i}]xfade=transition=fade:duration=${dur.toFixed(3)}:offset=${offset.toFixed(3)}[${out}];`;
+        filter += `[${cur}][n${i}]xfade=transition=fade:duration=${D.toFixed(3)}:offset=${offset.toFixed(3)}[${out}];`;
         cur = out;
       }
-      totalDur = segClips.length * hold - segClips.slice(1).reduce((a, _, i) => a + cutBefore(i + 1), 0);
+      totalDur = segClips.length * hold + tail;
     }
 
     // 3) optional music bed (trim/loop to length, fade, volume).

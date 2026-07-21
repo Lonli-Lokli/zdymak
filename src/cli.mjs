@@ -92,8 +92,9 @@ async function cmdReel(flags) {
   fs.mkdirSync(outDir, { recursive: true });
   console.log(`zdymak reel • ${reel.segments.length} segment(s) → ${w}×${h}${reel.music ? ', ♪' : ''}`);
   const { totalDur } = await buildMontage({
-    segments: reel.segments, brand: cfg.brand, theme: reel.theme ?? cfg.theme, spec,
-    music: reel.music, sceneDur: reel.sceneDur, bpm: reel.bpm, beatsPerCut: reel.beatsPerCut, outFile,
+    segments: reel.segments, brand: cfg.brand, theme: reel.theme, spec, // reel theme (light default), NOT cfg.theme
+    music: reel.music, sceneDur: reel.sceneDur, bpm: reel.bpm, beatsPerCut: reel.beatsPerCut,
+    transition: reel.transition, xfadeDur: reel.xfadeDur, outFile,
   });
   console.log(`  ✓ ${totalDur.toFixed(1)}s → ${path.relative(process.cwd(), outFile)}`);
   console.log('Done.');

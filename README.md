@@ -121,7 +121,7 @@ navigation.
 | `timing` | Reel-mode timeline override `{ coldOpen, scene, endCard, xfade }` for the `social-reel` bookends. |
 | `music` | Optional bed for **every** video: `{ path, offset, fadeIn, fadeOut, volume }` (silent if omitted). |
 | `devices` | Per-device **screenshots + reels** (see below). Configure only the devices you ship. |
-| `reel` | **Live-footage reel** — composite driven video `clip`s / `images` on the matte, beat-matched hard cuts (see **Live-footage reel** below). |
+| `reel` | **Live-footage reel** — composite driven video `clip`s / `images` on a clean light matte, cross-dissolves (see **Live-footage reel** below). |
 | `out` | Output directory. |
 
 ### Theme options (`theme` / `stillTheme`)
@@ -198,26 +198,29 @@ omits the others — that's the "use only part of it" contract.
 
 The video *targets* above animate a **static screenshot** (a subtle dolly) — inherently Ken Burns. For a
 genuinely premium reel, feed **real motion**: `zdymak reel` composites short **recordings** of your app (or
-an image sequence) on the brand matte, floats each with a rounded frame + shadow, and **hard-cuts on the
-beat** — the technique behind Apple-style product reels. Source-agnostic, like the two screenshot modes:
-each segment's footage can be **brought by you** or **captured** by `zdymak capture --record`.
+an image sequence) on a clean matte, floats each with a rounded frame + soft shadow, puts the headline **on
+top**, and **cross-dissolves** between beats — the restrained, Apple-App-Preview language. The matte defaults
+to **light** (consistent with the store screenshots) and stills get a slow, never-freezing push-in.
+Source-agnostic, like the two screenshot modes: each segment's footage can be **brought by you** or
+**captured** by `zdymak capture --record`.
 
 ```js
 reel: {
   size: [1080, 1920], bpm: 120, beatsPerCut: 4,   // hold = beatsPerCut × 60/bpm seconds per segment
+  transition: 'dissolve',                          // default; 'cut' for beat-matched hard cuts
   music: { path: './bed.mp3', volume: 0.9, fadeIn: 0.6, fadeOut: 0.8 }, // optional, faded
-  theme: { bgTop: '#0e1a12', bgBottom: '#0b0b0a', inset: 0.84, radius: 0.045, shadow: 0.5, vignette: 0.34 },
+  // theme: { bgTop: '#0e1a12', bgBottom: '#0b0b0a', label: true },     // override to a DARK bed if you want
   segments: [
-    { clip: './rec/study.mov',   caption: { title: 'Recall it.', sub: 'Right before you forget.' }, palette: 'a' },
-    { images: ['a.png', 'b.png'], caption: { title: 'Many cards.', sub: 'One page.' }, palette: 'a' }, // multi-photo
+    { clip: './rec/study.mov',   caption: { title: 'Recall it.', sub: 'Right before you forget.' } },
+    { images: ['a.png', 'b.png'], caption: { title: 'Many cards.', sub: 'One page.' } }, // multi-photo page
   ],
 }
 ```
 
 - **`clip`** = a recording (real motion). **`image`** / **`images`** = one still or a sequence shown within
-  the segment (a "multiple photos per page" beat). **`palette`** — same-palette neighbours hard-cut, a change
-  dissolves. Matte / float `inset` / `radius` / `shadow` / `vignette` / caption colours come from the reel
-  `theme` (same options as `theme`/`stillTheme`). Run `zdymak reel` → `<out>/reel.mp4`.
+  the segment (a "multiple photos per page" beat). **`transition`** = `dissolve` (default) or `cut`. Matte
+  colours / `inset` / `radius` / `shadow` / caption anchor default to a clean **light** look; override via the
+  reel `theme` (same options as `theme`/`stillTheme`). Run `zdymak reel` → `<out>/reel.mp4`.
 
 ## Where each file goes
 
