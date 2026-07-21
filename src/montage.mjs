@@ -182,7 +182,7 @@ function captionPng(W, H, caption, th, capCenterY) {
   const ctx = c.getContext('2d');
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const titleSize = Math.round(Math.min(W, H * 0.9) * 0.05);
+  const titleSize = Math.round(Math.min(W, H * 0.9) * (th.headlineScale ?? 0.062)); // bolder headline (top listings go big)
   const subSize = Math.round(Math.min(W, H * 0.9) * 0.033);
   const cx = W / 2;
   let y = capCenterY;
@@ -226,20 +226,25 @@ function captionPng(W, H, caption, th, capCenterY) {
 function compositeSource({ src, dur, W, H, fps, th, tmp, idx, sub, lay, mattePath, vignettePath, captionPath }) {
   const vid = isVideo(src);
   const [sw, sh] = probe(src, 'stream=width,height').map(Number); // ffprobe reads video + image dims alike
-  const framed = th.frame && th.frame !== 'none' && th.frame !== false;
+  // `bleed`: the source FILLS the whole frame (no matte / frame / shadow) — for a compliant App Store App
+  // Preview (real footage, full-bleed, no device frame). Otherwise: framed device, or a plain floating screen.
+  const bleed = !!th.bleed;
+  const framed = !bleed && th.frame && th.frame !== 'none' && th.frame !== false;
 
   // Geometry. Framed: fit the SCREEN so the phone BODY (screen + 2×bezel ≈ 6.4%) still fits the box.
-  const [fw, fh] = framed
-    ? fit(sw, sh, Math.round(lay.boxW / 1.064), Math.round(lay.availH / 1.064))
-    : fit(sw, sh, lay.boxW, lay.availH);
+  const [fw, fh] = bleed
+    ? [W, H]
+    : framed
+      ? fit(sw, sh, Math.round(lay.boxW / 1.064), Math.round(lay.availH / 1.064))
+      : fit(sw, sh, lay.boxW, lay.availH);
   const bezel = framed ? Math.round(fw * 0.032) : 0;
   const bodyW = fw + bezel * 2;
   const bodyH = fh + bezel * 2;
-  const bodyX = Math.round((W - bodyW) / 2);
-  const bodyY = Math.round(lay.availTop + (lay.availH - bodyH) / 2);
-  const sx = bodyX + bezel; // the screen (clip) top-left
-  const sy = bodyY + bezel;
-  const screenRadius = framed ? Math.round(fw * 0.135) : Math.round(W * th.radius);
+  const bodyX = bleed ? 0 : Math.round((W - bodyW) / 2);
+  const bodyY = bleed ? 0 : Math.round(lay.availTop + (lay.availH - bodyH) / 2);
+  const sx = bleed ? 0 : bodyX + bezel; // the screen (clip) top-left
+  const sy = bleed ? 0 : bodyY + bezel;
+  const screenRadius = bleed ? 0 : framed ? Math.round(fw * 0.135) : Math.round(W * th.radius);
 
   const tag = `${idx}${sub != null ? `_${sub}` : ''}`;
   const maskP = path.join(tmp, `mask-${tag}.png`);
@@ -249,6 +254,9 @@ function compositeSource({ src, dur, W, H, fps, th, tmp, idx, sub, lay, mattePat
   if (framed) {
     writePng(frameBackPng(W, H, bodyX, bodyY, bodyW, bodyH, Math.round(fw * 0.155), fw), backP);
     writePng(frameFrontPng(W, H, sx, sy, fw, bezel), frontP);
+  } else if (bleed) {
+    writePng(transparentPng(W, H), backP); // no shadow — the source fills the frame
+    writePng(transparentPng(W, H), frontP);
   } else {
     writePng(shadowPng(W, H, sx, sy, fw, fh, screenRadius, th.shadow), backP);
     writePng(transparentPng(W, H), frontP);
@@ -258,10 +266,12 @@ function compositeSource({ src, dur, W, H, fps, th, tmp, idx, sub, lay, mattePat
   // A video plays its own motion; a STILL gets a slow, never-freezing push-in (a frozen still reads as
   // dead — the Ken-Burns trap Apple avoids by keeping the camera always subtly moving).
   const frames = Math.ceil(dur * fps) + 4;
-  const screenFilter = vid
-    ? `[1:v]scale=${fw}:${fh},setsar=1,format=rgba[s]`
-    : `[1:v]scale=${Math.round(fw * 1.14)}:${Math.round(fh * 1.14)},zoompan=z='min(zoom+0.0008,1.12)':`
-      + `d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${fw}x${fh}:fps=${fps},setsar=1,format=rgba[s]`;
+  const screenFilter = bleed
+    ? `[1:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,format=rgba[s]` // cover
+    : vid
+      ? `[1:v]scale=${fw}:${fh},setsar=1,format=rgba[s]`
+      : `[1:v]scale=${Math.round(fw * 1.14)}:${Math.round(fh * 1.14)},zoompan=z='min(zoom+0.0008,1.12)':`
+        + `d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${fw}x${fh}:fps=${fps},setsar=1,format=rgba[s]`;
 
   // Inputs: 0 matte · 1 src · 2 mask · 3 back(shadow+body) · 4 front(island) · 5 caption · 6 vignette
   const srcIn = vid ? ['-i', src] : ['-loop', '1', '-i', src];

@@ -141,6 +141,9 @@ so a typical `stillTheme` only sets colours. Override any key per shot.
 | `handle` | — | Optional persistent top handle text (e.g. `@yourapp`). |
 | `captionAnchor` | `bottom` (video) · `top` (stills) | Caption above (`top`) or below (`bottom`) the device. |
 | `fit` | `cover` · `contain` (frameless stills) | `cover` fills + crops; `contain` shows the **whole** capture (e.g. a Mac window) with matte margins. |
+| `headlineScale` | `0.062` | Caption headline size as a fraction of the frame's short edge — bump it for bigger, bolder headlines. |
+| `frame` | `phone` (reel) | Device frame around a reel screen: `'phone'` iPhone bezel, or `false` for a bare rounded screen. |
+| `bleed` | `false` | Reel only: the source **fills the whole frame** (no matte / frame / shadow) — a compliant full-bleed App Store App Preview. |
 
 <br>
 
@@ -222,6 +225,9 @@ reel: {
   sits in an **iPhone frame** by default (`theme.frame`: `'phone'` | `false` for a bare rounded screen). Matte
   colours / `inset` / `radius` / `shadow` / caption anchor default to a clean **light** look; override via the
   reel `theme`. Run `zdymak reel` → `<out>/reel.mp4`.
+- **Compliant App Store App Preview** — Apple's in-store slot wants *real footage, full-bleed, no device
+  frame*. Point the reel at recordings (not stills) with `theme: { bleed: true }`, `size: [886, 1920]`,
+  `level: '4.0'`, and no captions. (The framed light reel above is the marketing/social asset, not the slot.)
 
 ## Where each file goes
 

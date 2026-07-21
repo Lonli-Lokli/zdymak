@@ -56,6 +56,7 @@ export const DEFAULT_THEME = {
 export const PUBLIC_THEME_KEYS = [
   'bgTop', 'bgBottom', 'glow', 'glowAlpha', 'vignette', 'inset',
   'label', 'labelColor', 'subColor', 'handle', 'captionAnchor', 'fit',
+  'headlineScale', 'frame', 'bleed',
 ];
 
 /** Average RGB of a canvas (coarse grid sample) — used to decide hard-cut vs dissolve. */
@@ -118,7 +119,7 @@ function drawLabel(ctx, W, H, caption, th, alpha) {
 
   // Scale type to the SHORTER edge so landscape (Mac) doesn't get huge text, and anchor high enough that
   // the pill + subtitle never clip the bottom on wide aspects.
-  const titleSize = Math.round(Math.min(W, H * 0.9) * 0.05);
+  const titleSize = Math.round(Math.min(W, H * 0.9) * (th.headlineScale ?? 0.062)); // bolder headline (top listings go big)
   const subSize = Math.round(Math.min(W, H * 0.9) * 0.033);
   const cx = W / 2;
   // Bottom by default (anchored higher on wide/landscape so the pill clears the app's own bottom UI);
