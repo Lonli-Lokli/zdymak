@@ -43,6 +43,7 @@ const REEL_LIGHT_DEFAULT = {
   inset: 0.8,
   radius: 0.05,
   shadow: 0.24, // the float cue on light
+  frame: 'phone', // iPhone bezel around the screen (like the framed screenshots); false = bare rounded screen
   label: false, // plain caption text, no pill (matches the light screenshots)
   pillFill: null,
   pillOpacity: 0.9,
@@ -144,6 +145,36 @@ function shadowPng(W, H, x, y, w, h, radius, alpha) {
   ctx.restore();
   return c;
 }
+/** iPhone frame BACK plate: drop shadow + black unibody at the body rect (its screen area is then covered
+ *  by the clip). Proportions mirror `frames.mjs` drawPhoneFrame so the reel matches the framed screenshots. */
+function frameBackPng(W, H, bx, by, bw, bh, bodyRadius, screenW) {
+  const c = createCanvas(W, H);
+  const ctx = c.getContext('2d');
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.4)';
+  ctx.shadowBlur = Math.round(screenW * 0.09);
+  ctx.shadowOffsetY = Math.round(screenW * 0.035);
+  roundRectPath(ctx, bx, by, bw, bh, bodyRadius);
+  ctx.fillStyle = '#0b0b0a';
+  ctx.fill();
+  ctx.restore();
+  return c;
+}
+/** iPhone Dynamic Island, drawn OVER the clip (front plate). */
+function frameFrontPng(W, H, sx, sy, screenW, bezel) {
+  const c = createCanvas(W, H);
+  const ctx = c.getContext('2d');
+  const iw = Math.round(screenW * 0.3);
+  const ih = Math.round(screenW * 0.085);
+  roundRectPath(ctx, Math.round(sx + (screenW - iw) / 2), Math.round(sy + bezel * 1.1), iw, ih, ih / 2);
+  ctx.fillStyle = '#050505';
+  ctx.fill();
+  return c;
+}
+/** A fully transparent full frame — the front plate when there's no device frame (keeps input indices stable). */
+function transparentPng(W, H) {
+  return createCanvas(W, H);
+}
 /** Bottom caption pill + subtitle (Apple launch-montage label) on a transparent full frame. */
 function captionPng(W, H, caption, th, capCenterY) {
   const c = createCanvas(W, H);
@@ -195,16 +226,33 @@ function captionPng(W, H, caption, th, capCenterY) {
 function compositeSource({ src, dur, W, H, fps, th, tmp, idx, sub, lay, mattePath, vignettePath, captionPath }) {
   const vid = isVideo(src);
   const [sw, sh] = probe(src, 'stream=width,height').map(Number); // ffprobe reads video + image dims alike
-  const [fw, fh] = fit(sw, sh, lay.boxW, lay.availH);
-  const x = Math.round((W - fw) / 2);
-  const y = Math.round(lay.availTop + (lay.availH - fh) / 2); // float in the area above the caption band
-  const radius = Math.round(W * th.radius);
+  const framed = th.frame && th.frame !== 'none' && th.frame !== false;
+
+  // Geometry. Framed: fit the SCREEN so the phone BODY (screen + 2×bezel ≈ 6.4%) still fits the box.
+  const [fw, fh] = framed
+    ? fit(sw, sh, Math.round(lay.boxW / 1.064), Math.round(lay.availH / 1.064))
+    : fit(sw, sh, lay.boxW, lay.availH);
+  const bezel = framed ? Math.round(fw * 0.032) : 0;
+  const bodyW = fw + bezel * 2;
+  const bodyH = fh + bezel * 2;
+  const bodyX = Math.round((W - bodyW) / 2);
+  const bodyY = Math.round(lay.availTop + (lay.availH - bodyH) / 2);
+  const sx = bodyX + bezel; // the screen (clip) top-left
+  const sy = bodyY + bezel;
+  const screenRadius = framed ? Math.round(fw * 0.135) : Math.round(W * th.radius);
 
   const tag = `${idx}${sub != null ? `_${sub}` : ''}`;
   const maskP = path.join(tmp, `mask-${tag}.png`);
-  const shadowP = path.join(tmp, `shadow-${tag}.png`);
-  writePng(maskPng(fw, fh, radius), maskP);
-  writePng(shadowPng(W, H, x, y, fw, fh, radius, th.shadow), shadowP);
+  const backP = path.join(tmp, `back-${tag}.png`); // shadow + phone body (framed) OR a plain drop shadow
+  const frontP = path.join(tmp, `front-${tag}.png`); // Dynamic Island (framed) OR transparent
+  writePng(maskPng(fw, fh, screenRadius), maskP);
+  if (framed) {
+    writePng(frameBackPng(W, H, bodyX, bodyY, bodyW, bodyH, Math.round(fw * 0.155), fw), backP);
+    writePng(frameFrontPng(W, H, sx, sy, fw, bezel), frontP);
+  } else {
+    writePng(shadowPng(W, H, sx, sy, fw, fh, screenRadius, th.shadow), backP);
+    writePng(transparentPng(W, H), frontP);
+  }
   const out = path.join(tmp, `seg-${tag}.mp4`);
 
   // A video plays its own motion; a STILL gets a slow, never-freezing push-in (a frozen still reads as
@@ -215,28 +263,27 @@ function compositeSource({ src, dur, W, H, fps, th, tmp, idx, sub, lay, mattePat
     : `[1:v]scale=${Math.round(fw * 1.14)}:${Math.round(fh * 1.14)},zoompan=z='min(zoom+0.0008,1.12)':`
       + `d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${fw}x${fh}:fps=${fps},setsar=1,format=rgba[s]`;
 
-  // Inputs: 0 matte(loop) · 1 src(clip loop-still/video) · 2 mask(loop) · 3 shadow(loop) · 4 caption(loop) · 5 vignette(loop)
-  const srcIn = vid
-    ? ['-i', src]
-    : ['-loop', '1', '-i', src];
+  // Inputs: 0 matte · 1 src · 2 mask · 3 back(shadow+body) · 4 front(island) · 5 caption · 6 vignette
+  const srcIn = vid ? ['-i', src] : ['-loop', '1', '-i', src];
   const args = [
     '-loop', '1', '-i', mattePath,
     ...srcIn,
     '-loop', '1', '-i', maskP,
-    '-loop', '1', '-i', shadowP,
+    '-loop', '1', '-i', backP,
+    '-loop', '1', '-i', frontP,
     '-loop', '1', '-i', captionPath,
     '-loop', '1', '-i', vignettePath,
     '-filter_complex',
     [
       screenFilter,
-      `[s][2:v]alphamerge[scr]`, //           round the screen's corners
+      `[s][2:v]alphamerge[scr]`, //           round the screen's corners to the phone-screen radius
       `[0:v]scale=${W}:${H},setsar=1[bg]`,
-      `[bg][3:v]overlay=0:0[b0]`, //          drop shadow under the screen
-      // the floating screen (its motion plays here); eof_action=repeat holds the last frame if the clip
-      // is shorter than the beat, so a short recording still fills its slot instead of truncating.
-      `[b0][scr]overlay=${x}:${y}:eof_action=repeat[b1]`,
-      `[b1][4:v]overlay=0:0[b2]`, //          caption pill
-      `[b2][5:v]overlay=0:0,` + //            vignette
+      `[bg][3:v]overlay=0:0[b0]`, //          shadow + phone body (framed) / plain shadow
+      // the floating screen plays here; eof_action=repeat holds the last frame if the clip is shorter
+      `[b0][scr]overlay=${sx}:${sy}:eof_action=repeat[b1]`,
+      `[b1][4:v]overlay=0:0[b2]`, //          Dynamic Island over the screen (transparent if unframed)
+      `[b2][5:v]overlay=0:0[b3]`, //          caption
+      `[b3][6:v]overlay=0:0,` + //            vignette
       `trim=0:${dur.toFixed(3)},setpts=PTS-STARTPTS,fps=${fps},format=yuv420p[v]`,
     ].join(';'),
     '-map', '[v]', '-t', dur.toFixed(3),

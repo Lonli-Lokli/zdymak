@@ -218,9 +218,10 @@ reel: {
 ```
 
 - **`clip`** = a recording (real motion). **`image`** / **`images`** = one still or a sequence shown within
-  the segment (a "multiple photos per page" beat). **`transition`** = `dissolve` (default) or `cut`. Matte
+  the segment (a "multiple photos per page" beat). **`transition`** = `dissolve` (default) or `cut`. The screen
+  sits in an **iPhone frame** by default (`theme.frame`: `'phone'` | `false` for a bare rounded screen). Matte
   colours / `inset` / `radius` / `shadow` / caption anchor default to a clean **light** look; override via the
-  reel `theme` (same options as `theme`/`stillTheme`). Run `zdymak reel` → `<out>/reel.mp4`.
+  reel `theme`. Run `zdymak reel` → `<out>/reel.mp4`.
 
 ## Where each file goes
 
