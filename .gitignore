@@ -1,5 +1,11 @@
 node_modules/
 store-assets/
 examples/out/
+examples/clips/
+# generated demo media — not committed yet; re-add (git add -f) for the final release
+*.gif
+*.mp4
+*.mov
+*.webm
 *.log
 .DS_Store
