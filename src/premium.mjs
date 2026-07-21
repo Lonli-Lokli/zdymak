@@ -27,7 +27,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const clamp01 = (t) => Math.min(1, Math.max(0, t));
 
 /** Defaults — brand-driven where a value is null (resolved in buildPremium against `brand`). */
-const DEFAULT_THEME = {
+export const DEFAULT_THEME = {
   bgTop: '#17161c', // matte gradient top
   bgBottom: '#0b0b0a', // matte gradient bottom
   glow: null, // radial brand glow colour → defaults to brand.sub
@@ -48,6 +48,15 @@ const DEFAULT_THEME = {
   captionAnchor: 'bottom', // 'top' places the caption above the device (the bright store-shot layout)
   fit: 'cover', // screenLayer image fit: 'cover' (fill + crop) | 'contain' (whole capture, matte margins)
 };
+
+/** The `theme`/`stillTheme` options an app author is expected to set — the doc-sync guard
+ *  (`scripts/check-docs.mjs`) asserts each appears in README.md/SKILL.md, so adding a public knob forces a
+ *  doc line. (The rest of DEFAULT_THEME — radius, shadow, the pill and cut knobs — are advanced/internal
+ *  and not enforced.) */
+export const PUBLIC_THEME_KEYS = [
+  'bgTop', 'bgBottom', 'glow', 'glowAlpha', 'vignette', 'inset',
+  'label', 'labelColor', 'subColor', 'handle', 'captionAnchor', 'fit',
+];
 
 /** Average RGB of a canvas (coarse grid sample) — used to decide hard-cut vs dissolve. */
 function avgColor(canvas) {

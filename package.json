@@ -16,6 +16,8 @@
   ],
   "scripts": {
     "example": "node bin/zdymak.mjs video --config examples/asilak.config.mjs",
+    "check:docs": "node scripts/check-docs.mjs",
+    "prepublishOnly": "node scripts/check-docs.mjs",
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
     "release:major": "node scripts/release.mjs major"

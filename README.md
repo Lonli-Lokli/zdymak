@@ -102,39 +102,62 @@ navigation.
 | `scenes[].move` | `pushIn` · `pushInSlow` · `pullBack` · `pullBackSlow` · `driftUp` · `driftDown` · `driftLeft` · `driftRight` · `still`. Omit to auto-vary. |
 | `targets[]` | Which videos to build from the top-level scenes (`zdymak specs` lists them). |
 | `sceneDur` / `xfade` | Seconds per scene / cross-dissolve. Tune total length to the store's 15–30s window. |
-| `theme` | Premium-technique styling (matte, `vignette`, `inset`, `handle`, cut timings). Brand-driven defaults. |
+| `theme` | **Video** matte styling — the premium-technique block (see **Theme options** below). Brand-driven defaults. |
+| `stillTheme` | **Screenshot** matte styling — same option shape as `theme`; falls back to `theme` when unset. |
+| `timing` | Reel-mode timeline override `{ coldOpen, scene, endCard, xfade }` for the `social-reel` bookends. |
 | `music` | Optional bed for **every** video: `{ path, offset, fadeIn, fadeOut, volume }` (silent if omitted). |
 | `devices` | Per-device **screenshots + reels** (see below). Configure only the devices you ship. |
 | `out` | Output directory. |
+
+### Theme options (`theme` / `stillTheme`)
+
+Both accept the same block; every key is optional with a brand-driven default. **Screenshots assume the
+premium store-shot shape by default** — `captionAnchor: 'top'`, and `fit: 'contain'` for frameless windows —
+so a typical `stillTheme` only sets colours. Override any key per shot.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `bgTop` / `bgBottom` | brand | Matte gradient top / bottom colour. |
+| `glow` / `glowAlpha` | brand.sub / `0.16` | Soft radial brand-glow colour + strength. |
+| `vignette` | `0.3` | 0..1 edge darkening (use `0` on a light matte). |
+| `inset` | `0.955` | Fraction of the frame the screen fills (lower floats it with a wider matte border). |
+| `label` | `true` | Show the caption on a pill; `false` = plain text, no pill. |
+| `labelColor` / `subColor` | brand.title / brand.sub | Caption title + subtitle colour. |
+| `handle` | — | Optional persistent top handle text (e.g. `@yourapp`). |
+| `captionAnchor` | `bottom` (video) · `top` (stills) | Caption above (`top`) or below (`bottom`) the device. |
+| `fit` | `cover` · `contain` (frameless stills) | `cover` fills + crops; `contain` shows the **whole** capture (e.g. a Mac window) with matte margins. |
 
 <br>
 
 ## Screenshots & multiple devices
 
 Videos are only half the set. `zdymak build` also renders **store screenshots** for each device you
-configure, in the same styles (premium / bleed), at each store's exact dimensions, as **no-alpha PNGs**
-(App Store & Play reject alpha). Each device points at its own captures; scenes with no matching capture
-are **skipped cleanly**, so an app lists only the devices it actually ships:
+configure, at each store's exact dimensions, as **no-alpha PNGs** (App Store & Play reject alpha). Each
+device points at its own captures; scenes with no matching capture are **skipped cleanly**, so an app lists
+only the devices it actually ships. **The style is inferred from the target**, so a device is usually just
+its captures + target(s):
 
 ```js
 devices: {
-  iphone: { capturesDir: './shots/iphone', suffix: '', screenshots: [{ target: 'appstore-iphone-6.9', style: 'premium' }] },
-  ipad:   { capturesDir: './shots/ipad',   suffix: '', screenshots: [{ target: 'appstore-ipad-13',    style: 'premium' }] },
-  mac:    { capturesDir: './shots/mac',     suffix: '', screenshots: [{ target: 'appstore-mac',        style: 'premium' }] },
+  iphone: { capturesDir: './shots/iphone', suffix: '', screenshots: [{ target: 'appstore-iphone-6.9' }] },
+  ipad:   { capturesDir: './shots/ipad',   suffix: '', screenshots: [{ target: 'appstore-ipad-13' }] },
+  mac:    { capturesDir: './shots/mac',     suffix: '', screenshots: [{ target: 'appstore-mac' }] },        // window on the matte
   watch:  { capturesDir: './shots/watch',   suffix: '',
             scenes: [{ id: '01-study' }, { id: '02-answer' }],   // per-device scene override (raw, no caption)
-            screenshots: [{ target: 'appstore-watch', style: 'bleed', size: [422, 514] }] },
+            screenshots: [{ target: 'appstore-watch', style: 'bleed', size: [422, 514] }] }, // override: raw fill
   android:{ capturesDir: './shots/android', suffix: '', screenshots: [
-            { target: 'play-phone', style: 'framed' },           // Android punch-hole frame
-            { target: 'play-tablet', style: 'premium' },
+            { target: 'play-phone' }, { target: 'play-tablet' },
             { target: 'play-feature-graphic' } ] },              // the 1024×500 Play banner (not per-scene)
   // a device may also carry `videos: [{ target: 'premium-reel', size: [2064, 2752] }]` at its own dimensions
 },
 ```
 
-The **`framed`** style picks the right bezel per target — iPhone (Dynamic Island), Android (punch-hole),
-iPad/tablet, or Watch ring — and Mac stays plain (its captures are already windowed). **`play-feature-graphic`**
-is special: one 1024×500 brand banner (logo + tagline + a tilted hero device), not a per-scene screenshot.
+**Inferred style** (override per shot with `style`): a **framed** device — iPhone (Dynamic Island), Android
+(punch-hole), iPad/tablet, Watch ring — for phone/tablet/watch targets; a **premium** window-on-the-matte for
+Mac/desktop (its capture is already a window, so `fit: 'contain'` shows the whole thing). Screenshots put the
+**caption on top** by default. Override any of it via `stillTheme` / a per-shot `theme`, or `style: 'bleed'`
+for a raw full-frame shot (Watch). **`play-feature-graphic`** is special: one 1024×500 brand banner (logo +
+tagline + a tilted hero device), not a per-scene screenshot.
 
 Commands:
 
@@ -199,10 +222,10 @@ await buildVideo({ scenes: cfg.scenes, spec: videoTarget('appstore-preview'), br
 
 - [x] Video engine — three styles (full-bleed, device-framed, premium), App Store + Play + social targets.
 - [x] **Multi-device screenshots** — iPhone / iPad / Mac / Watch, no-alpha PNG, modular `devices` config.
+- [x] **Device-framed stills** — inferred per target (iPhone/iPad/Android/Watch bezel, Mac window), caption
+      on top, `contain`-fit windows; all overridable via `stillTheme` / per-shot `theme`.
 - [x] **Music bed** — `{ path, offset, fadeIn, fadeOut, volume }` across every video.
 - [x] Automated publishing — npm trusted publishing (OIDC), see `RELEASING.md`.
-- [ ] **Device-framed stills** — iPhone/iPad bezel, Mac window, Watch ring for the `framed` screenshot style
-      (premium/bleed already cover every device).
 - [ ] Capture: **Playwright (web)** driver (adb / iOS-sim snapshot already ship).
 - [ ] Play feature graphic (1024×500) + per-locale caption sets.
 

@@ -23,6 +23,14 @@ const DEFAULT_BRAND = {
   name: 'App', tagline: '', endline: '', endsub: '', logo: null, reel: {},
 };
 
+/** Every top-level config field an app author can set. The doc-sync guard (`scripts/check-docs.mjs`)
+ *  asserts each appears in README.md/SKILL.md, so adding a field forces a doc line. Keep in sync with the
+ *  `raw.*` reads below. */
+export const CONFIG_KEYS = [
+  'brand', 'screenshotsDir', 'suffix', 'scenes', 'targets', 'sceneDur', 'xfade',
+  'timing', 'theme', 'stillTheme', 'music', 'devices', 'out',
+];
+
 /** Map raw scenes → resolved scenes with absolute image paths (`${dir}/${id}${suffix}.png` or explicit). */
 function resolveScenes(rawScenes, baseDir, dir, suffix) {
   return (rawScenes || []).map((s, i) => {

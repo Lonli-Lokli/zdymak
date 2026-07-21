@@ -11,8 +11,9 @@ per-store encode) is shared.
 
 ## When to use
 The user is building App Store / Google Play listing assets, or asks for an app-preview / store trailer /
-promo video. If they only need still screenshots resized to store dimensions, note that image targets are
-on the roadmap (dimensions are in `zdymak specs`) and the video flow is what's built.
+promo video, **or store screenshots**. `zdymak video` builds the previews; `zdymak build` *also* renders
+**multi-device store screenshots** (iPhone / iPad / Mac / Watch / Android) — style inferred per target,
+caption on top, `contain`-fit windows, no-alpha PNG. Dimensions are in `zdymak specs`.
 
 ## Prerequisites (check first)
 - `ffmpeg` on PATH (`brew install ffmpeg`) — the encode needs it.

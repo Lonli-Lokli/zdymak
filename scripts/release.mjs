@@ -28,6 +28,7 @@ try {
   process.exit(1);
 }
 
+run('node scripts/check-docs.mjs'); //           fail early if docs drifted (also enforced on prepublishOnly)
 run(`npm version ${type} -m "release: v%s"`); // bumps package.json + creates the git tag
 run('npm publish --access public'); //           npm asks for your 2FA OTP
 run('git push --follow-tags');
