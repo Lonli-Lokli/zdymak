@@ -19,6 +19,8 @@ import { buildMontage } from './montage.mjs';
 import { buildDeviceScreenshots, localizeScenes, localizeBrand, untranslatedScenes } from './screenshots.mjs';
 import { VIDEO_TARGETS, IMAGE_TARGETS, videoTarget } from './specs.mjs';
 import { runCapture } from './capture/index.mjs';
+import { resolveVideo, paletteAt } from './destinations.mjs';
+import { validateVideo, validateImage } from './validate.mjs';
 
 function parseFlags(argv) {
   const flags = {};
@@ -67,12 +69,28 @@ function warnAudio({ videoCount, hasMusic, label, silentByDesign }) {
   }
 }
 
-/** Build one video target (optionally at an overridden device size / scene set / theme). */
-async function buildVideoTarget({ id, scenes, brand, cfg, outFile, size, theme }) {
-  const base = videoTarget(id);
-  const spec = size ? { ...base, w: size[0], h: size[1] } : base;
-  const build = spec.style === 'reel' ? buildReel : spec.style === 'premium' ? buildPremium : buildVideo;
-  const tag = spec.style ? `, ${spec.style}` : '';
+/**
+ * Build one video. `entry` is either the `{ target }` shorthand or the split
+ * `{ destination, preset, transitions, effects }` form — DESTINATION decides what's accepted, PRESET
+ * decides how it looks, and a `transitions`/`effects` list lets the caller supply its own vocabulary
+ * instead of the preset's defaults.
+ */
+async function buildVideoTarget({ entry, scenes, brand, cfg, outFile, size, theme, flags }) {
+  const r = resolveVideo(entry);
+  const base = r.destination;
+  const useSize = size || r.size;
+  const spec = useSize ? { ...base, w: useSize[0], h: useSize[1] } : base;
+  const build = r.engine === 'reel' ? buildReel : r.engine === 'premium' ? buildPremium : buildVideo;
+  const id = r.id;
+  // A caller-supplied palette overrides the per-scene default for scenes that don't name their own.
+  if (r.transitions || r.effects) {
+    scenes = scenes.map((sc, i) => ({
+      ...sc,
+      cut: sc.cut ?? paletteAt(r.transitions, i, undefined),
+      effect: sc.effect ?? paletteAt(r.effects, i, undefined),
+    }));
+  }
+  const tag = r.preset !== 'full-bleed' ? `, ${r.preset}` : '';
   process.stdout.write(`  • ${id} (${spec.w}×${spec.h}${tag}${cfg.music ? ', ♪' : ''}) … `);
   const { totalDur, warnings } = await build({
     scenes, spec, brand, outFile,
@@ -81,6 +99,8 @@ async function buildVideoTarget({ id, scenes, brand, cfg, outFile, size, theme }
   });
   console.log(`${totalDur.toFixed(1)}s → ${path.relative(process.cwd(), outFile)}`);
   for (const w of warnings) console.warn(`    ⚠︎ ${w}`);
+  // Measure the artefact, don't trust the intent: a renderer or encoder bug is caught here.
+  validateVideo({ file: outFile, destination: base, size: useSize, force: !!flags?.force });
 }
 
 async function cmdVideo(flags) {
@@ -153,6 +173,7 @@ async function buildLocalizedScreenshots({ cfg, outDir, flags }) {
         brand: localizeBrand(cfg.brand, table),
         theme: device.theme ?? cfg.stillTheme ?? cfg.theme,
         outDir: path.join(outDir, locale),
+        force: !!flags.force,
       });
       console.log(`  • ${device.name}: ${written.length}${written.length ? '' : ' — no captures found, skipped'}`);
     }
@@ -170,7 +191,7 @@ async function cmdScreenshots(flags) {
   }
   console.log(`zdymak screenshots • ${cfg.devices.length} device group(s)`);
   for (const device of cfg.devices) {
-    const written = await buildDeviceScreenshots({ device, brand: cfg.brand, theme: device.theme ?? cfg.stillTheme ?? cfg.theme, outDir });
+    const written = await buildDeviceScreenshots({ device, brand: cfg.brand, theme: device.theme ?? cfg.stillTheme ?? cfg.theme, outDir, force: !!flags.force });
     console.log(`  • ${device.name}: ${written.length} shot(s)${written[0] ? ` (${written[0].W}×${written[0].H}…)` : ' — no captures found, skipped'}`);
   }
   await buildLocalizedScreenshots({ cfg, outDir, flags });
@@ -184,7 +205,7 @@ async function cmdBuild(flags) {
   if (cfg.targets.length && cfg.scenes.length) {
     console.log('zdymak build • videos');
     for (const id of cfg.targets) {
-      await buildVideoTarget({ id, scenes: cfg.scenes, brand: cfg.brand, cfg, outFile: path.join(outDir, `${id}.mp4`) });
+      await buildVideoTarget({ entry: id, scenes: cfg.scenes, brand: cfg.brand, cfg, outFile: path.join(outDir, `${id}.mp4`), flags });
     }
   }
   // 2) per-device videos + screenshots
@@ -199,13 +220,14 @@ async function cmdBuild(flags) {
       } else {
         console.log(`zdymak build • ${device.name} videos`);
         for (const v of device.videos) {
-          await buildVideoTarget({ id: v.target, scenes: captured, brand: cfg.brand, cfg, size: v.size, theme: v.theme ?? device.theme, outFile: path.join(outDir, `${device.name}-${v.target}.mp4`) });
+          const vid = resolveVideo(v);
+          await buildVideoTarget({ entry: v, scenes: captured, brand: cfg.brand, cfg, size: v.size, theme: v.theme ?? device.theme, outFile: path.join(outDir, `${device.name}-${vid.id}.mp4`), flags });
           deviceVideos++;
         }
       }
     }
     if (device.screenshots.length) {
-      const written = await buildDeviceScreenshots({ device, brand: cfg.brand, theme: device.theme ?? cfg.stillTheme ?? cfg.theme, outDir });
+      const written = await buildDeviceScreenshots({ device, brand: cfg.brand, theme: device.theme ?? cfg.stillTheme ?? cfg.theme, outDir, force: !!flags.force });
       console.log(`  • ${device.name} screenshots: ${written.length}${written.length ? '' : ' — no captures found, skipped'}`);
     }
   }
@@ -235,7 +257,7 @@ function cmdHelp() {
   console.log(`zdymak — premium App Store, Google Play & social videos + screenshots, from your captures
 
 Usage:
-  zdymak build       [--config <path>] [--out <dir>] [--clean] [--locale <ids>]  # everything
+  zdymak build       [--config <path>] [--out <dir>] [--clean] [--locale <ids>] [--force]  # everything
   zdymak video       [--config <path>] [--target <ids>] [--out <dir>] [--clean]
   zdymak reel        [--config <path>] [--out <dir>] [--clean]   # LIVE-FOOTAGE montage from clips/images
   zdymak screenshots [--config <path>] [--out <dir>] [--clean] [--locale <ids>]

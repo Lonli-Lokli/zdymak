@@ -115,6 +115,15 @@ for the upload, plus a plain `{ target: 'play-phone' }` for the website. Google 
 bar (no carrier/notifications, full battery/wifi/signal) — `statusBar: 'auto'` (the default) paints one into
 the empty band an Android Compose capture leaves behind; `statusBarTime` sets the clock.
 
+## Destination vs preset (and validation)
+`destination` = what a store accepts (size/codec/duration/alpha/cap). `preset` = how it looks
+(`full-bleed` | `framed` | `premium`). They're independent: `{ destination: 'play-promo', preset:
+'premium' }` is valid, and `{ destination, preset, transitions: [...], effects: [...] }` lets the user
+supply their own vocabulary (scenes without a `cut` cycle the list). `{ target: 'x' }` remains shorthand.
+A destination can REFUSE a preset — `appstore-preview` + `framed` throws, because Apple rejects bezels
+there. Every written asset is re-measured against its destination and REFUSED on violation (`--force`
+downgrades to a warning), so never claim an asset is spec-compliant without running the build.
+
 ## Hard store requirements (verified July 2026 — re-check before a release)
 **App Store screenshots** 1–10 per device type, JPEG/PNG, no alpha: iPhone 6.9" 1320×2868 · iPhone 6.5"
 1284×2778 · iPad 13" 2064×2752 (required for iPad apps) · Mac 2880×1800 · Watch 422×514 (pick one size,

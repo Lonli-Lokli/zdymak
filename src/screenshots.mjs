@@ -11,6 +11,7 @@ import { rgbPngBuffer } from './png.mjs';
 import { IMAGE_TARGETS } from './specs.mjs';
 import { inferFrame } from './frames.mjs';
 import { buildFeatureGraphic, buildAppIcon } from './graphic.mjs';
+import { validateImage } from './validate.mjs';
 
 /**
  * Apply a locale's caption table to a scene list. A scene the locale doesn't translate keeps its base
@@ -57,7 +58,7 @@ export function targetSize(spec, override) {
 }
 
 /** Build every screenshot for one resolved device group → array of written file paths. */
-export async function buildDeviceScreenshots({ device, brand, theme, outDir }) {
+export async function buildDeviceScreenshots({ device, brand, theme, outDir, force }) {
   const written = [];
   for (const shot of device.screenshots || []) {
     const spec = IMAGE_TARGETS[shot.target];
@@ -72,6 +73,7 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir }) {
     if (spec.icon) {
       const outFile = path.join(outDir, `${shot.target}.png`);
       await buildAppIcon({ W, H, brand, theme: shot.theme || theme, outFile });
+      validateImage({ file: outFile, destination: spec, size: [W, H], force });
       written.push({ file: outFile, W, H, style: 'icon' });
       continue;
     }
@@ -82,6 +84,7 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir }) {
       if (!hero) continue;
       const outFile = path.join(outDir, `${shot.target}.png`);
       await buildFeatureGraphic({ W, H, brand, theme: shot.theme || theme, heroPath: hero.image, outFile, frame: frame || 'android' });
+      validateImage({ file: outFile, destination: spec, size: [W, H], force });
       written.push({ file: outFile, W, H, style: 'graphic' });
       continue;
     }
@@ -107,6 +110,7 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir }) {
       });
       const file = path.join(dir, `${String(n).padStart(2, '0')}-${scene.id || n}.png`);
       fs.writeFileSync(file, rgbPngBuffer(still));
+      validateImage({ file, destination: spec, size: [W, H], force });
       written.push({ file, W, H, style });
     }
   }

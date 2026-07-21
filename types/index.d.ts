@@ -238,8 +238,28 @@ export interface ScreenshotSpec {
   theme?: Theme;
 }
 
+/** How an asset is rendered — independent of where it's going. */
+export type PresetId = 'full-bleed' | 'framed' | 'premium';
+
 export interface VideoSpec {
-  target: VideoTargetId | (string & {});
+  /**
+   * Where it's going. DESTINATION decides only what the store accepts — pixel size, codec, duration
+   * bounds, file cap. Use this with `preset` for the split form.
+   */
+  destination?: VideoTargetId | (string & {});
+  /**
+   * How it looks. `full-bleed` (no bezel — required for App Previews), `framed` (device + brand
+   * bookends), `premium` (floating on the matte). Defaults to whatever the destination implies.
+   */
+  preset?: PresetId;
+  /**
+   * Bring your own vocabulary: scenes that don't name a `cut` cycle through this list instead of the
+   * preset's default. Same for `effects`.
+   */
+  transitions?: CutId[];
+  effects?: EffectId[];
+  /** Shorthand for `{ destination, preset }` — every existing config keeps working. */
+  target?: VideoTargetId | (string & {});
   /** Exact output size — e.g. a landscape Mac reel at `[2880, 1800]`. */
   size?: [number, number];
   theme?: Theme;

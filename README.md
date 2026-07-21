@@ -282,6 +282,48 @@ is cleared — a ContentID claim can force ads onto the video, and Play forbids 
 
 <br>
 
+## Destination vs preset
+
+Two independent questions, previously welded into one `target` id:
+
+- **destination** — *will a store accept this?* Pixel size, codec profile/level, duration bounds, alpha,
+  file cap. Says nothing about how it looks.
+- **preset** — *how does it look?* `full-bleed` · `framed` · `premium`. Says nothing about what a store
+  accepts.
+
+Welding them meant "the premium look at Play dimensions" and "App Store validation with my own
+transitions" were unsayable. Now they're just fields:
+
+```js
+videos: [
+  { target: 'appstore-preview' },                       // shorthand — unchanged, still works
+  { destination: 'play-promo', preset: 'premium' },     // our matte treatment, Play's dimensions
+  { destination: 'play-promo', preset: 'framed',        // …or bring your own vocabulary:
+    transitions: ['blur-dissolve', 'push-up', 'flip'],  // scenes without a `cut` cycle these
+    effects: ['warm-film'] },
+]
+```
+
+A destination can refuse a preset. `appstore-preview` + `framed` throws at config time, because Apple
+rejects a device bezel in the App Preview slot — better a build error than a review rejection.
+
+### Validation is enforced, not advertised
+
+Every asset is re-measured **after** it's written — `ffprobe` for video, the PNG IHDR for stills — and
+**refused** if the destination wouldn't take it:
+
+```
+✗ out/appstore-preview.mp4 violates its destination:
+    • duration 13.1s is under App Store's 15s minimum
+  Fix the config, or pass --force to write it regardless.
+```
+
+Checked: exact pixel size (or one of the accepted sizes), duration window, alpha where forbidden, and the
+file cap (500 MB for App Previews, 1 MB for the Play icon). It reads the artefact rather than trusting
+our intent, so a renderer or encoder bug is caught too. `--force` downgrades it to a warning.
+
+<br>
+
 ## Presets — every target, style and frame
 
 `zdymak specs` prints this table from the code, so it can never drift from what the tool actually

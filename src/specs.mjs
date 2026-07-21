@@ -18,6 +18,8 @@ export const VIDEO_TARGETS = {
     level: '4.0', // Apple's wording is "up to High Profile Level 4.0" — a ceiling, not a mandate
     minSec: 15,
     maxSec: 30,
+    maxBytes: 500 * 1024 * 1024,
+    noFrame: true, // Apple rejects a device bezel in the App Preview slot
     slot: 'App Store Connect → your app → (localization) → App Previews. One 886×1920 file covers the 6.9", 6.5", 6.3" and 6.1" iPhone families. Up to 3 previews per family.',
     // Apple: https://developer.apple.com/help/app-store-connect/reference/app-preview-specifications/
   },
@@ -32,6 +34,8 @@ export const VIDEO_TARGETS = {
     level: '4.0',
     minSec: 15,
     maxSec: 30,
+    maxBytes: 500 * 1024 * 1024,
+    noFrame: true,
     slot: 'App Store Connect → App Previews (iPad). NOTE the iPad preview is 1200×1600 — NOT the 2064×2752 of the iPad screenshot slot.',
     // Apple: https://developer.apple.com/help/app-store-connect/reference/app-preview-specifications/
   },
@@ -46,6 +50,8 @@ export const VIDEO_TARGETS = {
     level: '4.0',
     minSec: 15,
     maxSec: 30,
+    maxBytes: 500 * 1024 * 1024,
+    noFrame: true,
     slot: 'App Store Connect → App Previews (Mac). Landscape only, same as Apple TV.',
     // Apple: https://developer.apple.com/help/app-store-connect/reference/app-preview-specifications/
   },
@@ -104,7 +110,7 @@ export const IMAGE_TARGETS = {
   'play-tablet': { store: 'Google Play', w: 2560, h: 1440, alpha: false, format: 'png', label: 'Play tablet (16:9, 1080–7680px, no alpha)' },
   'play-wear': { store: 'Google Play', w: 1080, h: 1080, alpha: false, format: 'png', label: 'Play Wear OS (1:1 square, 384–3840px, no alpha)' },
   'play-feature-graphic': { store: 'Google Play', w: 1024, h: 500, alpha: false, format: 'png', graphic: true, label: 'Play feature graphic (1024×500, no alpha) — brand banner, not a per-scene shot' },
-  'play-icon': { store: 'Google Play', w: 512, h: 512, alpha: true, format: 'png', graphic: true, icon: true, label: 'Play app icon (512×512, 32-bit PNG — the one asset where alpha is allowed; ≤1MB). Built from brand.logo.' },
+  'play-icon': { store: 'Google Play', w: 512, h: 512, alpha: true, format: 'png', graphic: true, icon: true, maxBytes: 1024 * 1024, label: 'Play app icon (512×512, 32-bit PNG — the one asset where alpha is allowed; ≤1MB). Built from brand.logo.' },
 };
 
 /** Resolve a video target by id, throwing a helpful error listing valid ids. */
