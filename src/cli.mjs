@@ -53,6 +53,17 @@ async function open(flags) {
   return { cfg, outDir };
 }
 
+/** Warn when the audio expectation and the config disagree: a video/reel that should carry a music score
+ *  has none (Apple recommends a single score for continuity), or `music` is set where nothing consumes it. */
+function warnAudio({ videoCount, hasMusic, label }) {
+  if (videoCount > 0 && !hasMusic) {
+    console.warn(`⚠︎ audio: ${label} ${videoCount === 1 ? 'plays' : 'play'} SILENT — no music. Apple recommends a single music score for continuity; set \`music.path\`.`);
+  }
+  if (videoCount === 0 && hasMusic) {
+    console.warn('⚠︎ audio: `music.path` is set but this run builds no video/reel — the audio is ignored (screenshots have no sound).');
+  }
+}
+
 /** Build one video target (optionally at an overridden device size / scene set / theme). */
 async function buildVideoTarget({ id, scenes, brand, cfg, outFile, size, theme }) {
   const base = videoTarget(id);
@@ -76,6 +87,7 @@ async function cmdVideo(flags) {
   for (const id of targets) {
     await buildVideoTarget({ id, scenes: cfg.scenes, brand: cfg.brand, cfg, outFile: path.join(outDir, `${id}.mp4`) });
   }
+  warnAudio({ videoCount: targets.length, hasMusic: !!cfg.music, label: 'videos' });
   console.log('Done.');
 }
 
@@ -97,6 +109,7 @@ async function cmdReel(flags) {
     transition: reel.transition, xfadeDur: reel.xfadeDur, outFile,
   });
   console.log(`  ✓ ${totalDur.toFixed(1)}s → ${path.relative(process.cwd(), outFile)}`);
+  warnAudio({ videoCount: 1, hasMusic: !!reel.music, label: 'the reel' });
   console.log('Done.');
 }
 
@@ -111,6 +124,7 @@ async function cmdScreenshots(flags) {
     const written = await buildDeviceScreenshots({ device, brand: cfg.brand, theme: device.theme ?? cfg.stillTheme ?? cfg.theme, outDir });
     console.log(`  • ${device.name}: ${written.length} shot(s)${written[0] ? ` (${written[0].W}×${written[0].H}…)` : ' — no captures found, skipped'}`);
   }
+  warnAudio({ videoCount: 0, hasMusic: !!cfg.music, label: 'screenshots' });
   console.log('Done.');
 }
 
@@ -136,6 +150,9 @@ async function cmdBuild(flags) {
       console.log(`  • ${device.name} screenshots: ${written.length}${written.length ? '' : ' — no captures found, skipped'}`);
     }
   }
+  const videoCount = (cfg.targets.length && cfg.scenes.length ? cfg.targets.length : 0)
+    + cfg.devices.reduce((a, d) => a + d.videos.length, 0);
+  warnAudio({ videoCount, hasMusic: !!cfg.music, label: 'videos' });
   console.log('Done.');
 }
 
