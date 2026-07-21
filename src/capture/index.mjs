@@ -92,7 +92,7 @@ async function captureIos(flags) {
     console.log(`🧹 cleaned ${cleared} stale capture(s) in ${path.relative(process.cwd(), outDir) || outDir}`);
   }
 
-  if (flags.record !== undefined) {
+  if (flags.record !== undefined && !flags.states) {
     const out = path.join(outDir, `${flags.name || 'recording'}.mov`);
     console.log(`▶︎ Recording the booted iOS simulator → ${out}\n  Interact with the app, then press Ctrl-C to stop.`);
     const proc = spawn('xcrun', ['simctl', 'io', 'booted', 'recordVideo', '--codec=h264', '--force', out], { stdio: 'inherit' });
@@ -132,19 +132,38 @@ async function captureIos(flags) {
         '--batteryState', 'discharging', '--batteryLevel', '100', '--cellularBars', '4', '--wifiBars', '3'], { stdio: 'ignore' });
     pinStatusBar();
 
-    console.log(`▶︎ Driving ${states.length} screens via "${flags.arg} <id>" on ${flags.bundle}…`);
+    // --record turns each screen into a short CLIP (real motion) instead of a still. The app must move
+    // during the window: pass the reel handle (default `-marketingReel`) so the harness auto-animates
+    // (auto-flip the card, auto-scroll a list, reveal the paywall). The reel engine (`zdymak reel`) then
+    // composites these clips on the matte. See SKILL/README "produce mode".
+    const recording = flags.record !== undefined;
+    const dur = Number(flags.duration || 3);
+    const reelArg = flags['reel-arg'] || '-marketingReel';
+    const verb = recording ? `Recording ${dur}s clips` : 'Driving';
+    console.log(`▶︎ ${verb} for ${states.length} screens via "${flags.arg} <id>" on ${flags.bundle}…`);
     for (const st of states) {
       spawnSync('xcrun', ['simctl', 'terminate', udid, flags.bundle], { stdio: 'ignore' });
-      sh('xcrun', ['simctl', 'launch', udid, flags.bundle, flags.arg, st]);
+      const launch = ['simctl', 'launch', udid, flags.bundle, flags.arg, st];
+      if (recording) launch.push(reelArg, 'YES'); // tell the harness to auto-animate this screen
+      sh('xcrun', launch);
       await sleep(settle * 1000);
-      // Re-assert RIGHT BEFORE the shot: a launch + the settle lets the sim re-sync the battery to the
-      // host (a charging bolt creeps back on later screens). Re-pinning per screen keeps every shot clean.
+      // Re-assert RIGHT BEFORE capture: a launch + the settle lets the sim re-sync the battery to the host
+      // (a charging bolt creeps back on later screens). Re-pinning per screen keeps every shot clean.
       pinStatusBar();
-      await sleep(500); // let the pinned bar paint before the screenshot
-      const out = path.join(outDir, `${st}${suffix}.png`);
-      sh('xcrun', ['simctl', 'io', udid, 'screenshot', out]);
-      await stripAlpha(out);
-      console.log(`   ✓ ${st}${suffix}.png`);
+      if (recording) {
+        const out = path.join(outDir, `${st}${suffix}.mov`);
+        const rec = spawn('xcrun', ['simctl', 'io', udid, 'recordVideo', '--codec=h264', '--force', out], { stdio: 'ignore' });
+        await sleep(dur * 1000);
+        rec.kill('SIGINT'); // simctl finalizes the mp4/mov on SIGINT
+        await new Promise((res) => rec.on('close', res));
+        console.log(`   ✓ ${st}${suffix}.mov (${dur}s)`);
+      } else {
+        await sleep(500); // let the pinned bar paint before the screenshot
+        const out = path.join(outDir, `${st}${suffix}.png`);
+        sh('xcrun', ['simctl', 'io', udid, 'screenshot', out]);
+        await stripAlpha(out);
+        console.log(`   ✓ ${st}${suffix}.png`);
+      }
     }
     console.log(`Done → ${outDir}`);
     return;
