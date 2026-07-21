@@ -9,6 +9,7 @@
  *   zdymak help
  */
 import path from 'node:path';
+import fs from 'node:fs';
 import { registerFonts } from './fonts.mjs';
 import { loadConfig } from './config.mjs';
 import { buildVideo } from './video.mjs';
@@ -42,6 +43,12 @@ async function open(flags) {
   const cfg = await loadConfig(flags.config || DEFAULT_CONFIG);
   registerFonts(cfg.brand.fontPaths);
   const outDir = flags.out ? path.resolve(flags.out) : cfg.out;
+  // --clean wipes the output folder first, so a run can't leave stale assets from a removed target/scene
+  // behind (every screenshot/video in the folder is then freshly produced by THIS run).
+  if (flags.clean && fs.existsSync(outDir)) {
+    fs.rmSync(outDir, { recursive: true, force: true });
+    console.log(`🧹 cleaned ${path.relative(process.cwd(), outDir) || outDir}`);
+  }
   return { cfg, outDir };
 }
 
@@ -128,17 +135,19 @@ function cmdHelp() {
   console.log(`zdymak — premium App Store, Google Play & social videos + screenshots, from your captures
 
 Usage:
-  zdymak build       [--config <path>] [--out <dir>]   # everything: videos + per-device screenshots
-  zdymak video       [--config <path>] [--target <ids>] [--out <dir>]
-  zdymak screenshots [--config <path>] [--out <dir>]
+  zdymak build       [--config <path>] [--out <dir>] [--clean]   # everything: videos + per-device screenshots
+  zdymak video       [--config <path>] [--target <ids>] [--out <dir>] [--clean]
+  zdymak screenshots [--config <path>] [--out <dir>] [--clean]
   zdymak specs
   zdymak capture  --platform ios --bundle <id> --arg <handle> --states <a,b,c> [--suffix -light]
-                  [--build --project <.xcodeproj> --scheme <name>] [--device <sim>] [--out <dir>]
+                  [--build --project <.xcodeproj> --scheme <name>] [--device <sim>] [--out <dir>] [--clean]
                   # full workflow: start the app, drive each screen by a launch handle, snap store-ready PNGs
   zdymak capture  --platform ios|android --name <screen>          # single snapshot of the booted device
   zdymak help
 
 Defaults: --config ${DEFAULT_CONFIG}. Needs ffmpeg on PATH (or $FFMPEG).
+--clean: wipe the output folder first (capture clears stale PNGs but keeps the .dd build cache) — so the
+folder ends up holding ONLY this run's assets, never a stale screenshot from a removed target/scene.
 README.md documents the config (brand, scenes, targets, theme, music, devices); SKILL.md is for agents.`);
 }
 

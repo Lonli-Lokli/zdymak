@@ -165,7 +165,13 @@ Commands:
 zdymak build          # EVERYTHING: top-level videos + every device's screenshots (+ device videos)
 zdymak screenshots    # just the per-device screenshots
 zdymak video          # just the top-level video targets
+zdymak build --clean  # wipe the output folder first, so ONLY this run's assets remain (no stale files)
 ```
+
+**`--clean`** (on `build` / `screenshots` / `video` / `capture`) empties the target folder before writing,
+so a removed target or renamed scene can't leave a stale screenshot behind — every file is produced by this
+run. On `capture` it clears only stale PNG/MOV captures and keeps the `.dd` build cache (rebuilds stay
+incremental).
 
 `zdymak specs` lists every image target and its exact dimensions. A device that only ships iPhone simply
 omits the others — that's the "use only part of it" contract.

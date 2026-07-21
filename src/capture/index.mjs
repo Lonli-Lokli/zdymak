@@ -82,6 +82,15 @@ async function captureIos(flags) {
   }
   const outDir = path.resolve(flags.out || 'shots');
   fs.mkdirSync(outDir, { recursive: true });
+  // --clean removes stale capture images first so the folder holds ONLY this run's screenshots. Keeps the
+  // `.dd` build cache (and any subdirs) so a rebuild stays incremental — only loose PNG/MOV files are cleared.
+  if (flags.clean) {
+    let cleared = 0;
+    for (const f of fs.readdirSync(outDir)) {
+      if (/\.(png|mov)$/i.test(f)) { fs.rmSync(path.join(outDir, f), { force: true }); cleared++; }
+    }
+    console.log(`🧹 cleaned ${cleared} stale capture(s) in ${path.relative(process.cwd(), outDir) || outDir}`);
+  }
 
   if (flags.record !== undefined) {
     const out = path.join(outDir, `${flags.name || 'recording'}.mov`);
@@ -168,6 +177,15 @@ async function captureAndroid(flags) {
   }
   const outDir = path.resolve(flags.out || 'shots');
   fs.mkdirSync(outDir, { recursive: true });
+  // --clean removes stale capture images first so the folder holds ONLY this run's screenshots. Keeps the
+  // `.dd` build cache (and any subdirs) so a rebuild stays incremental — only loose PNG/MOV files are cleared.
+  if (flags.clean) {
+    let cleared = 0;
+    for (const f of fs.readdirSync(outDir)) {
+      if (/\.(png|mov)$/i.test(f)) { fs.rmSync(path.join(outDir, f), { force: true }); cleared++; }
+    }
+    console.log(`🧹 cleaned ${cleared} stale capture(s) in ${path.relative(process.cwd(), outDir) || outDir}`);
+  }
 
   if (flags.record !== undefined) {
     const remote = '/sdcard/zdymak-rec.mp4';

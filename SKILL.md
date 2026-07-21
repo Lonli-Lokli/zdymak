@@ -13,7 +13,8 @@ per-store encode) is shared.
 The user is building App Store / Google Play listing assets, or asks for an app-preview / store trailer /
 promo video, **or store screenshots**. `zdymak video` builds the previews; `zdymak build` *also* renders
 **multi-device store screenshots** (iPhone / iPad / Mac / Watch / Android) — style inferred per target,
-caption on top, `contain`-fit windows, no-alpha PNG. Dimensions are in `zdymak specs`.
+caption on top, `contain`-fit windows, no-alpha PNG. Dimensions are in `zdymak specs`. Add **`--clean`** to
+any build/capture command to wipe the output folder first, so only this run's assets remain (no stale files).
 
 ## Prerequisites (check first)
 - `ffmpeg` on PATH (`brew install ffmpeg`) — the encode needs it.
