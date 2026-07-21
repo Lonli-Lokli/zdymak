@@ -15,6 +15,8 @@ promo video, **or store screenshots**. `zdymak video` builds the previews; `zdym
 **multi-device store screenshots** (iPhone / iPad / Mac / Watch / Android) — style inferred per target,
 caption on top, `contain`-fit windows, no-alpha PNG. Dimensions are in `zdymak specs`. Add **`--clean`** to
 any build/capture command to wipe the output folder first, so only this run's assets remain (no stale files).
+For a premium reel with REAL motion (not a Ken-Burns zoom of a still), use **`zdymak reel`** — it composites
+app RECORDINGS/clips (or an image sequence) on the matte with beat-matched hard cuts (the `reel` config block).
 
 ## Prerequisites (check first)
 - `ffmpeg` on PATH (`brew install ffmpeg`) — the encode needs it.

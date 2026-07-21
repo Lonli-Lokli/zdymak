@@ -28,7 +28,7 @@ const DEFAULT_BRAND = {
  *  `raw.*` reads below. */
 export const CONFIG_KEYS = [
   'brand', 'screenshotsDir', 'suffix', 'scenes', 'targets', 'sceneDur', 'xfade',
-  'timing', 'theme', 'stillTheme', 'music', 'devices', 'out',
+  'timing', 'theme', 'stillTheme', 'music', 'devices', 'reel', 'out',
 ];
 
 /** Map raw scenes → resolved scenes with absolute image paths (`${dir}/${id}${suffix}.png` or explicit). */
@@ -64,9 +64,9 @@ export async function loadConfig(configPath) {
   const screenshotsDir = raw.screenshotsDir ? path.resolve(baseDir, raw.screenshotsDir) : baseDir;
   const suffix = raw.suffix ?? '';
 
-  // Top-level scenes are required UNLESS a `devices` map supplies its own per-device scenes.
-  if (!raw.devices && (!Array.isArray(raw.scenes) || raw.scenes.length === 0)) {
-    throw new Error('Config error: `scenes` must be a non-empty array (or use a `devices` map).');
+  // Top-level scenes are required UNLESS a `devices` map or a live-footage `reel` supplies the content.
+  if (!raw.devices && !raw.reel && (!Array.isArray(raw.scenes) || raw.scenes.length === 0)) {
+    throw new Error('Config error: provide `scenes`, a `devices` map, or a `reel` block.');
   }
   const scenes = resolveScenes(raw.scenes, baseDir, screenshotsDir, suffix);
 
@@ -87,8 +87,25 @@ export async function loadConfig(configPath) {
     };
   });
 
+  // Live-footage reel: resolve each segment's clip/image(s) + the music bed relative to the config file.
+  const reel = raw.reel
+    ? {
+        ...raw.reel,
+        music: raw.reel.music?.path
+          ? { ...raw.reel.music, path: path.resolve(baseDir, raw.reel.music.path) }
+          : undefined,
+        segments: (raw.reel.segments || []).map((s) => ({
+          ...s,
+          clip: s.clip ? path.resolve(baseDir, s.clip) : undefined,
+          image: s.image ? path.resolve(baseDir, s.image) : undefined,
+          images: s.images ? s.images.map((p) => path.resolve(baseDir, p)) : undefined,
+        })),
+      }
+    : undefined;
+
   return {
     brand,
+    reel,
     scenes,
     devices,
     music,

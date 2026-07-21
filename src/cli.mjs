@@ -15,6 +15,7 @@ import { loadConfig } from './config.mjs';
 import { buildVideo } from './video.mjs';
 import { buildReel } from './reel.mjs';
 import { buildPremium } from './premium.mjs';
+import { buildMontage } from './montage.mjs';
 import { buildDeviceScreenshots } from './screenshots.mjs';
 import { VIDEO_TARGETS, IMAGE_TARGETS, videoTarget } from './specs.mjs';
 import { runCapture } from './capture/index.mjs';
@@ -78,6 +79,26 @@ async function cmdVideo(flags) {
   console.log('Done.');
 }
 
+async function cmdReel(flags) {
+  const { cfg, outDir } = await open(flags);
+  const reel = cfg.reel;
+  if (!reel?.segments?.length) {
+    console.warn('No `reel.segments` in the config — nothing to build. (See README: live-footage reel.)');
+    return;
+  }
+  const [w, h] = reel.size || [1080, 1920];
+  const spec = { w, h, fps: reel.fps || 30, profile: reel.profile || 'high', level: reel.level || '4.1' };
+  const outFile = path.join(outDir, `${flags.name || 'reel'}.mp4`);
+  fs.mkdirSync(outDir, { recursive: true });
+  console.log(`zdymak reel • ${reel.segments.length} segment(s) → ${w}×${h}${reel.music ? ', ♪' : ''}`);
+  const { totalDur } = await buildMontage({
+    segments: reel.segments, brand: cfg.brand, theme: reel.theme ?? cfg.theme, spec,
+    music: reel.music, sceneDur: reel.sceneDur, bpm: reel.bpm, beatsPerCut: reel.beatsPerCut, outFile,
+  });
+  console.log(`  ✓ ${totalDur.toFixed(1)}s → ${path.relative(process.cwd(), outFile)}`);
+  console.log('Done.');
+}
+
 async function cmdScreenshots(flags) {
   const { cfg, outDir } = await open(flags);
   if (!cfg.devices.length) {
@@ -137,6 +158,7 @@ function cmdHelp() {
 Usage:
   zdymak build       [--config <path>] [--out <dir>] [--clean]   # everything: videos + per-device screenshots
   zdymak video       [--config <path>] [--target <ids>] [--out <dir>] [--clean]
+  zdymak reel        [--config <path>] [--out <dir>] [--clean]   # LIVE-FOOTAGE montage from clips/images
   zdymak screenshots [--config <path>] [--out <dir>] [--clean]
   zdymak specs
   zdymak capture  --platform ios --bundle <id> --arg <handle> --states <a,b,c> [--suffix -light]
@@ -158,6 +180,7 @@ export async function run(argv = process.argv.slice(2)) {
     switch (cmd) {
       case 'build': await cmdBuild(flags); break;
       case 'video': await cmdVideo(flags); break;
+      case 'reel': await cmdReel(flags); break;
       case 'screenshots': await cmdScreenshots(flags); break;
       case 'specs': cmdSpecs(); break;
       case 'capture': await runCapture(flags, rest); break;
