@@ -116,16 +116,22 @@ async function captureIos(flags) {
       sh('xcrun', ['simctl', 'install', udid, app]);
     }
 
-    // Pin Apple's canonical marketing status bar: 9:41, full signal/wifi, FULL battery but NOT charging
+    // Apple's canonical marketing status bar: 9:41, full signal/wifi, FULL battery but NOT charging
     // (a charging bolt reads as a simulator override; Apple's own shots show an unplugged full battery).
-    spawnSync('xcrun', ['simctl', 'status_bar', udid, 'override', '--time', '9:41',
-      '--batteryState', 'discharging', '--batteryLevel', '100', '--cellularBars', '4', '--wifiBars', '3'], { stdio: 'ignore' });
+    const pinStatusBar = () =>
+      spawnSync('xcrun', ['simctl', 'status_bar', udid, 'override', '--time', '9:41',
+        '--batteryState', 'discharging', '--batteryLevel', '100', '--cellularBars', '4', '--wifiBars', '3'], { stdio: 'ignore' });
+    pinStatusBar();
 
     console.log(`▶︎ Driving ${states.length} screens via "${flags.arg} <id>" on ${flags.bundle}…`);
     for (const st of states) {
       spawnSync('xcrun', ['simctl', 'terminate', udid, flags.bundle], { stdio: 'ignore' });
       sh('xcrun', ['simctl', 'launch', udid, flags.bundle, flags.arg, st]);
       await sleep(settle * 1000);
+      // Re-assert RIGHT BEFORE the shot: a launch + the settle lets the sim re-sync the battery to the
+      // host (a charging bolt creeps back on later screens). Re-pinning per screen keeps every shot clean.
+      pinStatusBar();
+      await sleep(500); // let the pinned bar paint before the screenshot
       const out = path.join(outDir, `${st}${suffix}.png`);
       sh('xcrun', ['simctl', 'io', udid, 'screenshot', out]);
       await stripAlpha(out);
