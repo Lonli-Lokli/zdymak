@@ -1,6 +1,6 @@
 {
   "name": "zdymak",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Generate premium, spec-compliant App Store & Google Play preview videos (and store assets) from screenshots — one config-driven CLI across all your projects.",
   "type": "module",
   "bin": {
