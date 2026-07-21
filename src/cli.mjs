@@ -1,9 +1,9 @@
 /**
  * zdymak CLI.
  *
- *   zdymak build       [--config <path>] [--out <dir>]   # EVERYTHING in the config: videos + screenshots
+ *   zdymak build       [--config <path>] [--out <dir>] [--locale <ids>]  # EVERYTHING: videos + screenshots
  *   zdymak video       [--config <path>] [--target <ids>] [--out <dir>]
- *   zdymak screenshots [--config <path>] [--out <dir>]   # per-device store screenshots
+ *   zdymak screenshots [--config <path>] [--out <dir>] [--locale <ids>]  # per-device store screenshots
  *   zdymak specs                                          # print the store spec matrix
  *   zdymak capture --platform ios|android --name <screen> [--record] [--out <dir>]
  *   zdymak help
@@ -16,7 +16,7 @@ import { buildVideo } from './video.mjs';
 import { buildReel } from './reel.mjs';
 import { buildPremium } from './premium.mjs';
 import { buildMontage } from './montage.mjs';
-import { buildDeviceScreenshots } from './screenshots.mjs';
+import { buildDeviceScreenshots, localizeScenes, localizeBrand, untranslatedScenes } from './screenshots.mjs';
 import { VIDEO_TARGETS, IMAGE_TARGETS, videoTarget } from './specs.mjs';
 import { runCapture } from './capture/index.mjs';
 
@@ -113,6 +113,52 @@ async function cmdReel(flags) {
   console.log('Done.');
 }
 
+/**
+ * Which locales to render, from `captions` + an optional `--locale de,fr` filter. An unknown locale is an
+ * error, not a silent no-op — a typo'd locale would otherwise look like a successful run that shipped
+ * nothing.
+ */
+function localesFor(cfg, flags) {
+  const configured = Object.keys(cfg.captions || {});
+  if (!flags.locale) return configured;
+  const wanted = String(flags.locale).split(',').map((s) => s.trim()).filter(Boolean);
+  const unknown = wanted.filter((l) => !configured.includes(l));
+  if (unknown.length) {
+    throw new Error(
+      `--locale: no captions configured for ${unknown.join(', ')}. ` +
+        (configured.length ? `Configured: ${configured.join(', ')}.` : 'The config has no `captions` block.'),
+    );
+  }
+  return wanted;
+}
+
+/**
+ * Per-locale screenshot sets → `<out>/<locale>/<target>/…`, leaving the base (source-language) set where
+ * it already is. Screenshots only: stores take localized stills far more often than localized previews,
+ * and re-encoding every video per locale costs minutes each.
+ */
+async function buildLocalizedScreenshots({ cfg, outDir, flags }) {
+  for (const locale of localesFor(cfg, flags)) {
+    const table = cfg.captions[locale];
+    console.log(`zdymak • ${locale} screenshots`);
+    const fellBack = new Set();
+    for (const device of cfg.devices) {
+      if (!device.screenshots.length) continue;
+      untranslatedScenes(device.scenes, table).forEach((id) => fellBack.add(id));
+      const written = await buildDeviceScreenshots({
+        device: { ...device, scenes: localizeScenes(device.scenes, table) },
+        brand: localizeBrand(cfg.brand, table),
+        theme: device.theme ?? cfg.stillTheme ?? cfg.theme,
+        outDir: path.join(outDir, locale),
+      });
+      console.log(`  • ${device.name}: ${written.length}${written.length ? '' : ' — no captures found, skipped'}`);
+    }
+    if (fellBack.size) {
+      console.log(`    ↳ ${fellBack.size} scene(s) kept the base caption (no ${locale} translation): ${[...fellBack].join(', ')}`);
+    }
+  }
+}
+
 async function cmdScreenshots(flags) {
   const { cfg, outDir } = await open(flags);
   if (!cfg.devices.length) {
@@ -124,6 +170,7 @@ async function cmdScreenshots(flags) {
     const written = await buildDeviceScreenshots({ device, brand: cfg.brand, theme: device.theme ?? cfg.stillTheme ?? cfg.theme, outDir });
     console.log(`  • ${device.name}: ${written.length} shot(s)${written[0] ? ` (${written[0].W}×${written[0].H}…)` : ' — no captures found, skipped'}`);
   }
+  await buildLocalizedScreenshots({ cfg, outDir, flags });
   warnAudio({ videoCount: 0, hasMusic: !!cfg.music, label: 'screenshots' });
   console.log('Done.');
 }
@@ -149,7 +196,7 @@ async function cmdBuild(flags) {
       } else {
         console.log(`zdymak build • ${device.name} videos`);
         for (const v of device.videos) {
-          await buildVideoTarget({ id: v.target, scenes: captured, brand: cfg.brand, cfg, size: v.size, theme: device.theme, outFile: path.join(outDir, `${device.name}-${v.target}.mp4`) });
+          await buildVideoTarget({ id: v.target, scenes: captured, brand: cfg.brand, cfg, size: v.size, theme: v.theme ?? device.theme, outFile: path.join(outDir, `${device.name}-${v.target}.mp4`) });
           deviceVideos++;
         }
       }
@@ -159,6 +206,9 @@ async function cmdBuild(flags) {
       console.log(`  • ${device.name} screenshots: ${written.length}${written.length ? '' : ' — no captures found, skipped'}`);
     }
   }
+  // 3) localized screenshot sets (base set already written above)
+  await buildLocalizedScreenshots({ cfg, outDir, flags });
+
   const videoCount = (cfg.targets.length && cfg.scenes.length ? cfg.targets.length : 0) + deviceVideos;
   warnAudio({ videoCount, hasMusic: !!cfg.music, label: 'videos' });
   console.log('Done.');
@@ -182,13 +232,13 @@ function cmdHelp() {
   console.log(`zdymak — premium App Store, Google Play & social videos + screenshots, from your captures
 
 Usage:
-  zdymak build       [--config <path>] [--out <dir>] [--clean]   # everything: videos + per-device screenshots
+  zdymak build       [--config <path>] [--out <dir>] [--clean] [--locale <ids>]  # everything
   zdymak video       [--config <path>] [--target <ids>] [--out <dir>] [--clean]
   zdymak reel        [--config <path>] [--out <dir>] [--clean]   # LIVE-FOOTAGE montage from clips/images
-  zdymak screenshots [--config <path>] [--out <dir>] [--clean]
+  zdymak screenshots [--config <path>] [--out <dir>] [--clean] [--locale <ids>]
   zdymak specs
   zdymak capture  --platform ios --bundle <id> --arg <handle> --states <a,b,c> [--suffix -light]
-                  [--build --project <.xcodeproj> --scheme <name>] [--device <sim>] [--out <dir>] [--clean]
+                  [--build --project <.xcodeproj> --scheme <name>] [--device <sim>] [--out <dir>] [--clean] [--keep]
                   # full workflow: start the app, drive each screen by a launch handle, snap store-ready PNGs
   zdymak capture  --platform ios|android --name <screen>          # single snapshot of the booted device
   zdymak help

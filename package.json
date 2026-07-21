@@ -1,23 +1,31 @@
 {
   "name": "zdymak",
   "version": "0.10.0",
-  "description": "Generate premium, spec-compliant App Store & Google Play preview videos (and store assets) from screenshots — one config-driven CLI across all your projects.",
+  "description": "Store screenshots and spec-compliant App Store / Google Play preview videos — captured from your app and composed, in one config-driven CLI. Drives iOS simulators, Android devices and web apps to take the screenshots, then frames, captions and encodes them to each store's exact requirements.",
   "type": "module",
   "bin": {
     "zdymak": "bin/zdymak.mjs"
   },
+  "types": "./types/index.d.ts",
   "exports": {
-    ".": "./src/index.mjs"
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.mjs"
+    }
   },
   "files": [
     "bin",
     "src",
+    "types/index.d.ts",
     "SKILL.md"
   ],
   "scripts": {
     "example": "node bin/zdymak.mjs video --config examples/asilak.config.mjs",
+    "demo": "node scripts/build-demo.mjs",
+    "docs:diagram": "node scripts/build-diagram.mjs",
     "check:docs": "node scripts/check-docs.mjs",
-    "prepublishOnly": "node scripts/check-docs.mjs",
+    "check:types": "tsc --noEmit -p tsconfig.json && node scripts/check-types.mjs",
+    "prepublishOnly": "node scripts/check-docs.mjs && npm run check:types",
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
     "release:major": "node scripts/release.mjs major"
@@ -42,7 +50,17 @@
     "aso",
     "marketing",
     "video",
-    "ffmpeg"
+    "ffmpeg",
+    "screenshot-automation",
+    "playwright",
+    "simulator",
+    "adb",
+    "app-preview-video",
+    "store-assets"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2"
+  }
 }

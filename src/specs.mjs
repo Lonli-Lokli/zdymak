@@ -9,7 +9,7 @@
 export const VIDEO_TARGETS = {
   'appstore-preview': {
     store: 'App Store',
-    label: 'App Store App Preview (iPhone 6.5" + 6.9")',
+    label: 'App Store App Preview (iPhone — one file fills 6.9" / 6.5" / 6.3" / 6.1")',
     w: 886,
     h: 1920,
     fps: 30,
@@ -18,7 +18,35 @@ export const VIDEO_TARGETS = {
     level: '4.0', // Apple requires High @ 4.0 for App Previews
     minSec: 15,
     maxSec: 30,
-    slot: 'App Store Connect → your app → (localization) → App Previews. One 886×1920 file fills BOTH the 6.5" and 6.9" slots.',
+    slot: 'App Store Connect → your app → (localization) → App Previews. One 886×1920 file covers the 6.9", 6.5", 6.3" and 6.1" iPhone families. Up to 3 previews per family.',
+    // Apple: https://developer.apple.com/help/app-store-connect/reference/app-preview-specifications/
+  },
+  'appstore-preview-ipad': {
+    store: 'App Store',
+    label: 'App Store App Preview (iPad 13" / 12.9" / 11" / 10.5")',
+    w: 1200,
+    h: 1600,
+    fps: 30,
+    codec: 'h264',
+    profile: 'high',
+    level: '4.0',
+    minSec: 15,
+    maxSec: 30,
+    slot: 'App Store Connect → App Previews (iPad). NOTE the iPad preview is 1200×1600 — NOT the 2064×2752 of the iPad screenshot slot.',
+    // Apple: https://developer.apple.com/help/app-store-connect/reference/app-preview-specifications/
+  },
+  'appstore-preview-mac': {
+    store: 'Mac App Store',
+    label: 'App Store App Preview (Mac — landscape only)',
+    w: 1920,
+    h: 1080,
+    fps: 30,
+    codec: 'h264',
+    profile: 'high',
+    level: '4.0',
+    minSec: 15,
+    maxSec: 30,
+    slot: 'App Store Connect → App Previews (Mac). Landscape only, same as Apple TV.',
     // Apple: https://developer.apple.com/help/app-store-connect/reference/app-preview-specifications/
   },
   'play-promo': {

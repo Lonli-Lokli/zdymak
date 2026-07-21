@@ -314,8 +314,9 @@ function concatClips(clips, tmp, idx) {
 }
 
 /**
- * Build one live-footage reel. `segments[]` each carry a `clip` | `image` | `images` source + `caption` +
- * optional `palette`. Hard cuts between same-palette neighbours, a short dissolve at a palette change.
+ * Build one live-footage reel. `segments[]` each carry a `clip` | `image` | `images` source + `caption`.
+ * Transitions are uniform across the montage (`transition: 'cut'` for beat-matched hard cuts, else a
+ * dissolve) — per-boundary control lives in the reel engine's `cut` vocabulary, not here.
  */
 export async function buildMontage({ segments, brand, theme, spec, music, sceneDur, bpm, beatsPerCut, transition, xfadeDur, outFile }) {
   const th = resolveReelTheme(brand, theme);

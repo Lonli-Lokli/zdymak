@@ -1,0 +1,15 @@
+{
+  "//": "Type-checks the shipped .d.ts and the type tests in types/. The package itself stays plain ESM JS — TypeScript is a dev-only check, never a build step.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": false,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["types/**/*.ts"]
+}

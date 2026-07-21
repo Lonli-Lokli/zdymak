@@ -11,8 +11,9 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { premiumStill } from './premium.mjs';
 import { drawCaption, hexA } from './canvas.mjs';
+import { loadCapture } from './statusbar.mjs';
 
-function coverCanvas(img, W, H) {
+function coverCanvas(img, W, H, anchor = 'center') {
   const c = createCanvas(W, H);
   const ctx = c.getContext('2d');
   const ia = img.height / img.width;
@@ -22,16 +23,20 @@ function coverCanvas(img, W, H) {
     dh = H;
     dw = H / ia;
   }
-  ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  // A phone capture is taller than any store slot (Play caps at 2:1), so a cover fit must drop some of
+  // it. `anchor: 'top'` drops it from the BOTTOM — keeping the status bar and the screen's headline,
+  // which is what a plain, unframed store shot needs; centring would shave both ends.
+  const dy = anchor === 'top' ? 0 : (H - dh) / 2;
+  ctx.drawImage(img, (W - dw) / 2, dy, dw, dh);
   return c;
 }
 
-function bleedStill({ W, H, img, caption, brand }) {
+function bleedStill({ W, H, img, caption, brand, theme }) {
   const c = createCanvas(W, H);
   const ctx = c.getContext('2d');
   ctx.fillStyle = brand.ink;
   ctx.fillRect(0, 0, W, H);
-  ctx.drawImage(coverCanvas(img, W, H), 0, 0);
+  ctx.drawImage(coverCanvas(img, W, H, theme?.anchor), 0, 0);
   if (caption.title || caption.sub) {
     const g = ctx.createLinearGradient(0, H * 0.55, 0, H);
     g.addColorStop(0, hexA(brand.ink, 0));
@@ -53,10 +58,16 @@ function bleedStill({ W, H, img, caption, brand }) {
   return c;
 }
 
-/** Render one still to a canvas. `style`: premium | framed (device bezel) | bleed. */
+/**
+ * Render one still to a canvas. `style`: premium | framed (device bezel) | bleed.
+ *
+ * The status bar is painted onto the CAPTURE before any framing/scaling, so it lands at the capture's own
+ * density and gets scaled down with everything else — drawing it afterwards would size it to the output
+ * frame and look pasted on.
+ */
 export async function renderStill(style, { W, H, imgPath, caption, brand, theme, frame }) {
-  const img = await loadImage(imgPath);
+  const img = await loadCapture(imgPath, theme, frame);
   if (style === 'framed') return premiumStill({ W, H, img, caption, brand, theme, frame: frame || 'phone' });
   if (style === 'premium') return premiumStill({ W, H, img, caption, brand, theme });
-  return bleedStill({ W, H, img, caption, brand });
+  return bleedStill({ W, H, img, caption, brand, theme });
 }

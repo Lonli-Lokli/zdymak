@@ -2,10 +2,15 @@ node_modules/
 store-assets/
 examples/out/
 examples/clips/
-# generated demo media — not committed yet; re-add (git add -f) for the final release
+# Generated media stays out of git EXCEPT the README/npm demo, which has to be in the repo for the
+# embed to resolve (npm renders the GIF; GitHub plays the mp4 from a raw URL). Regenerate with
+# `npm run demo` — and remember each rebuild is a new binary blob in history, so don't re-commit it
+# for cosmetic tweaks.
 *.gif
 *.mp4
 *.mov
 *.webm
+!docs/demo.gif
+!docs/demo.mp4
 *.log
 .DS_Store

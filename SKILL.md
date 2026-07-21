@@ -1,6 +1,6 @@
 ---
 name: zdymak
-description: Generate premium, spec-compliant App Store & Google Play preview VIDEOS from a project's screenshots. Use when a user wants an "app preview", "store preview video", "App Store trailer", "Play promo video", or is preparing store-listing assets. Produces the exact resolution/codec each store requires (App Store 886×1920 H.264 High@4.0, 15–30s, no bezel; Play 1080×1920 for YouTube) with cinematic spring motion + kinetic captions — not a flat Ken-Burns slideshow.
+description: Capture app screenshots AND generate spec-compliant App Store / Google Play preview videos and store screenshots. Use when a user wants an "app preview", "store preview video", "App Store trailer", "Play promo video", store screenshots, a Play feature graphic, localized store assets — or needs the screenshots THEMSELVES taken: zdymak drives iOS simulators (launch-arg handle, can build+install), Android devices over adb (intent extra, SystemUI demo mode for a clean status bar) and any web app via Playwright, then frames/captions/encodes to each store's exact spec.
 ---
 
 # zdymak
@@ -17,6 +17,40 @@ caption on top, `contain`-fit windows, no-alpha PNG. Dimensions are in `zdymak s
 any build/capture command to wipe the output folder first, so only this run's assets remain (no stale files).
 For a premium reel with REAL motion (not a Ken-Burns zoom of a still), use **`zdymak reel`** — it composites
 app RECORDINGS/clips (or an image sequence) on the matte with beat-matched hard cuts (the `reel` config block).
+
+## Pick the right preset (do this before writing any config)
+
+The two stores want **opposite** things. Choosing the wrong target is the #1 way to produce assets that
+get rejected or quietly under-perform.
+
+| The user wants… | Target | Style | Non-obvious rule |
+|---|---|---|---|
+| An App Store preview video | `appstore-preview` | full-bleed | **15–30 s** or Apple rejects it. **No device frame.** Apple expects footage from inside the app — captions are overlay, so keep them minimal (or use a captions-free real-footage cut). |
+| A Play listing video | `play-promo` | full-bleed | Play takes a **YouTube URL**, not a file. Keep it **silent** unless the music is cleared — a ContentID claim can force ads on, which Play forbids on listing videos. |
+| A marketing/social reel | `social-reel` | device-framed | Set `theme.frame: 'android'` for Android captures — the default body is an iPhone, and an Android UI in an iPhone shell misrepresents the app. Never submit this as an App Preview. |
+| A cinematic showcase | `premium-reel` | premium matte | Override `size` for landscape (Mac: `[2880, 1800]`). |
+| **App Store** screenshots | `appstore-iphone-6.9` (+`-6.5`), `appstore-ipad-13`, `appstore-mac`, `appstore-watch` | framed (inferred) | Marketing styling is **expected** here: frames, headlines, backgrounds. iPad/Mac/Watch shots are *required* if the app ships there. Pick ONE Watch size and keep it across localizations. |
+| **Google Play** screenshots | `play-phone`, `play-tablet`, `play-wear`, `play-feature-graphic` | `bleed` + `caption: false` for the upload | Google forbids device frames, added text and backgrounds on store screenshots (hard requirement for Wear OS). Render a plain set for upload and a styled set for the website — `dir` keeps both. The feature graphic is **required** even without a video. |
+| Web-app screenshots | any target, captured with `--platform web` | as above | Playwright driver; states are URL paths. |
+
+Exact dimensions live in `zdymak specs` (printed from the code, so it can't drift). They're checked
+against Apple's *Screenshot / App preview specifications* and Google's *Add preview assets* pages.
+
+**Status bars.** An Android Compose capture reserves the status-bar inset but can't contain the system UI,
+so the shot has an empty band. `statusBar: 'auto'` (default) detects that band and paints a clean bar
+(9:41 · full signal/wifi/battery) — exactly the state Google asks for. Square (watch) captures are skipped.
+iOS XCUITest captures already include a real status bar, so nothing is drawn there.
+
+## It can take the screenshots too (don't assume the user must supply them)
+`zdymak capture --platform ios|android|web` DRIVES the app through each screen and writes a store-ready
+PNG per screen — it is not only a compositor. iOS: boots/creates a sim, optionally `--build` +installs,
+relaunches per state via a launch-arg handle, pins the status bar to 9:41. Android: `am start --es <arg>
+<state>` over adb with SystemUI demo mode on for a clean bar. Web: Playwright navigates URL paths itself,
+no handle needed. Single-shot `--name <screen>` and `--record` also exist. If the user has no screenshots
+yet, offer this before asking them to produce some. macOS capture is deliberately out of scope (TCC).
+Capture TEARS DOWN what it set up (status-bar override cleared, a sim it booted shut down, a device it
+created deleted, Android demo mode switched off) — `--keep` skips that for debugging. A simulator the
+user already had booted is never touched.
 
 ## Prerequisites (check first)
 - `ffmpeg` on PATH (`brew install ffmpeg`) — the encode needs it.
@@ -65,6 +99,58 @@ app RECORDINGS/clips (or an image sequence) on the matte with beat-matched hard 
 5. **Tell the user where it goes:**
    - App Store → App Store Connect → App Previews (one 886×1920 file fills the 6.5" **and** 6.9" slots).
    - Play → upload the 1080×1920 file to **YouTube**, paste the link in Play Console → Preview video.
+
+## Capturing the screenshots
+`zdymak capture --platform ios|android|web`. For **web**, states are URL paths and the tool drives itself:
+`--platform web --url http://localhost:3000 --states /,/today --suffix -light`, plus `--device "iPhone 15 Pro"`
+for mobile-web, `--theme dark`, `--locale`, `--wait <selector>`, `--full-page`. Playwright is an optional
+dep (`npm i -D playwright && npx playwright install chromium`). Shots are deterministic — animations are
+zeroed and fonts/images awaited — so re-runs only differ where the UI did.
+
+## Play wants PLAIN screenshots (Apple wants styled)
+Google's asset guidance forbids device frames, added text and backgrounds on Play screenshots (a hard
+requirement for Wear OS), while Apple expects marketing styling. Render both from one target with `dir`:
+`{ target: 'play-phone', dir: 'play-phone-plain', style: 'bleed', caption: false, theme: { anchor: 'top' } }`
+for the upload, plus a plain `{ target: 'play-phone' }` for the website. Google *does* want a tidy status
+bar (no carrier/notifications, full battery/wifi/signal) — `statusBar: 'auto'` (the default) paints one into
+the empty band an Android Compose capture leaves behind; `statusBarTime` sets the clock.
+
+## Hard store requirements (verified July 2026 — re-check before a release)
+**App Store screenshots** 1–10 per device type, JPEG/PNG, no alpha: iPhone 6.9" 1320×2868 · iPhone 6.5"
+1284×2778 · iPad 13" 2064×2752 (required for iPad apps) · Mac 2880×1800 · Watch 422×514 (pick one size,
+use it in every locale).
+**App Previews** 15–30s or it's rejected · ≤500MB · ≤30fps · H.264 High ≤4.0 · up to 3 per family · NO
+device frame. iPhone 886×1920 (`appstore-preview`) · **iPad 1200×1600** (`appstore-preview-ipad`) · Mac
+1920×1080 landscape (`appstore-preview-mac`). The iPad preview is NOT the iPad screenshot size — that
+mismatch is a routine rejection.
+**Play images** JPEG/24-bit PNG, no alpha: phone 1080×1920 (2–8, max 2:1, 320–3840px) · tablet 2560×1440
+· Wear 1080×1080 1:1 (required for Wear) · feature graphic 1024×500 (**required**) · icon 512×512 ≤1MB
+(alpha OK). Wear OS: interface only (requirement). Phone/tablet: frames recommended against, taglines ≤20% allowed.
+**Play video** is a YouTube URL, not a file — render `play-promo`, upload, paste the link. Keep it silent
+unless the track is cleared (ContentID → forced ads → Play violation).
+
+## Store cut vs social-ad cut (per-scene `cut` / `effect`)
+`social-reel` supports **32 transitions** and **23 effects**, chosen per scene:
+`{ id: 'study', cut: 'flip', effect: 'warm-film', push: true }`.
+
+- **Store preview → stay plain.** Default `cut` (a one-frame hard cut) carries the rhythm; spend a
+  `dissolve` only where the meaning changes; use at most ONE `push: true` camera move in the whole reel.
+  Reaching for a different decorative transition at every boundary is the #1 amateur tell.
+- **Social ad → open it up.** Anything in the tables is fair game; `auto` gives a deterministic rotation
+  that stays mostly plain without art direction.
+- **Effects are reel-only.** Never grade a store screenshot — Google requires Play shots to show the
+  interface unaltered.
+- **Beat-match the cuts** with `timing: { bpm, beatsPerCut }` (hold = beatsPerCut × 60 / bpm).
+
+Full tables (id → duration → what it reads as) are in the README under *Transitions & effects*; the ids are
+also the `CutId` / `EffectId` unions in `types/index.d.ts`, so an editor will autocomplete them.
+
+## Localized store listings
+If the app ships more than one store locale, add a `captions` block — `{ de: './captions/de.json' }` or an
+inline `{ sceneId: { title, sub } }` table — and run `zdymak screenshots` (or `--locale de,fr`). Each locale
+renders to `<out>/<locale>/<target>/`; untranslated scenes keep the base caption and are reported. The
+reserved `$brand` key localizes the feature graphic's wordmark copy. Screenshots only — videos aren't
+re-encoded per locale.
 
 ## Tuning for quality
 - **Captions overlap busy UI?** Lower them (they sit at ~0.75·height) or pick screenshots with calmer

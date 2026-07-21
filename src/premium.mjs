@@ -18,6 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
+import { loadCapture } from './statusbar.mjs';
 import { font, hexA, hexRgb, springSeries, roundRectPath, fillVerticalGradient, radialGlow, wrapLines } from './canvas.mjs';
 import { spawnEncoder } from './encode.mjs';
 import { frameFor } from './frames.mjs';
@@ -56,7 +57,7 @@ export const DEFAULT_THEME = {
 export const PUBLIC_THEME_KEYS = [
   'bgTop', 'bgBottom', 'glow', 'glowAlpha', 'vignette', 'inset',
   'label', 'labelColor', 'subColor', 'handle', 'captionAnchor', 'fit',
-  'headlineScale', 'frame', 'bleed',
+  'headlineScale', 'frame', 'bleed', 'statusBar', 'statusBarTime', 'statusBarCellular', 'anchor',
 ];
 
 /** Average RGB of a canvas (coarse grid sample) — used to decide hard-cut vs dissolve. */
@@ -281,7 +282,7 @@ export async function buildPremium({ scenes, spec, brand, theme, outFile, sceneD
   const clips = [];
   for (const s of scenes) {
     if (!fs.existsSync(s.image)) throw new Error(`Screenshot not found: ${s.image}`);
-    const img = await loadImage(s.image);
+    const img = await loadCapture(s.image, th, th?.frame);
     const layer = createCanvas(W, H);
     const lctx = layer.getContext('2d');
     // soft drop shadow

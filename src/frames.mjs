@@ -8,6 +8,21 @@
  */
 import { roundRectPath } from './canvas.mjs';
 
+/**
+ * Paint the screen area. `screen` is either an image (cover-fit, as before) or a callback
+ * `(ctx, x, y, w, h) => void` that paints it — the hook that lets the reel scroll content inside a device
+ * that itself never moves. With a callback the caller must say how tall the screen is via `opts.aspect`,
+ * since there's no image to measure.
+ */
+function paintScreen(ctx, screen, x, y, w, h) {
+  if (typeof screen === 'function') return screen(ctx, x, y, w, h);
+  return drawInto(ctx, screen, x, y, w, h);
+}
+
+/** Screen height for a frame: the image's own aspect, or an explicit one when painting via callback. */
+const screenHeight = (screen, screenW, opts) =>
+  screenW * (typeof screen === 'function' ? (opts.aspect ?? 2.165) : screen.height / screen.width);
+
 /** Cover-fit an image into a rect (preserve aspect, crop overflow). */
 function drawInto(ctx, img, x, y, w, h) {
   const sAspect = img.height / img.width;
@@ -21,8 +36,8 @@ function drawInto(ctx, img, x, y, w, h) {
 }
 
 /** iPhone: dark unibody, thin uniform bezel, centred Dynamic Island. */
-export function drawPhoneFrame(ctx, img, cx, cy, screenW) {
-  const screenH = screenW * (img.height / img.width);
+export function drawPhoneFrame(ctx, img, cx, cy, screenW, opts = {}) {
+  const screenH = screenHeight(img, screenW, opts);
   const bezel = Math.round(screenW * 0.032);
   const bodyW = screenW + bezel * 2;
   const bodyH = screenH + bezel * 2;
@@ -43,7 +58,7 @@ export function drawPhoneFrame(ctx, img, cx, cy, screenW) {
   ctx.save();
   roundRectPath(ctx, sx, sy, screenW, screenH, Math.round(screenW * 0.135));
   ctx.clip();
-  drawInto(ctx, img, sx, sy, screenW, screenH);
+  paintScreen(ctx, img, sx, sy, screenW, screenH);
   ctx.restore();
 
   const iw = Math.round(screenW * 0.3);
@@ -51,12 +66,12 @@ export function drawPhoneFrame(ctx, img, cx, cy, screenW) {
   roundRectPath(ctx, Math.round(sx + (screenW - iw) / 2), Math.round(sy + bezel * 1.1), iw, ih, ih / 2);
   ctx.fillStyle = '#050505';
   ctx.fill();
-  return { bodyH };
+  return { bodyH, bodyY, screen: { x: sx, y: sy, w: screenW, h: screenH, r: Math.round(screenW * 0.135) } };
 }
 
 /** Android (Pixel-neutral): dark unibody, uniform bezel, centred punch-hole camera. */
-export function drawAndroidPhoneFrame(ctx, img, cx, cy, screenW) {
-  const screenH = screenW * (img.height / img.width);
+export function drawAndroidPhoneFrame(ctx, img, cx, cy, screenW, opts = {}) {
+  const screenH = screenHeight(img, screenW, opts);
   const bezel = Math.round(screenW * 0.035);
   const bodyW = screenW + bezel * 2;
   const bodyH = screenH + bezel * 2;
@@ -77,7 +92,7 @@ export function drawAndroidPhoneFrame(ctx, img, cx, cy, screenW) {
   ctx.save();
   roundRectPath(ctx, sx, sy, screenW, screenH, Math.round(screenW * 0.105));
   ctx.clip();
-  drawInto(ctx, img, sx, sy, screenW, screenH);
+  paintScreen(ctx, img, sx, sy, screenW, screenH);
   ctx.restore();
 
   // Centred punch-hole camera near the top edge.
@@ -85,12 +100,12 @@ export function drawAndroidPhoneFrame(ctx, img, cx, cy, screenW) {
   ctx.arc(sx + screenW / 2, sy + bezel * 1.6, Math.round(screenW * 0.018), 0, Math.PI * 2);
   ctx.fillStyle = '#050505';
   ctx.fill();
-  return { bodyH };
+  return { bodyH, bodyY, screen: { x: sx, y: sy, w: screenW, h: screenH, r: Math.round(screenW * 0.105) } };
 }
 
 /** iPad: dark unibody, tight even bezel, gentler corners, no island. */
-export function drawIpadFrame(ctx, img, cx, cy, screenW) {
-  const screenH = screenW * (img.height / img.width);
+export function drawIpadFrame(ctx, img, cx, cy, screenW, opts = {}) {
+  const screenH = screenHeight(img, screenW, opts);
   const bezel = Math.round(screenW * 0.024);
   const bodyW = screenW + bezel * 2;
   const bodyH = screenH + bezel * 2;
@@ -111,9 +126,9 @@ export function drawIpadFrame(ctx, img, cx, cy, screenW) {
   ctx.save();
   roundRectPath(ctx, sx, sy, screenW, screenH, Math.round(screenW * 0.035));
   ctx.clip();
-  drawInto(ctx, img, sx, sy, screenW, screenH);
+  paintScreen(ctx, img, sx, sy, screenW, screenH);
   ctx.restore();
-  return { bodyH };
+  return { bodyH, bodyY, screen: { x: sx, y: sy, w: screenW, h: screenH, r: Math.round(screenW * 0.035) } };
 }
 
 /** Apple Watch: round dark unibody, thin ring, a crown nub; the square capture is clipped to the circle. */
@@ -161,8 +176,11 @@ export function frameFor(id) {
 /** Infer a frame id from a screenshot target id (order matters: play-phone → android before → phone). */
 export function inferFrame(target) {
   if (/watch|wear/.test(target)) return 'watch';
+  // Play targets are matched FIRST: `play-tablet` contains "tablet", so an ipad/tablet test placed above
+  // this would frame Android tablet captures in an iPad body — the same misrepresentation we refuse to
+  // make on phones.
+  if (/^play/.test(target) || /android/.test(target)) return 'android';
   if (/ipad|tablet/.test(target)) return 'ipad';
-  if (/play.*phone|android/.test(target)) return 'android';
   if (/iphone|phone/.test(target)) return 'phone';
   return null;
 }

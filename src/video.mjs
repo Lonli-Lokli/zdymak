@@ -14,6 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
+import { loadCapture } from './statusbar.mjs';
 import { spawnEncoder } from './encode.mjs';
 
 const smooth = (t) => t * t * (3 - 2 * t);
@@ -151,7 +152,9 @@ function hexA(hex, a) {
  * @param {number}  [o.xfade=0.32]    cross-dissolve seconds
  * @returns {Promise<{outFile, totalDur, frames, warnings}>}
  */
-export async function buildVideo({ scenes, spec, brand, outFile, sceneDur = 3.1, xfade = 0.32, music }) {
+// `theme` is accepted only for the status-bar knobs (`statusBar` / `statusBarTime`) — a full-bleed App
+// Preview has no matte to style.
+export async function buildVideo({ scenes, spec, brand, outFile, sceneDur = 3.1, xfade = 0.32, music, theme }) {
   if (!scenes?.length) throw new Error('buildVideo: no scenes');
   const { w: W, h: H, fps } = spec;
   const warnings = [];
@@ -168,7 +171,7 @@ export async function buildVideo({ scenes, spec, brand, outFile, sceneDur = 3.1,
   for (let i = 0; i < scenes.length; i++) {
     const s = scenes[i];
     if (!fs.existsSync(s.image)) throw new Error(`Screenshot not found: ${s.image}`);
-    const img = await loadImage(s.image);
+    const img = await loadCapture(s.image, theme, theme?.frame);
     clips.push({
       screen: coverCanvas(img, W, H),
       caption: { title: s.title || '', sub: s.sub || '' },

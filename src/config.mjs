@@ -28,15 +28,50 @@ const DEFAULT_BRAND = {
  *  `raw.*` reads below. */
 export const CONFIG_KEYS = [
   'brand', 'screenshotsDir', 'suffix', 'scenes', 'targets', 'sceneDur', 'xfade',
-  'timing', 'theme', 'stillTheme', 'music', 'devices', 'reel', 'out',
+  'timing', 'theme', 'stillTheme', 'music', 'devices', 'captions', 'reel', 'out',
 ];
 
-/** Map raw scenes → resolved scenes with absolute image paths (`${dir}/${id}${suffix}.png` or explicit). */
+/**
+ * Per-locale caption tables: `captions: { de: './captions/de.json' | { sceneId: { title, sub } } }`.
+ * A JSON path is read here so a bad path fails at config load, not halfway through a render. The
+ * reserved `$brand` key carries the localized wordmark lines used by the feature graphic.
+ */
+function loadCaptions(rawCaptions, baseDir) {
+  const out = {};
+  for (const [locale, value] of Object.entries(rawCaptions)) {
+    let table = value;
+    if (typeof value === 'string') {
+      const file = path.resolve(baseDir, value);
+      if (!fs.existsSync(file)) {
+        throw new Error(`Config error: captions["${locale}"] → file not found: ${file}`);
+      }
+      try {
+        table = JSON.parse(fs.readFileSync(file, 'utf8'));
+      } catch (e) {
+        throw new Error(`Config error: captions["${locale}"] → ${file} is not valid JSON (${e.message})`);
+      }
+    }
+    if (!table || typeof table !== 'object' || Array.isArray(table)) {
+      throw new Error(`Config error: captions["${locale}"] must be a JSON path or an object of sceneId → { title, sub }.`);
+    }
+    out[locale] = table;
+  }
+  return out;
+}
+
+/**
+ * Map raw scenes → resolved scenes with absolute image paths (`${dir}/${id}${suffix}.png` or explicit).
+ *
+ * SPREAD the source scene rather than picking known keys: this used to whitelist
+ * `{id, image, title, sub, move}`, which silently swallowed every per-scene knob added since
+ * (`cut`, `effect`, `push`, `scroll`) — the config looked right, no error was raised, and the renderer
+ * just never saw them. Anything a scene carries now reaches the engine untouched.
+ */
 function resolveScenes(rawScenes, baseDir, dir, suffix) {
   return (rawScenes || []).map((s, i) => {
     if (!s.image && !s.id) throw new Error(`Config error: scene[${i}] needs an "id" or an "image".`);
     const image = s.image ? path.resolve(baseDir, s.image) : path.join(dir, `${s.id}${suffix}.png`);
-    return { id: s.id || String(i + 1), image, title: s.title || '', sub: s.sub || '', move: s.move };
+    return { ...s, id: s.id || String(i + 1), image, title: s.title || '', sub: s.sub || '' };
   });
 }
 
@@ -108,8 +143,11 @@ export async function loadConfig(configPath) {
     reel,
     scenes,
     devices,
+    captions: raw.captions ? loadCaptions(raw.captions, baseDir) : undefined,
     music,
-    targets: raw.targets?.length ? raw.targets : ['appstore-preview'],
+    // `?? ` not `?.length ?` — an explicit `targets: []` means "no top-level videos" (a devices-only
+    // config renders each device's own), whereas omitting the key entirely still gets the sane default.
+    targets: raw.targets ?? ['appstore-preview'],
     sceneDur: raw.sceneDur ?? 3.1,
     xfade: raw.xfade ?? 0.32,
     timing: raw.timing, // reel-mode timeline override { coldOpen, scene, endCard, xfade }

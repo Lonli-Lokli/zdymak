@@ -9,6 +9,24 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 
 /** Start the ffmpeg process reading rawvideo from stdin. Returns { proc, done, hasAudio }. */
+/**
+ * Smallest H.264 level that fits this frame size + rate (macroblocks and MB/s per Annex A), floored at
+ * the target's own level so we never *under*-declare what a store asked for.
+ */
+function h264Level(W, H, fps, floor) {
+  const mbs = Math.ceil(W / 16) * Math.ceil(H / 16);
+  const rate = mbs * fps;
+  const TABLE = [
+    ['3.0', 1620, 40500], ['3.1', 3600, 108000], ['3.2', 5120, 216000],
+    ['4.0', 8192, 245760], ['4.1', 8192, 245760], ['4.2', 8704, 522240],
+    ['5.0', 22080, 589824], ['5.1', 36864, 983040], ['5.2', 36864, 2073600],
+    ['6.0', 139264, 4177920],
+  ];
+  const fit = TABLE.find(([, maxMbs, maxRate]) => mbs <= maxMbs && rate <= maxRate);
+  const chosen = fit ? fit[0] : '6.2';
+  return Number(chosen) > Number(floor || 0) ? chosen : floor;
+}
+
 export function spawnEncoder({ W, H, fps, spec, outFile, music, totalDur }) {
   const hasAudio = !!(music && music.path && fs.existsSync(music.path));
   const args = [
@@ -27,11 +45,19 @@ export function spawnEncoder({ W, H, fps, spec, outFile, music, totalDur }) {
     args.push('-af', `volume=${vol},afade=t=in:st=0:d=${fi},afade=t=out:st=${outStart}:d=${fo}`, '-shortest');
   }
 
+  // LEVEL must follow the ACTUAL frame size, not the target's default. A device `size` override (e.g. the
+  // Mac reel at 2880×1800) exceeds the base target's level, and libx264 will still stamp the requested
+  // level_idc into the SPS — a stream that says it's Level 4.1 while carrying 20k macroblocks. Players
+  // mostly cope; strict validators and hardware decoders need not. Recompute, and never go below the spec.
+  const level = h264Level(W, H, fps, spec.level);
   args.push(
-    '-c:v', 'libx264', '-profile:v', spec.profile, '-level:v', spec.level,
-    '-pix_fmt', 'yuv420p', '-crf', '17', '-maxrate', '12M', '-bufsize', '12M',
+    '-c:v', 'libx264', '-profile:v', spec.profile, '-level:v', level,
+    // CRF 15, not 17: the stores re-encode whatever you upload, so the master needs headroom — flat UI
+    // gradients are exactly where banding appears after that second pass.
+    '-pix_fmt', 'yuv420p', '-crf', '15', '-maxrate', '12M', '-bufsize', '12M',
     '-preset', 'slow', '-r', String(fps), '-movflags', '+faststart',
-    ...(hasAudio ? ['-c:a', 'aac', '-b:a', '192k'] : ['-an']),
+    // Apple's App Preview spec: stereo AAC at 256 kbps. `-ac 2` guards a mono source.
+    ...(hasAudio ? ['-c:a', 'aac', '-b:a', '256k', '-ac', '2'] : ['-an']),
     outFile,
   );
 

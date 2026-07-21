@@ -14,12 +14,14 @@
  * Simpler modes:
  *   zdymak capture --platform ios|android --name welcome         # single snapshot of the booted device
  *   zdymak capture --platform ios --record --out shots/rec       # screen-record (stop with Ctrl-C)
+ *   zdymak capture --platform web --url http://localhost:3000 --states /,/today   # Playwright (see web.mjs)
  */
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { rgbPngBuffer } from '../png.mjs';
+import { captureWeb } from './web.mjs';
 
 /** Flatten over black and rewrite as a NO-ALPHA RGB PNG (App Store & Play reject alpha on screenshots). */
 async function stripAlpha(file) {
@@ -43,17 +45,24 @@ const udidRe = /\(([0-9A-Fa-f-]{36})\)/;
 
 /** Boot (or reuse/create) an iOS simulator → UDID. Prefers --udid, then an already-booted sim, then a
  *  device matching --device (default iPhone 16 Pro Max), creating one if needed. */
+/**
+ * Boot (or reuse/create) a simulator. Returns `{ udid, booted, created }` — the two booleans are the
+ * TEARDOWN receipt: they say what this process changed, so the cleanup can undo exactly that and leave a
+ * simulator the user already had running exactly as they left it.
+ */
 function bootIosSim(flags) {
   if (flags.udid) {
+    const wasBooted = out2('xcrun', ['simctl', 'list', 'devices', 'booted']).includes(flags.udid);
     spawnSync('xcrun', ['simctl', 'boot', flags.udid], { stdio: 'ignore' });
     spawnSync('xcrun', ['simctl', 'bootstatus', flags.udid, '-b'], { stdio: 'ignore' });
-    return flags.udid;
+    return { udid: flags.udid, booted: !wasBooted, created: false };
   }
   if (!flags.device) {
     const booted = out2('xcrun', ['simctl', 'list', 'devices', 'booted']).match(udidRe);
-    if (booted) return booted[1];
+    if (booted) return { udid: booted[1], booted: false, created: false }; // the user's own sim — leave it alone
   }
   const name = flags.device || 'iPhone 16 Pro Max';
+  let created = false;
   let udid = out2('xcrun', ['simctl', 'list', 'devices', 'available'])
     .split('\n').find((l) => l.includes(name) && udidRe.test(l))?.match(udidRe)?.[1];
   if (!udid) {
@@ -63,10 +72,29 @@ function bootIosSim(flags) {
       .find((l) => /com\.apple[^\s)]+/.test(l))?.match(/(com\.apple[^\s)]+)/)?.[1];
     if (!devtype || !runtime) throw new Error(`Could not resolve a simulator for "${name}".`);
     udid = sh('xcrun', ['simctl', 'create', 'zdymak-capture', devtype, runtime]).trim();
+    created = true;
   }
   spawnSync('xcrun', ['simctl', 'boot', udid], { stdio: 'ignore' });
   spawnSync('xcrun', ['simctl', 'bootstatus', udid, '-b'], { stdio: 'ignore' });
-  return udid;
+  return { udid, booted: true, created };
+}
+
+/**
+ * Undo the setup. A capture run boots a simulator (~1.7GB resident), overrides its status bar and may
+ * CREATE a throwaway device — leaving all three behind is how a machine ends up with a pile of booted
+ * `zdymak-capture` sims and a permanently faked status bar. Only what this run changed is reverted;
+ * `--keep` skips it when you want to inspect the device afterwards.
+ */
+function teardownIosSim({ udid, booted, created }, flags) {
+  if (!udid || flags.keep) {
+    if (flags.keep) console.log('  (--keep: simulator left booted)');
+    return;
+  }
+  spawnSync('xcrun', ['simctl', 'status_bar', udid, 'clear'], { stdio: 'ignore' });
+  if (!booted) return; // it was already running before us — not ours to shut down
+  spawnSync('xcrun', ['simctl', 'shutdown', udid], { stdio: 'ignore' });
+  if (created) spawnSync('xcrun', ['simctl', 'delete', udid], { stdio: 'ignore' });
+  console.log(`  ↩ tore down the simulator${created ? ' (and deleted the temporary device)' : ''}`);
 }
 
 const simctlOk = () => spawnSync('xcrun', ['simctl', 'help'], { stdio: 'ignore' }).status === 0;
@@ -111,8 +139,9 @@ async function captureIos(flags) {
     const states = flags.states.split(',').map((s) => s.trim()).filter(Boolean);
     const suffix = flags.suffix || '';
     const settle = Number(flags.settle || 4);
-    const udid = bootIosSim(flags);
-
+    const sim = bootIosSim(flags);
+    const udid = sim.udid;
+    try {
     if (flags.build !== undefined) {
       if (!flags.project || !flags.scheme) throw new Error('--build needs --project <.xcodeproj> and --scheme <name>.');
       const dd = path.join(outDir, '.dd');
@@ -166,7 +195,10 @@ async function captureIos(flags) {
       }
     }
     console.log(`Done → ${outDir}`);
-    return;
+    } finally {
+      // Always: a thrown build/launch error must not strand a booted sim with a faked status bar.
+      teardownIosSim(sim, flags);
+    }
   }
 
   // Single snapshot of whatever is on the booted sim.
@@ -271,15 +303,16 @@ async function captureAndroid(flags) {
  *
  * Folding that xcodebuild-test + xcresult-export flow into zdymak would just wrap an app-specific test
  * with no real gain; a `screencapture` path would need a *second* TCC grant and is fragile. So Mac
- * capture is deliberately left to the project's XCUITest script; zdymak captures iOS/Android (clean CLI)
- * and composes every platform. (Web/Playwright capture is on the roadmap.)
+ * capture is deliberately left to the project's XCUITest script; zdymak captures iOS/Android/web (clean
+ * CLI) and composes every platform.
  */
 export async function runCapture(flags) {
   const platform = flags.platform;
   if (platform === 'ios') return captureIos(flags);
   if (platform === 'android') return captureAndroid(flags);
+  if (platform === 'web') return captureWeb(flags, { stripAlpha, sleep });
   if (platform === 'macos' || platform === 'mac') {
     throw new Error('macOS capture is intentionally out of scope (see the note above runCapture): use an XCUITest capture (e.g. Scripts/capture-mac.sh) that drives the launch-arg handle + exports .xcresult attachments, then `zdymak build` composes the Mac assets.');
   }
-  throw new Error('capture needs --platform ios|android. Boot a simulator/emulator (or connect a device) first, then run a single --name <screen> or the full-workflow form (--bundle --arg --states).');
+  throw new Error('capture needs --platform ios|android|web. For ios/android boot a simulator/emulator (or connect a device) first, then run a single --name <screen> or the full-workflow form (--bundle --arg --states); for web pass --url (+ --states).');
 }

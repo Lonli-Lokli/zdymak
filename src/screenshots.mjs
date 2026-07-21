@@ -12,6 +12,42 @@ import { IMAGE_TARGETS } from './specs.mjs';
 import { inferFrame } from './frames.mjs';
 import { buildFeatureGraphic } from './graphic.mjs';
 
+/**
+ * Apply a locale's caption table to a scene list. A scene the locale doesn't translate keeps its base
+ * caption — a store shot with the source-language headline beats a missing slot — and the caller reports
+ * the fallbacks rather than hiding them.
+ */
+export function localizeScenes(scenes, table) {
+  if (!table) return scenes;
+  return scenes.map((s) => {
+    const t = table[s.id];
+    return t ? { ...s, title: t.title ?? s.title, sub: t.sub ?? s.sub } : s;
+  });
+}
+
+/** Scene ids in `scenes` that this locale's table doesn't translate (used for the fallback report). */
+export function untranslatedScenes(scenes, table) {
+  if (!table) return [];
+  return scenes.filter((s) => !table[s.id]).map((s) => s.id);
+}
+
+/**
+ * Localized brand lines for the feature graphic, from the reserved `$brand` key of a caption table
+ * (`{ "$brand": { "tagline": "…" } }`). Only the wordmark copy is localizable — colours/logo are global.
+ */
+export function localizeBrand(brand, table) {
+  const b = table?.$brand;
+  if (!b) return brand;
+  const { name, tagline, endline, endsub } = b;
+  return {
+    ...brand,
+    ...(name !== undefined && { name }),
+    ...(tagline !== undefined && { tagline }),
+    ...(endline !== undefined && { endline }),
+    ...(endsub !== undefined && { endsub }),
+  };
+}
+
 /** Resolve a concrete [w,h] for a screenshot target: explicit override → spec w/h → first accepted size. */
 export function targetSize(spec, override) {
   if (override) return override;
@@ -42,7 +78,9 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir }) {
       continue;
     }
 
-    const dir = path.join(outDir, shot.target);
+    // `dir` lets two shots of the SAME target coexist — e.g. a styled `play-phone/` for the website and a
+    // plain `play-phone-plain/` for the Play upload, which would otherwise overwrite each other.
+    const dir = path.join(outDir, shot.dir || shot.target);
 
     let n = 0;
     for (const scene of device.scenes) {
@@ -51,8 +89,10 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir }) {
       n++;
       const still = await renderStill(style, {
         W, H,
+        // `caption: false` renders the app interface alone — what Google Play asks for on store
+        // screenshots ("no additional text, graphics, or backgrounds that are not part of the interface").
+        caption: shot.caption === false ? { title: '', sub: '' } : { title: scene.title || '', sub: scene.sub || '' },
         imgPath: scene.image,
-        caption: { title: scene.title || '', sub: scene.sub || '' },
         brand,
         theme: shot.theme || theme,
         frame,
