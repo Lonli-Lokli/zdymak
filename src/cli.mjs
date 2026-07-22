@@ -106,9 +106,9 @@ async function buildVideoTarget({ entry, scenes, brand, cfg, outFile, size, them
 async function cmdVideo(flags) {
   const { cfg, outDir } = await open(flags);
   const targets = flags.target ? flags.target.split(',').map((s) => s.trim()) : cfg.targets;
-  console.log(`zdymak video • ${cfg.scenes.length} scenes → ${targets.join(', ')}`);
+  console.log(`zdymak video • ${cfg.scenes.length} scenes → ${targets.map((t) => resolveVideo(t).id).join(', ')}`);
   for (const id of targets) {
-    await buildVideoTarget({ id, scenes: cfg.scenes, brand: cfg.brand, cfg, outFile: path.join(outDir, `${id}.mp4`) });
+    await buildVideoTarget({ entry: id, scenes: cfg.scenes, brand: cfg.brand, cfg, outFile: path.join(outDir, `${resolveVideo(id).id}.mp4`) });
   }
   warnAudio({ videoCount: targets.length, hasMusic: !!cfg.music, label: 'videos' });
   console.log('Done.');
@@ -205,7 +205,7 @@ async function cmdBuild(flags) {
   if (cfg.targets.length && cfg.scenes.length) {
     console.log('zdymak build • videos');
     for (const id of cfg.targets) {
-      await buildVideoTarget({ entry: id, scenes: cfg.scenes, brand: cfg.brand, cfg, outFile: path.join(outDir, `${id}.mp4`), flags });
+      await buildVideoTarget({ entry: id, scenes: cfg.scenes, brand: cfg.brand, cfg, outFile: path.join(outDir, `${resolveVideo(id).id}.mp4`), flags });
     }
   }
   // 2) per-device videos + screenshots
