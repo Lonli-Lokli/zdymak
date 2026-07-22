@@ -1,6 +1,6 @@
 {
   "name": "zdymak",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "Store screenshots and spec-compliant App Store / Google Play preview videos — captured from your app and composed, in one config-driven CLI. Drives iOS simulators, Android devices and web apps to take the screenshots, then frames, captions and encodes them to each store's exact requirements.",
   "type": "module",
   "bin": {
