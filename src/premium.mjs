@@ -150,10 +150,21 @@ function drawLabel(ctx, W, H, caption, th, alpha) {
 
   if (caption.sub) {
     ctx.font = font(subSize, 'regular');
-    ctx.fillStyle = th.subColor;
+    const subPadY = Math.round(subSize * 0.4);
+    const subPillH = subSize + subPadY * 2;
     for (const ln of wrapLines(ctx, caption.sub, W * 0.82)) {
+      // Back each sub line with the same pill as the title, so the subtitle stays legible over ANY app
+      // content — light OR dark. Bare subtitle text failed WCAG (e.g. a light sub on a white screen).
+      // Stills (`label: false`) keep the plain sub on their own controlled matte.
+      if (th.label) {
+        const subPillW = ctx.measureText(ln).width + Math.round(subSize * 0.85) * 2;
+        roundRectPath(ctx, cx - subPillW / 2, y - subPillH / 2, subPillW, subPillH, subPillH / 2);
+        ctx.fillStyle = hexA(th.pillFill, th.pillOpacity);
+        ctx.fill();
+      }
+      ctx.fillStyle = th.subColor;
       ctx.fillText(ln, cx, y);
-      y += subSize * 1.3;
+      y += th.label ? subPillH * 1.18 : subSize * 1.3;
     }
   }
   ctx.restore();
