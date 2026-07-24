@@ -4,7 +4,7 @@
  * (Swap `clip:` for real `zdymak capture --record` output, or `images: [...]` for a multi-photo page.)
  */
 export default {
-  brand: { ink: '#0b0b0a', title: '#F5F5F4', sub: '#BBF7D0', name: 'Asilak' },
+  brand: { ink: '#0b0b0a', title: '#F5F5F4', sub: '#BBF7D0', name: 'Your App' },
 
   reel: {
     size: [1080, 1920],

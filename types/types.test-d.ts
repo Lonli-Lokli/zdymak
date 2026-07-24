@@ -13,14 +13,14 @@ import {
   type ImageTargetId,
 } from 'zdymak';
 
-// A realistic multi-device config (mirrors asilak's own).
+// A realistic multi-device config.
 const config: Config = defineConfig({
   brand: {
     ink: '#0b0b0a',
     title: '#F5F5F4',
     sub: '#BBF7D0',
-    name: 'Asilak',
-    tagline: 'Learn anything. Remember it for good.',
+    name: 'Your App',
+    tagline: 'Your tagline goes here.',
     logo: './icon-512.png',
   },
   screenshotsDir: './captures',

@@ -1,6 +1,6 @@
 /**
- * Live demo config used by the README's "see it in action" GIF and by `npm run example`.
- * The three screens in ./screenshots/ are REAL Asilak captures; this turns them into the premium reel
+ * Standalone showcase config — a full premium reel, end to end.
+ * The three screens in ./screenshots/ are REAL app captures; this turns them into the premium reel
  * (Apple editing vocabulary — floating matte, spring-then-freeze dolly, kinetic caption pills).
  */
 export default {
@@ -8,10 +8,10 @@ export default {
     ink: '#0b0b0a',
     title: '#F5F5F4', // light caption title (dark reel matte)
     sub: '#BBF7D0', // green-200 subtitle
-    name: 'Asilak',
-    tagline: 'Learn anything. Remember it for good.',
-    endline: 'Learning that actually sticks.',
-    endsub: 'Free to try · Buy once · No subscription',
+    name: 'Your App',
+    tagline: 'Your tagline goes here.',
+    endline: 'Your closing line.',
+    endsub: 'Your closing subtitle',
   },
 
   screenshotsDir: './screenshots',
