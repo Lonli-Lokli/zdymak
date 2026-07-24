@@ -77,6 +77,21 @@ function resolveScenes(rawScenes, baseDir, dir, suffix) {
 
 const asList = (arr) => (arr || []).map((x) => (typeof x === 'string' ? { target: x } : x));
 
+/**
+ * The effective music bed for one video target. `music.overrides[targetId]` wins over the base bed:
+ *   `false`/`null` → that target renders SILENT (e.g. the Google Play promo, to dodge YouTube Content ID)
+ *   `{ path, … }`  → swap in another (license-clear) bed for that target
+ * Returns the bed WITHOUT its `overrides` map, so encoders see a plain { path, volume, … }.
+ */
+export function musicForTarget(music, targetId) {
+  if (!music) return undefined;
+  const ov = music.overrides?.[targetId];
+  const { overrides, ...bed } = music;
+  if (ov === undefined) return bed; // no per-target rule → shared bed
+  if (!ov) return undefined; // false/null → silent
+  return { ...bed, ...ov }; // object → swapped bed
+}
+
 export async function loadConfig(configPath) {
   const abs = path.resolve(configPath);
   if (!fs.existsSync(abs)) {
@@ -105,8 +120,19 @@ export async function loadConfig(configPath) {
   }
   const scenes = resolveScenes(raw.scenes, baseDir, screenshotsDir, suffix);
 
-  // Optional music bed shared by every video target — path is relative to the config file.
-  const music = raw.music?.path ? { ...raw.music, path: path.resolve(baseDir, raw.music.path) } : undefined;
+  // Optional music bed shared by every video target — path relative to the config file. `overrides` lets a
+  // single target diverge: `false` renders it SILENT, `{ path, … }` swaps in another bed. Used e.g. for the
+  // Google Play promo, whose YouTube home can Content-ID-flag a licensed Apple score.
+  const resolveBed = (m) => (m?.path ? { ...m, path: path.resolve(baseDir, m.path) } : undefined);
+  const music = (() => {
+    const bed = resolveBed(raw.music);
+    if (bed && raw.music.overrides) {
+      bed.overrides = Object.fromEntries(
+        Object.entries(raw.music.overrides).map(([t, ov]) => [t, ov && ov.path ? resolveBed(ov) : ov]),
+      );
+    }
+    return bed;
+  })();
 
   // Modular per-device config. An app lists ONLY the devices it ships; each has its own captures dir,
   // optional scene overrides, screenshot targets (+ style) and video targets. Missing captures skip cleanly.

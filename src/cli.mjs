@@ -11,7 +11,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { registerFonts } from './fonts.mjs';
-import { loadConfig } from './config.mjs';
+import { loadConfig, musicForTarget } from './config.mjs';
 import { buildVideo } from './video.mjs';
 import { buildReel } from './reel.mjs';
 import { buildPremium } from './premium.mjs';
@@ -91,11 +91,14 @@ async function buildVideoTarget({ entry, scenes, brand, cfg, outFile, size, them
     }));
   }
   const tag = r.preset !== 'full-bleed' ? `, ${r.preset}` : '';
-  process.stdout.write(`  • ${id} (${spec.w}×${spec.h}${tag}${cfg.music ? ', ♪' : ''}) … `);
+  // Per-target audio: a target may be silenced or given a different bed (e.g. Play/YouTube vs Apple).
+  const music = musicForTarget(cfg.music, id);
+  const audioTag = music ? ', ♪' : cfg.music ? ', muted' : '';
+  process.stdout.write(`  • ${id} (${spec.w}×${spec.h}${tag}${audioTag}) … `);
   const { totalDur, warnings } = await build({
     scenes, spec, brand, outFile,
     sceneDur: cfg.sceneDur, xfade: cfg.xfade, timing: cfg.timing,
-    theme: theme ?? cfg.theme, music: cfg.music,
+    theme: theme ?? cfg.theme, music,
   });
   console.log(`${totalDur.toFixed(1)}s → ${path.relative(process.cwd(), outFile)}`);
   for (const w of warnings) console.warn(`    ⚠︎ ${w}`);
