@@ -18,6 +18,14 @@ any build/capture command to wipe the output folder first, so only this run's as
 For a premium reel with REAL motion (not a Ken-Burns zoom of a still), use **`zdymak reel`** — it composites
 app RECORDINGS/clips (or an image sequence) on the matte with beat-matched hard cuts (the `reel` config block).
 
+**Not zdymak's job → use [vydanne](https://www.npmjs.com/package/vydanne).** zdymak stops at files on
+disk. Writing or *uploading* the store listing — localized name/subtitle/description/keywords, screenshot
+and preview **upload**, age rating, App Review contact, App Privacy + accessibility labels, IAP text,
+export-compliance PDF, and the submission-completeness gate — is vydanne (`npx vydanne preflight`,
+`npx vydanne fill`). The handoff is path-based and needs no glue: zdymak's output paths
+(`marketing/out/play-feature-graphic.png`, `play-phone-plain/`, `play-tablet7-plain/`,
+`play-tablet-plain/`) are the exact paths vydanne uploads from. Neither tool ever submits the app.
+
 ## Pick the right preset (do this before writing any config)
 
 The two stores want **opposite** things. Choosing the wrong target is the #1 way to produce assets that

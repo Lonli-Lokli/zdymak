@@ -54,6 +54,28 @@ for `--platform ios`, the **Android SDK / `adb`** for `--platform android`.
 
 <br>
 
+## The other half of a release — [vydanne](https://www.npmjs.com/package/vydanne)
+
+zdymak makes the **media**. Its sibling **[vydanne](https://github.com/Lonli-Lokli/vydanne)** does
+everything else a store submission needs, so you never touch App Store Connect's web forms:
+
+| | **zdymak** 📸 | [vydanne](https://github.com/Lonli-Lokli/vydanne) 📝 |
+|---|---|---|
+| Makes | Screenshots, App Preview videos, Play feature graphic | Listing text in every language, age rating, review contact, privacy & accessibility labels, IAP text, export-compliance PDF |
+| Ends with | Image + video files on disk | Those files **uploaded**, the listing filled in and verified |
+
+They're built to line up: zdymak's default output paths (`marketing/out/play-feature-graphic.png`,
+`play-phone-plain/`, `play-tablet-plain/`, …) are exactly the paths vydanne uploads from — no glue.
+
+```sh
+npm run store-assets                 # zdymak: build the media
+npx vydanne preflight && npx vydanne fill   # vydanne: check, then push the listing
+```
+
+Neither tool ever submits your app — a human attaches the build and presses Submit.
+
+<br>
+
 ## Quickstart
 
 **1. Add a config** to your project root (copy `examples/example.config.mjs` → `zdymak.config.mjs`):
