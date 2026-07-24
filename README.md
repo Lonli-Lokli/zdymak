@@ -705,8 +705,8 @@ including the target ids, the `move` / `captionAnchor` unions and every theme op
 import { defineConfig } from 'zdymak';
 
 export default defineConfig({
-  brand: { name: 'Asilak', tagline: 'Learn anything.' },
-  scenes: [{ id: 'welcome', title: 'Learn anything.', move: 'pushInSlow' }],
+  brand: { name: 'Your App', tagline: 'Your tagline.' },
+  scenes: [{ id: 'welcome', title: 'Your tagline.', move: 'pushInSlow' }],
   devices: { android: { screenshots: [{ target: 'play-phone' }, { target: 'play-feature-graphic' }] } },
 });
 ```

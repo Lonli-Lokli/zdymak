@@ -297,8 +297,8 @@ async function captureAndroid(flags) {
  * The robust, TCC-correct way to capture a Mac app's marketing screens is an **XCUITest** run on the
  * native-macOS build that drives the same launch-arg handle (`-marketingScreen <id>`) and saves each
  * screen as an **XCTAttachment** — the sandboxed Mac test-runner can't write PNGs into your repo — then
- * exports them from the `.xcresult`. That lives project-side (see Asilak's `Scripts/capture-mac.sh`,
- * which already owns the one-time Accessibility grant + signing). zdymak still **composes** the Mac
+ * exports them from the `.xcresult`. That lives project-side (a `Scripts/capture-mac.sh` in your own
+ * repo, which owns the one-time Accessibility grant + signing). zdymak still **composes** the Mac
  * screenshots/reels from those captures (premium/bleed at 2880×1800, etc.).
  *
  * Folding that xcodebuild-test + xcresult-export flow into zdymak would just wrap an app-specific test

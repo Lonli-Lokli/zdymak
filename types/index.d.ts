@@ -147,7 +147,7 @@ export interface Theme {
   labelColor?: string;
   /** Subhead colour. */
   subColor?: string;
-  /** Persistent social handle drawn at the top (e.g. `'@asilak'`). */
+  /** Persistent social handle drawn at the top (e.g. `'@yourapp'`). */
   handle?: string;
   /** Caption position. Screenshots default to `'top'`. */
   captionAnchor?: 'top' | 'bottom';

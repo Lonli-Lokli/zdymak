@@ -20,7 +20,7 @@
     "SKILL.md"
   ],
   "scripts": {
-    "example": "node bin/zdymak.mjs video --config examples/asilak.config.mjs",
+    "example": "node bin/zdymak.mjs video --config examples/promo.config.mjs",
     "demo": "node scripts/build-demo.mjs",
     "docs:diagram": "node scripts/build-diagram.mjs",
     "check:docs": "node scripts/check-docs.mjs",
