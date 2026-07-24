@@ -57,8 +57,22 @@ relaunches per state via a launch-arg handle, pins the status bar to 9:41. Andro
 no handle needed. Single-shot `--name <screen>` and `--record` also exist. If the user has no screenshots
 yet, offer this before asking them to produce some. macOS capture is deliberately out of scope (TCC).
 Capture TEARS DOWN what it set up (status-bar override cleared, a sim it booted shut down, a device it
-created deleted, Android demo mode switched off) — `--keep` skips that for debugging. A simulator the
-user already had booted is never touched.
+created deleted, Android demo mode switched off, display override reset) — `--keep` skips that for
+debugging. A simulator the user already had booted is never touched.
+
+**Live footage, not Ken Burns.** `--record` with `--states` records a CLIP per state instead of a still —
+on both iOS and Android. This is what you want when the app animates itself (an autoplay demo, an
+auto-scroll): the store video then shows the real thing moving, not a dolly over a screenshot. Android
+adds three fixes you would otherwise rediscover the hard way:
+- **`--size 1080x1920`** relayouts the app to the video spec. Phones are taller than the spec (a Pixel is
+  1080×2400); cropping down to 1920 instead cuts off whatever is at the bottom — usually the buttons.
+- **Auto head-trim.** A driven recording opens on the launcher plus a blank starting window. The head is
+  detected as the first sustained brightness step and cut; `--trim <s>` overrides when that misreads
+  (an app that paints darker than the launcher).
+- **`--hold`** (default 1.5s) clones the last frame back on, because `screenrecord` STOPS as soon as the
+  screen goes static — so a clip ending on a settled screen is otherwise cut off mid-beat.
+The app must actually move during the window: drive it with a state handle that autoplays. Feed the clips
+to `zdymak reel`, or ship a `--size`-matched clip straight to the store slot.
 
 ## Prerequisites (check first)
 - `ffmpeg` on PATH (`brew install ffmpeg`) — the encode needs it.

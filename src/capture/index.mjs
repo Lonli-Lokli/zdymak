@@ -209,16 +209,27 @@ async function captureIos(flags) {
 }
 
 /** Toggle Android SystemUI Demo Mode → a clean, Play-native status bar (Google's own convention):
- *  pinned clock, full battery UNPLUGGED (no charging), full signal/wifi, notifications hidden. */
+ *  pinned clock, full battery UNPLUGGED (no charging), full signal, notifications hidden.
+ *
+ *  Two non-obvious details, both learned the hard way from shipped-looking assets:
+ *  - `fully true` marks the connection INTERNET-VALIDATED. Without it SystemUI badges every
+ *    signal icon with a "!" (connected, no internet) — which reads as a broken phone on a
+ *    store screenshot, and is easy to miss until you zoom in.
+ *  - `wifi show` populates BOTH the legacy and the modern wifi slot on API 34 emulators, so the
+ *    bar renders TWO wifi icons. Until that is per-image detectable, wifi stays hidden and the
+ *    mobile bars carry the "connected" read: one signal icon, no duplicate. Pass `--wifi` to
+ *    show it anyway (fine on a real device, where the duplicate does not happen). */
 function androidDemo(on, flags) {
   const b = (...args) => spawnSync('adb', ['shell', 'am', 'broadcast', '-a', 'com.android.systemui.demo', ...args], { stdio: 'ignore' });
   if (!on) return void b('-e', 'command', 'exit');
   spawnSync('adb', ['shell', 'settings', 'put', 'global', 'sysui_demo_allowed', '1'], { stdio: 'ignore' });
+  b('-e', 'command', 'exit'); // drop stale slots from an earlier run before re-entering
   b('-e', 'command', 'enter');
   b('-e', 'command', 'clock', '-e', 'hhmm', (flags.time || '09:41').replace(':', ''));
   b('-e', 'command', 'battery', '-e', 'level', '100', '-e', 'plugged', 'false'); // full, NOT charging
-  b('-e', 'command', 'network', '-e', 'wifi', 'show', '-e', 'level', '4');
-  b('-e', 'command', 'network', '-e', 'mobile', 'show', '-e', 'datatype', 'none', '-e', 'level', '4');
+  const wifi = flags.wifi !== undefined ? 'show' : 'hide';
+  b('-e', 'command', 'network', '-e', 'wifi', wifi, '-e', 'level', '4', '-e', 'fully', 'true');
+  b('-e', 'command', 'network', '-e', 'mobile', 'show', '-e', 'datatype', 'none', '-e', 'level', '4', '-e', 'fully', 'true');
   b('-e', 'command', 'notifications', '-e', 'visible', 'false');
 }
 
@@ -238,7 +249,9 @@ async function captureAndroid(flags) {
     console.log(`🧹 cleaned ${cleared} stale capture(s) in ${path.relative(process.cwd(), outDir) || outDir}`);
   }
 
-  if (flags.record !== undefined) {
+  // Free-form: record whatever the operator does, until Ctrl-C. No states to drive, so none of the
+  // trim/hold post-processing below applies — you get the raw capture.
+  if (flags.record !== undefined && !flags.states) {
     const remote = '/sdcard/zdymak-rec.mp4';
     const out = path.join(outDir, `${flags.name || 'recording'}.mp4`);
     console.log(`▶︎ Recording the device → ${out}\n  Interact with the app, then press Ctrl-C to stop.`);
@@ -257,6 +270,7 @@ async function captureAndroid(flags) {
   };
 
   androidDemo(true, flags); // clean marketing status bar (Google convention)
+  const display = androidDisplay(flags);
   try {
     // Full workflow: drive the app through screens via an intent-extra HANDLE (--component + --arg).
     if (flags.states) {
@@ -266,13 +280,17 @@ async function captureAndroid(flags) {
       const states = flags.states.split(',').map((s) => s.trim()).filter(Boolean);
       const suffix = flags.suffix || '';
       const settle = Number(flags.settle || 4);
-      console.log(`▶︎ Driving ${states.length} screens via "--es ${flags.arg} <id>" on ${flags.component}…`);
-      for (const st of states) {
-        sh('adb', ['shell', 'am', 'start', '-n', flags.component, '--es', flags.arg, st]);
-        await sleep(settle * 1000);
-        const out = path.join(outDir, `${st}${suffix}.png`);
-        await grab(out);
-        console.log(`   ✓ ${st}${suffix}.png`);
+      if (flags.record !== undefined) {
+        await recordAndroidStates(states, suffix, outDir, flags);
+      } else {
+        console.log(`▶︎ Driving ${states.length} screens via "--es ${flags.arg} <id>" on ${flags.component}…`);
+        for (const st of states) {
+          sh('adb', ['shell', 'am', 'start', '-n', flags.component, '--es', flags.arg, st]);
+          await sleep(settle * 1000);
+          const out = path.join(outDir, `${st}${suffix}.png`);
+          await grab(out);
+          console.log(`   ✓ ${st}${suffix}.png`);
+        }
       }
       console.log(`Done → ${outDir}`);
     } else {
@@ -281,7 +299,126 @@ async function captureAndroid(flags) {
       console.log(`✓ ${out}  (alpha stripped, store-ready)`);
     }
   } finally {
+    display.reset();
     androidDemo(false, flags);
+  }
+}
+
+/**
+ * Optional display override, e.g. `--size 1080x1920 --density 400`.
+ *
+ * WHY this matters for video: a phone panel is usually TALLER than the store's video spec (a Pixel is
+ * 1080×2400; `play-promo` wants 1080×1920). Overriding the display makes the app RELAYOUT to the target
+ * aspect, so `screenrecord` emits the exact spec with nothing cropped. Cropping a 2400-tall capture down
+ * to 1920 instead silently guillotines whatever sits at the bottom of the screen — usually the primary
+ * buttons. Always reset, or the device is left in a wrong-sized state after the run.
+ */
+function androidDisplay(flags) {
+  const wm = (...args) => spawnSync('adb', ['shell', 'wm', ...args], { stdio: 'ignore' });
+  let changed = false;
+  if (flags.size) {
+    if (!/^\d+x\d+$/.test(flags.size)) throw new Error(`--size must look like 1080x1920 (got "${flags.size}")`);
+    wm('size', flags.size);
+    changed = true;
+  }
+  if (flags.density) { wm('density', String(flags.density)); changed = true; }
+  if (changed) console.log(`▶︎ Display override ${flags.size || '(size unchanged)'} @ ${flags.density || 'default'}dpi`);
+  return {
+    reset() {
+      if (!changed || flags.keep !== undefined) return;
+      wm('size', 'reset');
+      wm('density', 'reset');
+    },
+  };
+}
+
+/** Mean luma per sample via ffmpeg signalstats — the cheapest reliable "what is on screen" signal. */
+function lumaSeries(file, fps = 4) {
+  const r = spawnSync(process.env.FFMPEG || 'ffmpeg',
+    ['-v', 'error', '-i', file, '-vf', `fps=${fps},scale=64:-1,signalstats,metadata=print:file=-`, '-f', 'null', '-'],
+    { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const out = [];
+  for (const line of (r.stdout || '').split('\n')) {
+    const m = line.match(/lavfi\.signalstats\.YAVG=([\d.]+)/);
+    if (m) out.push({ t: out.length / fps, y: Number(m[1]) });
+  }
+  return out;
+}
+
+/**
+ * Where the app's content actually appears, in seconds.
+ *
+ * A driven recording always opens on junk: the launcher, then the app's blank window while it starts.
+ * Content arrives as a sustained BRIGHTNESS STEP — so take the first sample that jumps well clear of the
+ * darkest frame so far and then holds steady. Heuristic by nature: an app that paints DARKER than the
+ * launcher defeats it, which is what `--trim <seconds>` is for. Returns 0 when nothing convincing is found
+ * (better to ship a slightly long clip than to cut into the app).
+ */
+function detectContentStart(series, maxHead = 12) {
+  const win = series.filter((s) => s.t <= maxHead);
+  if (win.length < 6) return 0;
+  let floor = win[0].y;
+  for (let i = 1; i < win.length - 3; i++) {
+    floor = Math.min(floor, win[i].y);
+    const step = win[i].y >= floor * 1.25 && win[i].y - floor > 8;
+    if (!step) continue;
+    const steady = [1, 2, 3].every((k) => Math.abs(win[i + k].y - win[i].y) <= win[i].y * 0.08);
+    if (steady) return Math.max(0, win[i].t - 0.15); // a hair early, to catch the fade-in
+  }
+  return 0;
+}
+
+/**
+ * Record each driven state to its own clip.
+ *
+ * Three things here are not obvious, and each one silently ruins a take:
+ *  - WARM RELAUNCH. A cold start burns 5-6s of blank window into the clip. So the app is started once to
+ *    warm the process, then re-entered with `--activity-multiple-task` — a plain re-`am start` is
+ *    delivered to the existing instance via onNewIntent and would NOT re-run the state.
+ *  - THE RECORDER STOPS ON IDLE. `screenrecord` stops emitting once the screen goes static, so a clip that
+ *    ends on a settled screen is cut off right there. `--hold` clones that final frame back in — faithful,
+ *    since the app genuinely sits on it.
+ *  - THE HEAD IS JUNK. See detectContentStart; `--trim` overrides it.
+ */
+async function recordAndroidStates(states, suffix, outDir, flags) {
+  const limit = Math.min(180, Number(flags.duration || 60)); // screenrecord caps at 180s
+  const hold = Number(flags.hold ?? 1.5);
+  const fps = Number(flags.fps || 30);
+  const warm = Number(flags.settle || 4);
+  const ff = process.env.FFMPEG || 'ffmpeg';
+  console.log(`▶︎ Recording ${states.length} screen(s) via "--es ${flags.arg} <id>" on ${flags.component}…`);
+
+  for (const st of states) {
+    const remote = `/sdcard/zdymak-${st}.mp4`;
+    const raw = path.join(outDir, `${st}${suffix}.raw.mp4`);
+    const out = path.join(outDir, `${st}${suffix}.mp4`);
+    spawnSync('adb', ['shell', 'rm', '-f', remote], { stdio: 'ignore' });
+
+    // Warm the process so the recorded take is not a cold start.
+    spawnSync('adb', ['shell', 'am', 'force-stop', flags.component.split('/')[0]], { stdio: 'ignore' });
+    sh('adb', ['shell', 'am', 'start', '-n', flags.component, '--es', flags.arg, st]);
+    await sleep(warm * 1000);
+
+    const rec = spawn('adb', ['shell', 'screenrecord', '--bit-rate', String(flags.bitrate || 20000000),
+      '--time-limit', String(limit), remote], { stdio: 'ignore' });
+    await sleep(1000);
+    sh('adb', ['shell', 'am', 'start', '-n', flags.component, '--activity-multiple-task', '--es', flags.arg, st]);
+    await new Promise((res) => rec.on('close', res)); // ends at --time-limit or when the screen idles
+    sh('adb', ['pull', remote, raw]);
+    spawnSync('adb', ['shell', 'rm', '-f', remote], { stdio: 'ignore' });
+
+    const trim = flags.trim !== undefined ? Number(flags.trim) : detectContentStart(lumaSeries(raw));
+    const chain = [`fps=${fps}`, 'format=yuv420p'];
+    if (hold > 0) chain.push(`tpad=stop_mode=clone:stop_duration=${hold}`);
+    const args = ['-v', 'error', '-y'];
+    if (trim > 0) args.push('-ss', String(trim.toFixed(2)));
+    args.push('-i', raw, '-an', '-vf', chain.join(','),
+      '-c:v', 'libx264', '-profile:v', 'high', '-level', '4.0', '-preset', 'slow', '-crf', '18',
+      '-movflags', '+faststart', out);
+    const enc = spawnSync(ff, args, { encoding: 'utf8' });
+    if (enc.status !== 0) throw new Error(`ffmpeg failed on ${st}: ${(enc.stderr || '').trim()}`);
+    if (flags['keep-raw'] === undefined) fs.rmSync(raw, { force: true });
+    console.log(`   ✓ ${st}${suffix}.mp4  (head trimmed ${trim.toFixed(2)}s, held ${hold}s)`);
   }
 }
 

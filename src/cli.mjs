@@ -268,7 +268,15 @@ Usage:
   zdymak capture  --platform ios --bundle <id> --arg <handle> --states <a,b,c> [--suffix -light]
                   [--build --project <.xcodeproj> --scheme <name>] [--device <sim>] [--out <dir>] [--clean] [--keep]
                   # full workflow: start the app, drive each screen by a launch handle, snap store-ready PNGs
+  zdymak capture  --platform android --record --component <pkg/act> --arg <extra> --states <a,b,c>
+                  [--size 1080x1920] [--density 400] [--duration 60] [--trim <s>] [--hold 1.5]
+                  [--fps 30] [--bitrate 20000000] [--keep-raw] [--out <dir>]
+                  # LIVE FOOTAGE per state: warm-relaunches the app, records, auto-trims the launch
+                  # head and holds the final frame. --size relayouts the app to the video spec so
+                  # nothing is cropped. Feed the clips to "zdymak reel", or ship one directly.
   zdymak capture  --platform ios|android --name <screen>          # single snapshot of the booted device
+                  # android bar: clock from --time, signal shown internet-validated (no "!" badge),
+                  # wifi hidden by default (API 34 emulators draw it twice) — --wifi shows it anyway
   zdymak help
 
 Defaults: --config ${DEFAULT_CONFIG}. Needs ffmpeg on PATH (or $FFMPEG).

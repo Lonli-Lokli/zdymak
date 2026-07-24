@@ -134,11 +134,42 @@ zdymak capture --platform web --url http://localhost:3000 --states /,/today,/stu
 | Platform | How it drives | What your app must provide | Needs |
 |---|---|---|---|
 | **iOS** | Boots/creates a simulator, optionally `xcodebuild`s and installs, then relaunches with `<arg> <state>` per screen and screenshots via `simctl`. Pins the status bar to 9:41, full bars, charging. | A launch-arg "handle" that routes to a seeded screen (e.g. reads `-marketingScreen <id>`) | Xcode |
-| **Android** | `am start -n <component> --es <arg> <state>` per screen, then `adb exec-out screencap`. Turns on **SystemUI demo mode** first, so the status bar is clean (9:41, full battery/wifi, no notifications) and restores it after. | An intent extra that routes to a seeded screen | Android SDK / `adb` |
+| **Android** | `am start -n <component> --es <arg> <state>` per screen, then `adb exec-out screencap`. Turns on **SystemUI demo mode** first, so the status bar is clean (9:41, full battery/signal, no notifications, nothing badged "!") and restores it after. | An intent extra that routes to a seeded screen | Android SDK / `adb` |
 | **Web** | Playwright navigates each path itself, disables animations, waits for `document.fonts.ready` and undecoded images. Device descriptors, dark mode, locale, full-page. | Nothing — just a URL | `npm i -D playwright` |
 
 There's also a single-shot mode (`--name welcome`) that snaps whatever is currently on screen, and
 `--record` for a screen recording you can feed to the live-footage `reel`.
+
+### `--record --states` — live footage, one clip per screen
+
+Add `--record` to the driven form and each state is recorded as a **clip** instead of snapped as a still.
+Use it when the app animates *itself* — an autoplay demo, an auto-scroll, a reveal — so the store video
+shows the real thing moving rather than a Ken Burns dolly over a screenshot.
+
+```bash
+zdymak capture --platform android --record \
+  --component com.x.app/.MainActivity --arg state --states play \
+  --size 1080x1920 --density 400 --hold 1.8 --out ./rec
+# ▶︎ Display override 1080x1920 @ 400dpi
+# ✓ play.mp4  (head trimmed 2.35s, held 1.8s)
+```
+
+Android does three things here that you would otherwise rediscover the hard way:
+
+| Flag | Why it exists |
+|---|---|
+| `--size WxH` (+ `--density`) | Phones are **taller** than the video spec — a Pixel is 1080×2400, `play-promo` wants 1080×1920. This relayouts the app to the target aspect so the recording IS the spec, uncropped. Cropping the 2400-tall capture instead guillotines the bottom of the screen, which is where the primary buttons live. Reset automatically (`--keep` skips). |
+| auto head-trim | A driven recording opens on the launcher plus the app's blank starting window. The head is found as the first sustained brightness step and cut. Heuristic — an app that paints *darker* than the launcher defeats it, so `--trim <s>` overrides. |
+| `--hold` (default 1.5s) | `screenrecord` **stops emitting as soon as the screen goes static**, so a clip that ends on a settled screen gets cut off mid-beat. This clones the final frame back on — faithful, since the app genuinely sits there. |
+
+The app must actually move during the window, so drive it with a state handle that autoplays. The clips
+feed `zdymak reel`; a `--size`-matched clip is also directly shippable to the store slot.
+
+Also note `--wifi`: the Android status bar hides wifi by default, because `network wifi show` populates
+both the legacy and modern wifi slot on API 34 emulators and renders **two** icons. The mobile bars carry
+the "connected" read instead. On a real device the duplicate doesn't happen — pass `--wifi` there. Signal
+icons are always marked internet-validated, or SystemUI badges each one with a "!" that reads as a broken
+phone in a store asset.
 
 **It cleans up after itself.** Capture is setup *and* teardown: on iOS the status-bar override is cleared,
 a simulator this run booted is shut down, and a throwaway device it created is deleted — all in a
