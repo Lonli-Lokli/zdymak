@@ -1,6 +1,13 @@
 /** Shared canvas primitives (Skia via @napi-rs/canvas) used by the reel renderer. */
 
-export const font = (sizePx, weight = 'bold') => `${weight} ${sizePx}px Brand`;
+// System fonts (macOS) covering scripts the Brand face lacks — CJK, Arabic, Hebrew, Devanagari,
+// Bengali — so LOCALIZED captions render real glyphs instead of tofu (▯▯). Latin/Cyrillic still come
+// from Brand (listed first). Missing families are silently skipped, so this is safe on any OS.
+// (ja & zh share Han codepoints; the order favours ja kana+kanji, then simplified-zh from PingFang.)
+const SCRIPT_FALLBACK =
+  '"Hiragino Sans", "PingFang SC", "Apple SD Gothic Neo", "Geeza Pro", "Arial Hebrew", "Kohinoor Devanagari", "Kohinoor Bangla"';
+
+export const font = (sizePx, weight = 'bold') => `${weight} ${sizePx}px Brand, ${SCRIPT_FALLBACK}`;
 
 /** #rrggbb + alpha → rgba() string. */
 export function hexA(hex, a) {
