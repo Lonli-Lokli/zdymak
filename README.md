@@ -1,5 +1,11 @@
 # zdymak
 
+[![npm version](https://img.shields.io/npm/v/zdymak?logo=npm&color=cb3837)](https://www.npmjs.com/package/zdymak)
+[![npm downloads](https://img.shields.io/npm/dm/zdymak?logo=npm&color=cb3837)](https://www.npmjs.com/package/zdymak)
+[![node](https://img.shields.io/node/v/zdymak?logo=nodedotjs&color=5FA04E)](https://nodejs.org)
+[![license](https://img.shields.io/npm/l/zdymak?color=blue)](LICENSE)
+[![companion: vydanne](https://img.shields.io/badge/companion-vydanne-6e40c9?logo=github)](https://github.com/Lonli-Lokli/vydanne)
+
 **Premium App Store & Google Play preview videos — from your screenshots, in one command.**
 
 Turn a handful of app screenshots into a cinematic, **spec-compliant** store preview: spring-eased camera
@@ -54,7 +60,7 @@ for `--platform ios`, the **Android SDK / `adb`** for `--platform android`.
 
 <br>
 
-## The other half of a release — [vydanne](https://www.npmjs.com/package/vydanne)
+## The other half of a release — [vydanne](https://github.com/Lonli-Lokli/vydanne)
 
 zdymak makes the **media**. Its sibling **[vydanne](https://github.com/Lonli-Lokli/vydanne)** does
 everything else a store submission needs, so you never touch App Store Connect's web forms:
@@ -68,8 +74,9 @@ They're built to line up: zdymak's default output paths (`marketing/out/play-fea
 `play-phone-plain/`, `play-tablet-plain/`, …) are exactly the paths vydanne uploads from — no glue.
 
 ```sh
-npm run store-assets                 # zdymak: build the media
-npx vydanne preflight && npx vydanne fill   # vydanne: check, then push the listing
+npm i -D github:Lonli-Lokli/vydanne          # vydanne: install straight from source
+npm run store-assets                         # zdymak: build the media
+npx vydanne preflight && npx vydanne fill    # vydanne: check, then push the listing
 ```
 
 Neither tool ever submits your app — a human attaches the build and presses Submit.
