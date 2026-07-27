@@ -42,6 +42,14 @@
   "dependencies": {
     "@napi-rs/canvas": "^0.1.60"
   },
+  "peerDependencies": {
+    "playwright": "*"
+  },
+  "peerDependenciesMeta": {
+    "playwright": {
+      "optional": true
+    }
+  },
   "keywords": [
     "app-store",
     "google-play",

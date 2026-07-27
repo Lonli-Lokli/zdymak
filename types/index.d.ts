@@ -549,8 +549,16 @@ export declare function untranslatedScenes(scenes: ResolvedScene[], table?: Capt
 /** Apply a caption table's reserved `$brand` block to the brand copy. */
 export declare function localizeBrand(brand: Brand, table?: CaptionTable): Brand;
 
-/** Encode a canvas as a store-safe **no-alpha** PNG. */
-export declare function rgbPngBuffer(canvas: unknown): Buffer;
+/**
+ * Encode a canvas as a store-safe **no-alpha** PNG.
+ *
+ * Returns `Uint8Array`, which `Buffer` extends — so this stays assignable wherever a Buffer was
+ * expected, and it no longer drags the `Buffer` global into a consumer's type-check. Naming `Buffer`
+ * here meant anyone type-checking a project that depends on zdymak without `@types/node` installed got
+ * `TS2580: Cannot find name 'Buffer'` reported from inside node_modules. zdymak's own `check:types`
+ * never saw it, because @types/node is in its devDependencies.
+ */
+export declare function rgbPngBuffer(canvas: unknown): Uint8Array;
 
 /** Register custom TTF/OTF files so text renders identically everywhere. */
 export declare function registerFonts(fontPaths?: string[]): void;
