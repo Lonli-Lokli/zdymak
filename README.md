@@ -412,6 +412,7 @@ specifications* and Google's *Add preview assets* pages.
 | `play-wear` | 1080×1080 | Play Wear OS (1:1) | **Required** for Wear OS listings, min 384×384 |
 | `play-feature-graphic` | 1024×500 | Play feature graphic | **Required** even without a video; it's also the promo-video thumbnail, so keep the centre clear |
 | `play-icon` | 512×512 | Play app icon | The only target where alpha is allowed |
+| `social-card` | 1200×630 | Open Graph / Twitter card | Not a store asset — the image a shared LINK previews with. One file covers og:image, twitter:image, Slack, Discord and iMessage |
 
 Apple takes 1–10 screenshots per device type; Google takes 2–8 per form factor. Both reject transparency
 everywhere except the Play icon — zdymak always writes colour-type-2 PNG, so that's handled.

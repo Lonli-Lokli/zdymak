@@ -37,7 +37,9 @@ export type ImageTargetId =
   | 'play-tablet'
   | 'play-wear'
   | 'play-feature-graphic'
-  | 'play-icon';
+  | 'play-icon'
+  /** Not a store asset — the 1200×630 og:image / twitter:image a shared LINK previews with. */
+  | 'social-card';
 
 export interface VideoTargetSpec {
   store: string;

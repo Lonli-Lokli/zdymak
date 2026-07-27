@@ -111,6 +111,14 @@ export const IMAGE_TARGETS = {
   'play-wear': { store: 'Google Play', w: 1080, h: 1080, alpha: false, format: 'png', label: 'Play Wear OS (1:1 square, 384–3840px, no alpha)' },
   'play-feature-graphic': { store: 'Google Play', w: 1024, h: 500, alpha: false, format: 'png', graphic: true, label: 'Play feature graphic (1024×500, no alpha) — brand banner, not a per-scene shot' },
   'play-icon': { store: 'Google Play', w: 512, h: 512, alpha: true, format: 'png', graphic: true, icon: true, maxBytes: 1024 * 1024, label: 'Play app icon (512×512, 32-bit PNG — the one asset where alpha is allowed; ≤1MB). Built from brand.logo.' },
+  // Not a store asset — the picture every LINK to the game shows. Same branded banner the Play
+  // feature graphic uses, at the aspect the social platforms crop to, so a game gets one from the
+  // pipeline it already runs instead of someone exporting a one-off by hand and letting it go stale.
+  //
+  // 1200×630 is the size to build once: it is Open Graph's recommendation, it satisfies Twitter's
+  // `summary_large_image` (min 300×157, ≤5MB, ~1.91:1), and Slack/Discord/iMessage all read the same
+  // og: tags. Anything squarer gets centre-cropped by somebody.
+  'social-card': { store: 'Open Graph / Twitter card', w: 1200, h: 630, alpha: false, format: 'png', graphic: true, label: 'Social preview (1200×630, no alpha) — the og:image / twitter:image a shared link shows' },
 };
 
 /** Resolve a video target by id, throwing a helpful error listing valid ids. */
