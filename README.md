@@ -74,9 +74,8 @@ They're built to line up: zdymak's default output paths (`marketing/out/play-fea
 `play-phone-plain/`, `play-tablet-plain/`, …) are exactly the paths vydanne uploads from — no glue.
 
 ```sh
-npm i -D github:Lonli-Lokli/vydanne          # vydanne: install straight from source
-npm run store-assets                         # zdymak: build the media
-npx vydanne preflight && npx vydanne fill    # vydanne: check, then push the listing
+npm run store-assets                 # zdymak: build the media
+npx vydanne preflight && npx vydanne fill   # vydanne: check, then push the listing
 ```
 
 Neither tool ever submits your app — a human attaches the build and presses Submit.
