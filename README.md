@@ -146,6 +146,37 @@ zdymak capture --platform web --url http://localhost:3000 --states /,/today,/stu
 There's also a single-shot mode (`--name welcome`) that snaps whatever is currently on screen, and
 `--record` for a screen recording you can feed to the live-footage `reel`.
 
+### `--orientation` — photograph a tablet both ways (iOS)
+
+Both stores accept either orientation **in a single slot** and will show them together, so an app
+whose tablet layout genuinely changes on rotation can prove it. Capture each orientation into its own
+directory and give each its own device entry:
+
+```sh
+zdymak capture --platform ios --bundle com.x.app --arg -screen --states a,b,c   --device 'iPad Pro 13-inch (M5)' --orientation landscape-left --out ./shots/ipad-landscape
+```
+
+`portrait` (default) · `landscape-left` · `landscape-right` · `portrait-upside-down`.
+
+Pair it with the rotated targets — `appstore-ipad-13-landscape` (2752×2064) and
+`play-tablet-portrait` (1600×2560). Neither needs a new device drawing: the frames derive their body
+from the capture's own aspect, so a landscape screen already yields a landscape iPad.
+
+Two things worth knowing, because both fail by producing a perfectly valid PNG:
+
+- **`simctl` cannot rotate**, and its screenshots ignore rotation. Orientation lives in the Simulator
+  *app*, so this drives its Device ▸ Orientation menu, which needs the terminal to have
+  **System Settings ▸ Privacy & Security ▸ Accessibility**. The framebuffer then comes back
+  portrait-shaped with the interface lying on its side; zdymak stands it back up.
+- **iOS refuses an orientation the app does not declare**, and on iPad the key it reads is
+  `UISupportedInterfaceOrientations~ipad`, not the plain one. Since every failure here leaves the
+  device where it was — and would hand you a full set of good *portrait* screenshots filed as
+  landscape — the turn is verified, and a device that did not move is an error, not a warning.
+
+On **Android** there is no flag, because `--size` already does it better: relayouting to `1600x2560`
+gives the app a real upright tablet (800×1280dp at density 320), while rotating a 16:9 landscape
+figure would hand it 405×720dp — a large phone, which is the layout the set exists to disprove.
+
 ### `--record --states` — live footage, one clip per screen
 
 Add `--record` to the driven form and each state is recorded as a **clip** instead of snapped as a still.
@@ -285,7 +316,7 @@ Sources: Apple [Screenshot specifications](https://developer.apple.com/help/app-
 |---|---|---|---|
 | iPhone 6.9" | 1320×2868 | one iPhone size required if it runs on iPhone | `appstore-iphone-6.9` |
 | iPhone 6.5" | 1284×2778 *(or 1242×2688)* | only if you skip 6.9" | `appstore-iphone-6.5` |
-| iPad 13" | 2064×2752 | **required** if it runs on iPad | `appstore-ipad-13` |
+| iPad 13" | 2064×2752 | **required** if it runs on iPad | `appstore-ipad-13` (+ `-landscape`, same slot) |
 | Mac | 2880×1800 *(16:10; also 1280×800 · 1440×900 · 2560×1600)* | **required** for Mac apps | `appstore-mac` |
 | Apple Watch | 422×514 *(or 410×502 · 416×496 · 396×484 · 368×448 · 312×390)* | **required** for Watch apps | `appstore-watch` |
 
@@ -313,7 +344,7 @@ rejects bezels here, which is why `social-reel` must never go in this slot.
 | Asset | Size | Required? | Target |
 |---|---|---|---|
 | Phone screenshots | 1080×1920 (320–3840 px per side, **max 2:1**) | 2–8; min 2 to publish | `play-phone` |
-| Tablet screenshots | 2560×1440 (16:9) | recommended for large-screen | `play-tablet` |
+| Tablet screenshots | 2560×1440 (16:9) | recommended for large-screen | `play-tablet` (+ `play-tablet-portrait`, same slots) |
 | Wear OS screenshots | 1080×1080 (**1:1**, 384–3840) | **required** for Wear listings | `play-wear` |
 | Feature graphic | **1024×500** | **required** | `play-feature-graphic` |
 | App icon | 512×512, ≤1 MB, alpha OK | **required** | `play-icon` (from `brand.logo`) |
@@ -405,10 +436,12 @@ specifications* and Google's *Add preview assets* pages.
 | `appstore-iphone-6.9` | 1320×2868 | iPhone 6.9" — Air, 17/16/15 Pro Max, 16/15 Plus, 14 Pro Max | One iPhone size required if the app runs on iPhone; Apple down-scales 6.9" to the smaller classes |
 | `appstore-iphone-6.5` | 1284×2778 *(or 1242×2688)* | iPhone 6.5" — 14 Plus, 13/12/11 Pro Max, XS Max, XR | Only needed if you don't ship 6.9" |
 | `appstore-ipad-13` | 2064×2752 | iPad 13" — iPad Pro M5/M4, Air M4/M3/M2 | **Required** if the app runs on iPad |
+| `appstore-ipad-13-landscape` | 2752×2064 | the same iPad slot, turned | Optional — only if the layout actually changes on rotation (see `--orientation`) |
 | `appstore-mac` | 2880×1800 | Mac (16:10) | **Required** for Mac apps |
 | `appstore-watch` | 422×514 *(or 410×502 · 416×496 · 396×484 · 368×448 · 312×390)* | Apple Watch — Ultra 3 / Ultra 2 / Series 11 / 10 / 9…3 | **Required** for Watch apps. Pick ONE size and use it in every localization |
 | `play-phone` | 1080×1920 | Play phone | 2–8 per form factor; 320–3840 px per side, max 2:1 |
 | `play-tablet` | 2560×1440 | Play 7"/10" tablet + Chromebook | Recommended for large-screen visibility |
+| `play-tablet-portrait` | 1600×2560 | the same two Play slots, upright | Optional — capture with `--size 1600x2560`, not by rotating |
 | `play-wear` | 1080×1080 | Play Wear OS (1:1) | **Required** for Wear OS listings, min 384×384 |
 | `play-feature-graphic` | 1024×500 | Play feature graphic | **Required** even without a video; it's also the promo-video thumbnail, so keep the centre clear |
 | `play-icon` | 512×512 | Play app icon | The only target where alpha is allowed |

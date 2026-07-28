@@ -37,8 +37,8 @@ get rejected or quietly under-perform.
 | A Play listing video | `play-promo` | full-bleed | Play takes a **YouTube URL**, not a file. Keep it **silent** unless the music is cleared — a ContentID claim can force ads on, which Play forbids on listing videos. |
 | A marketing/social reel | `social-reel` | device-framed | Set `theme.frame: 'android'` for Android captures — the default body is an iPhone, and an Android UI in an iPhone shell misrepresents the app. Never submit this as an App Preview. |
 | A cinematic showcase | `premium-reel` | premium matte | Override `size` for landscape (Mac: `[2880, 1800]`). |
-| **App Store** screenshots | `appstore-iphone-6.9` (+`-6.5`), `appstore-ipad-13`, `appstore-mac`, `appstore-watch` | framed (inferred) | Marketing styling is **expected** here: frames, headlines, backgrounds. iPad/Mac/Watch shots are *required* if the app ships there. Pick ONE Watch size and keep it across localizations. |
-| **Google Play** screenshots | `play-phone`, `play-tablet`, `play-wear`, `play-feature-graphic` | `bleed` + `caption: false` for the upload | Google forbids device frames, added text and backgrounds on store screenshots (hard requirement for Wear OS). Render a plain set for upload and a styled set for the website — `dir` keeps both. The feature graphic is **required** even without a video. |
+| **App Store** screenshots | `appstore-iphone-6.9` (+`-6.5`), `appstore-ipad-13` (+`-landscape`), `appstore-mac`, `appstore-watch` | framed (inferred) | Marketing styling is **expected** here: frames, headlines, backgrounds. iPad/Mac/Watch shots are *required* if the app ships there. Pick ONE Watch size and keep it across localizations. |
+| **Google Play** screenshots | `play-phone`, `play-tablet` (+`-portrait`), `play-wear`, `play-feature-graphic` | `bleed` + `caption: false` for the upload | Google forbids device frames, added text and backgrounds on store screenshots (hard requirement for Wear OS). Render a plain set for upload and a styled set for the website — `dir` keeps both. The feature graphic is **required** even without a video. |
 | Web-app screenshots | any target, captured with `--platform web` | as above | Playwright driver; states are URL paths. |
 
 Exact dimensions live in `zdymak specs` (printed from the code, so it can't drift). They're checked
@@ -128,6 +128,27 @@ to `zdymak reel`, or ship a `--size`-matched clip straight to the store slot.
 for mobile-web, `--theme dark`, `--locale`, `--wait <selector>`, `--full-page`. Playwright is an optional
 dep (`npm i -D playwright && npx playwright install chromium`). Shots are deterministic — animations are
 zeroed and fonts/images awaited — so re-runs only differ where the UI did.
+
+### Both orientations of a tablet
+Both stores show two orientations **in one slot**, so an app whose tablet layout genuinely changes on
+rotation should ship both — and one that merely stretches should not bother. Capture each into its own
+directory, give each its own `devices` entry, and pair them with `appstore-ipad-13-landscape` /
+`play-tablet-portrait`. No new device drawing is involved: the frames take their body from the capture's
+aspect.
+
+- **iOS:** `--orientation landscape-left|landscape-right|portrait-upside-down`. It drives the Simulator's
+  Device ▸ Orientation menu, because `simctl` has no rotation command — so the terminal needs
+  **Accessibility** permission. simctl's screenshots also ignore rotation (a turned iPad arrives
+  portrait-shaped with the UI on its side); zdymak stands them back up. It **fails** rather than warns if
+  the device did not turn, since the alternative is a full set of good portrait shots filed as landscape.
+  The usual cause is the app: iOS refuses an orientation the plist omits, and iPad reads
+  `UISupportedInterfaceOrientations~ipad`.
+- **Android:** no flag — use `--size 1600x2560`, which relayouts the app to a real upright tablet
+  (800×1280dp at density 320). Rotating the 16:9 figure instead gives 405×720dp, a large phone.
+- **Filenames collide.** Both orientations land in one store slot, and both targets emit `01-….png`, so
+  rename one set on the way to the upload directory or the second silently overwrites the first — the copy
+  succeeds and the listing is simply half as long. It also fixes ORDER, which stores read from the
+  filename: one set whole, then the other, rather than alternating shapes.
 
 ## Play wants PLAIN screenshots (Apple wants styled)
 Google's asset guidance forbids device frames, added text and backgrounds on Play screenshots (a hard
