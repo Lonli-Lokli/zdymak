@@ -43,6 +43,155 @@ const out2 = (cmd, args) => (spawnSync(cmd, args, { encoding: 'utf8', maxBuffer:
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const udidRe = /\(([0-9A-Fa-f-]{36})\)/;
 
+/* ── Rotating an iOS simulator ─────────────────────────────────────────────────────────────────
+ *
+ * There is no `simctl` command for this. Orientation belongs to the Simulator APP, not to the device
+ * service, so the only lever Apple exposes is the Device ▸ Orientation menu — which is why this
+ * drives a GUI menu, an approach that would be indefensible in a capture pipeline if any other
+ * existed.
+ *
+ * Rotating is only half of it. `simctl io screenshot` returns the RAW FRAMEBUFFER, which ignores
+ * rotation entirely: a turned iPad screenshots as a portrait-shaped PNG with the whole interface
+ * lying on its side. Correct pixels, valid image, unusable as a store asset — and invisible to any
+ * check that does not actually look at it. So the capture is stood back up here rather than left for
+ * someone to notice.
+ */
+const ORIENTATION_MENU = {
+  portrait: 'Portrait',
+  'portrait-upside-down': 'Portrait Upside Down',
+  landscape: 'Landscape Left',
+  'landscape-left': 'Landscape Left',
+  'landscape-right': 'Landscape Right',
+};
+
+/**
+ * Wait for the Simulator to have a DEVICE WINDOW, not merely to be running.
+ *
+ * The menu bar exists the instant the app launches, and Device ▸ Orientation ▸ Landscape Left is
+ * clickable while there is still nothing to rotate — so the click reports success and does nothing.
+ * That is how this first failed: `open -a Simulator` followed by a one-second delay is plenty for a
+ * warm app and nowhere near enough for a cold one, which made the bug look intermittent rather than
+ * like a missing wait.
+ */
+async function awaitSimulatorWindow() {
+  spawnSync('open', ['-a', 'Simulator'], { stdio: 'ignore' });
+  for (let i = 0; i < 40; i++) {
+    const r = spawnSync('osascript', [
+      '-e', 'tell application "System Events" to tell process "Simulator" to get name of every window',
+    ], { encoding: 'utf8' });
+    if (r.status === 0 && r.stdout.trim()) return;
+    await sleep(500);
+  }
+  throw new Error('the Simulator never opened a device window, so its Device ▸ Orientation menu has nothing to act on.');
+}
+
+/**
+ * Wait until the screen stops moving.
+ *
+ * A rotation is a relayout, and on a real interface that takes visibly longer than the turn itself.
+ * Screenshotting too early yields a frame caught mid-flight — the list clipped, half the board
+ * missing — which is a perfectly valid PNG of a state no player ever sees. Polling for two identical
+ * framebuffers is better than any fixed sleep here: it is as fast as the device is, and it does not
+ * silently become too short on a slower machine or a heavier screen.
+ */
+async function settleFrame(udid, outDir, maxMs = 9000) {
+  const probe = path.join(outDir, '.settle-probe.png');
+  const t0 = Date.now();
+  let last = null;
+  try {
+    while (Date.now() - t0 < maxMs) {
+      sh('xcrun', ['simctl', 'io', udid, 'screenshot', probe]);
+      const now = fs.readFileSync(probe);
+      if (last && last.equals(now)) return;
+      last = now;
+      await sleep(700);
+    }
+  } finally {
+    fs.rmSync(probe, { force: true });
+  }
+}
+
+async function setSimOrientation(orientation) {
+  const item = ORIENTATION_MENU[orientation];
+  if (!item) {
+    throw new Error(`--orientation must be one of: ${Object.keys(ORIENTATION_MENU).join(', ')} (got "${orientation}").`);
+  }
+  await awaitSimulatorWindow();
+  const r = spawnSync('osascript', [
+    '-e', 'tell application "Simulator" to activate',
+    '-e', 'delay 1',
+    '-e', `tell application "System Events" to tell process "Simulator" to click menu item "${item}" `
+        + 'of menu 1 of menu item "Orientation" of menu 1 of menu bar item "Device" of menu bar 1',
+  ], { encoding: 'utf8' });
+  if (r.status !== 0) {
+    throw new Error(
+      `could not reach the Simulator's Device ▸ Orientation ▸ ${item} menu: ${(r.stderr || '').trim()}\n`
+      + '  Rotation goes through the Simulator UI because simctl cannot do it, so the terminal running\n'
+      + '  zdymak needs System Settings ▸ Privacy & Security ▸ Accessibility.',
+    );
+  }
+}
+
+/**
+ * Turn the device, and PROVE that it turned.
+ *
+ * A denied automation permission, a Simulator window that never came forward, a menu renamed in some
+ * future Xcode — each of those fails by leaving the device exactly where it was, and each then yields
+ * a complete set of perfectly valid PORTRAIT screenshots filed as landscape. That is this pipeline's
+ * recurring failure shape: an asset wrong in a way nothing downstream can see. So the device is
+ * driven to portrait first, then to the target, and the two framebuffers compared. Two orientations
+ * of a real screen never match byte for byte.
+ */
+async function rotateSim(udid, orientation, outDir) {
+  if (orientation === 'portrait') { await setSimOrientation('portrait'); await settleFrame(udid, outDir); return; }
+  const probe = path.join(outDir, '.orientation-probe.png');
+  try {
+    await setSimOrientation('portrait');
+    await settleFrame(udid, outDir);
+    sh('xcrun', ['simctl', 'io', udid, 'screenshot', probe]);
+    const before = fs.readFileSync(probe);
+    await setSimOrientation(orientation);
+    await settleFrame(udid, outDir);
+    sh('xcrun', ['simctl', 'io', udid, 'screenshot', probe]);
+    if (before.equals(fs.readFileSync(probe))) {
+      throw new Error(
+        `the simulator did not turn — still portrait after asking for ${orientation}.\n`
+        + '  The usual cause is the APP, not the tooling: iOS refuses an orientation the Info.plist does\n'
+        + '  not list, and on iPad the key it reads is UISupportedInterfaceOrientations~ipad.',
+      );
+    }
+  } finally {
+    fs.rmSync(probe, { force: true });
+  }
+}
+
+/**
+ * Stand a raw framebuffer back up.
+ *
+ * Tests the shape rather than trusting the request: if some future simctl starts applying rotation
+ * itself, the capture arrives correct and this does nothing, instead of helpfully laying it on its
+ * side.
+ */
+async function uprightCapture(file, orientation) {
+  if (!orientation || orientation === 'portrait') return;
+  const img = await loadImage(file);
+  const wantsLandscape = orientation.startsWith('landscape');
+  if (wantsLandscape === (img.width > img.height)) return; // already the right way up
+  const c = createCanvas(img.height, img.width);
+  const ctx = c.getContext('2d');
+  // Landscape Left leaves the interface's top along the framebuffer's RIGHT edge, Landscape Right
+  // along its left; turning each the other way is what brings that edge back to the top.
+  if (orientation === 'landscape-right') {
+    ctx.translate(c.width, 0);
+    ctx.rotate(Math.PI / 2);
+  } else {
+    ctx.translate(0, c.height);
+    ctx.rotate(-Math.PI / 2);
+  }
+  ctx.drawImage(img, 0, 0);
+  fs.writeFileSync(file, rgbPngBuffer(c));
+}
+
 /** Boot (or reuse/create) an iOS simulator → UDID. Prefers --udid, then an already-booted sim, then a
  *  device matching --device (default iPhone 16 Pro Max), creating one if needed. */
 /**
@@ -141,6 +290,10 @@ async function captureIos(flags) {
     const settle = Number(flags.settle || 4);
     const sim = bootIosSim(flags);
     const udid = sim.udid;
+    const orientation = (flags.orientation || 'portrait').toLowerCase();
+    if (!ORIENTATION_MENU[orientation]) {
+      throw new Error(`--orientation must be one of: ${Object.keys(ORIENTATION_MENU).join(', ')} (got "${flags.orientation}").`);
+    }
     try {
     if (flags.build !== undefined) {
       if (!flags.project || !flags.scheme) throw new Error('--build needs --project <.xcodeproj> and --scheme <name>.');
@@ -170,12 +323,21 @@ async function captureIos(flags) {
     const reelArg = flags['reel-arg'] || '-marketingReel';
     const verb = recording ? `Recording ${dur}s clips` : 'Driving';
     console.log(`▶︎ ${verb} for ${states.length} screens via "${flags.arg} <id>" on ${flags.bundle}…`);
-    for (const st of states) {
+    for (const [i, st] of states.entries()) {
       spawnSync('xcrun', ['simctl', 'terminate', udid, flags.bundle], { stdio: 'ignore' });
       const launch = ['simctl', 'launch', udid, flags.bundle, flags.arg, st];
       if (recording) launch.push(reelArg, 'YES'); // tell the harness to auto-animate this screen
       sh('xcrun', launch);
       await sleep(settle * 1000);
+      // Rotation is asked for AFTER the app is up, never before: iOS resolves an orientation request
+      // against whatever is frontmost, so a device turned at the home screen springs back the moment
+      // a portrait app launches into it. The expensive PROVEN turn runs once; later states only
+      // re-assert, because a relaunch inherits the device's orientation and re-proving it every time
+      // would flip the screen back and forth for no information.
+      if (orientation !== 'portrait') {
+        if (i === 0) await rotateSim(udid, orientation, outDir);
+        else { await setSimOrientation(orientation); await settleFrame(udid, outDir); }
+      }
       // Re-assert RIGHT BEFORE capture: a launch + the settle lets the sim re-sync the battery to the host
       // (a charging bolt creeps back on later screens). Re-pinning per screen keeps every shot clean.
       pinStatusBar();
@@ -190,15 +352,20 @@ async function captureIos(flags) {
         await sleep(500); // let the pinned bar paint before the screenshot
         const out = path.join(outDir, `${st}${suffix}.png`);
         sh('xcrun', ['simctl', 'io', udid, 'screenshot', out]);
+        await uprightCapture(out, orientation);
         await stripAlpha(out);
         console.log(`   ✓ ${st}${suffix}.png`);
       }
     }
     console.log(`Done → ${outDir}`);
     } finally {
-      // Always: a thrown build/launch error must not strand a booted sim with a faked status bar.
+      // Always: a thrown build/launch error must not strand a booted sim with a faked status bar —
+      // nor one lying on its side. A simulator the user already had running is handed back the way
+      // they left it, and orientation is part of "the way they left it".
+      if (orientation !== 'portrait') { try { await setSimOrientation('portrait'); } catch { /* teardown */ } }
       teardownIosSim(sim, flags);
     }
+    return; // the workflow is DONE — falling through would try to snap a sim that was just torn down
   }
 
   // Single snapshot of whatever is on the booted sim.

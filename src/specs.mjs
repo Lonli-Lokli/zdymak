@@ -104,10 +104,22 @@ export const IMAGE_TARGETS = {
   'appstore-iphone-6.9': { store: 'App Store', w: 1320, h: 2868, accepts: [[1320, 2868], [1290, 2796], [1260, 2736]], alpha: false, format: 'png', label: 'iPhone 6.9" (largest — Apple scales down for smaller iPhones; also accepts 1290×2796 and 1260×2736)' },
   'appstore-iphone-6.5': { store: 'App Store', accepts: [[1242, 2688], [1284, 2778]], alpha: false, format: 'png', label: 'iPhone 6.5" (accepts 1242×2688 or 1284×2778)' },
   'appstore-ipad-13': { store: 'App Store', w: 2064, h: 2752, alpha: false, format: 'png', label: 'iPad 13" (largest iPad class)' },
+  // THE SAME SLOT, TURNED — not a second one. Both stores accept either orientation for a tablet
+  // display type and will show both in one set, so an app whose tablet layout genuinely CHANGES on
+  // rotation has somewhere to prove it, and one that merely stretches should not bother.
+  //
+  // Neither needs a new device drawing. `drawIpadFrame` and `drawAndroidPhoneFrame` derive the body
+  // height from the capture's own aspect, so a landscape screen already yields a landscape body;
+  // and `inferFrame` still routes these correctly, because it tests `^play` before `ipad|tablet`.
+  // What was actually missing was the ability to CAPTURE a rotated device — see
+  // `capture --orientation`, which had to be built, because `simctl` has no rotation command and
+  // hands back a framebuffer that ignores rotation even after the device has turned.
+  'appstore-ipad-13-landscape': { store: 'App Store', w: 2752, h: 2064, alpha: false, format: 'png', label: 'iPad 13" LANDSCAPE (same App Store slot as appstore-ipad-13, rotated)' },
   'appstore-watch': { store: 'App Store', accepts: [[422, 514], [410, 502], [416, 496], [396, 484], [368, 448], [312, 390]], alpha: false, format: 'png', label: 'Apple Watch (any one accepted size; alpha NOT allowed)' },
   'appstore-mac': { store: 'Mac App Store', w: 2880, h: 1800, alpha: false, format: 'png', label: 'Mac (2880×1800, 16:10 landscape — largest required class)' },
   'play-phone': { store: 'Google Play', w: 1080, h: 1920, alpha: false, format: 'png', label: 'Play phone (9:16; store minimum is 320px per side, 1080+ for promotion eligibility; max 2:1; no alpha)' },
   'play-tablet': { store: 'Google Play', w: 2560, h: 1440, alpha: false, format: 'png', label: 'Play tablet (16:9, 1080–7680px, no alpha)' },
+  'play-tablet-portrait': { store: 'Google Play', w: 1600, h: 2560, alpha: false, format: 'png', label: 'Play tablet PORTRAIT (same Play slots as play-tablet, rotated; 1080–7680px, no alpha)' },
   'play-wear': { store: 'Google Play', w: 1080, h: 1080, alpha: false, format: 'png', label: 'Play Wear OS (1:1 square, 384–3840px, no alpha)' },
   'play-feature-graphic': { store: 'Google Play', w: 1024, h: 500, alpha: false, format: 'png', graphic: true, label: 'Play feature graphic (1024×500, no alpha) — brand banner, not a per-scene shot' },
   'play-icon': { store: 'Google Play', w: 512, h: 512, alpha: true, format: 'png', graphic: true, icon: true, maxBytes: 1024 * 1024, label: 'Play app icon (512×512, 32-bit PNG — the one asset where alpha is allowed; ≤1MB). Built from brand.logo.' },

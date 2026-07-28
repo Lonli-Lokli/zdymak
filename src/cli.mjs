@@ -267,7 +267,12 @@ Usage:
   zdymak specs
   zdymak capture  --platform ios --bundle <id> --arg <handle> --states <a,b,c> [--suffix -light]
                   [--build --project <.xcodeproj> --scheme <name>] [--device <sim>] [--out <dir>] [--clean] [--keep]
+                  [--orientation portrait|landscape-left|landscape-right]
                   # full workflow: start the app, drive each screen by a launch handle, snap store-ready PNGs
+                  # --orientation turns the DEVICE (via the Simulator's own menu — simctl has no such
+                  # command) and stands the framebuffer back up, since simctl's ignores rotation. It
+                  # fails loudly if the device does not actually turn; the usual cause is the app's
+                  # Info.plist, and on iPad the key read is UISupportedInterfaceOrientations~ipad.
   zdymak capture  --platform android --record --component <pkg/act> --arg <extra> --states <a,b,c>
                   [--size 1080x1920] [--density 400] [--duration 60] [--trim <s>] [--hold 1.5]
                   [--fps 30] [--bitrate 20000000] [--keep-raw] [--out <dir>]
