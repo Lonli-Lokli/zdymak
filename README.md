@@ -78,7 +78,8 @@ npm run store-assets                 # zdymak: build the media
 npx vydanne preflight && npx vydanne fill   # vydanne: check, then push the listing
 ```
 
-Neither tool ever submits your app — a human attaches the build and presses Submit.
+Neither tool ever submits your app for review. vydanne's `prepare` does attach the uploaded build to
+the draft version; Add to Review and Submit stay yours, in the web UI.
 
 <br>
 
