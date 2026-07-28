@@ -56,7 +56,18 @@ try {
   console.log(`✓ npm: authenticated as '${who}'. '${name}' is unpublished — this will be the FIRST publish.`);
 }
 
-run('node scripts/check-docs.mjs'); //           fail early if docs drifted (also enforced on prepublishOnly)
+// EVERY CHECK RUNS BEFORE ANYTHING MUTATES THE REPO — the rule the npm auth gate above already states
+// in its own comment, and which this line used to break. It ran only `check-docs` and left
+// `check:types` to `prepublishOnly`, which npm runs AFTER `npm version` has bumped package.json and
+// cut the tag. So the ordinary failure — a target added to specs.mjs and not declared in the .d.ts —
+// aborted the publish having already committed `release: v0.18.0` and tagged it, for a version that
+// does not exist on the registry and never will. Unpicking that by hand is precisely the outcome the
+// auth gate was written to prevent, arriving through a door left open beside it.
+//
+// `npm run verify` is the SAME script `prepublishOnly` runs, not a second copy of the list. Two lists
+// drift, and it is always the early one that falls behind — which turns this guard back into
+// decoration while still reading like a guard.
+run('npm run verify'); //                        docs + types, exactly what prepublishOnly re-runs
 run(`npm version ${type} -m "release: v%s"`); // bumps package.json + creates the git tag
 run('npm publish --access public'); //           npm asks for your 2FA OTP
 run('git push --follow-tags');

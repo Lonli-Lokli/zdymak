@@ -25,7 +25,8 @@
     "docs:diagram": "node scripts/build-diagram.mjs",
     "check:docs": "node scripts/check-docs.mjs",
     "check:types": "tsc --noEmit -p tsconfig.json && node scripts/check-types.mjs",
-    "prepublishOnly": "node scripts/check-docs.mjs && npm run check:types",
+    "verify": "npm run check:docs && npm run check:types",
+    "prepublishOnly": "npm run verify",
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
     "release:major": "node scripts/release.mjs major"

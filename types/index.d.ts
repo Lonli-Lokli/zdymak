@@ -31,10 +31,14 @@ export type ImageTargetId =
   | 'appstore-iphone-6.9'
   | 'appstore-iphone-6.5'
   | 'appstore-ipad-13'
+  /** The SAME App Store slot as `appstore-ipad-13`, turned — capture with `--orientation`. */
+  | 'appstore-ipad-13-landscape'
   | 'appstore-watch'
   | 'appstore-mac'
   | 'play-phone'
   | 'play-tablet'
+  /** The SAME two Play tablet slots as `play-tablet`, upright — capture with `--size 1600x2560`. */
+  | 'play-tablet-portrait'
   | 'play-wear'
   | 'play-feature-graphic'
   | 'play-icon'
