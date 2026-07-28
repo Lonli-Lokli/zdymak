@@ -12,6 +12,28 @@ import { rgbPngBuffer } from './png.mjs';
 
 const DEFAULT = { matteTop: '#052E16', matteBottom: '#0b0b0a', glow: null, glowAlpha: 0.22 };
 
+/**
+ * The banner's ground, taking the game's own palette when it has one.
+ *
+ * `matteTop`/`matteBottom` name the graphic's gradient, `bgTop`/`bgBottom` name the screenshots'.
+ * Two names for the same intent, and only the first reached this file — so a game that themed its
+ * screenshots got the built-in GREEN here and never knew, because nothing errors and the banner
+ * looks perfectly good on its own. It only shows up side by side: two titles from one studio, one
+ * of them wearing the other's colour, on the same Play developer page.
+ *
+ * So the screenshot ground is the fallback. A game that wants the banner to differ still says
+ * matteTop/matteBottom and wins; a game that themed itself once now gets one brand everywhere.
+ */
+function ground(theme) {
+  const t = theme || {};
+  return {
+    ...DEFAULT,
+    ...t,
+    matteTop: t.matteTop ?? t.bgTop ?? DEFAULT.matteTop,
+    matteBottom: t.matteBottom ?? t.bgBottom ?? DEFAULT.matteBottom,
+  };
+}
+
 /** Split a tagline into ≤2 lines (on the first sentence break, else the whole thing). */
 function splitTagline(t) {
   if (!t) return ['', ''];
@@ -21,7 +43,7 @@ function splitTagline(t) {
 
 /** Build the 1024×500 feature graphic → writes a no-alpha PNG. `frame`: which device frame for the hero. */
 export async function buildFeatureGraphic({ W = 1024, H = 500, brand, theme, heroPath, outFile, frame = 'android' }) {
-  const th = { ...DEFAULT, ...(theme || {}) };
+  const th = ground(theme);
   const glow = th.glow || brand.sub;
   const c = createCanvas(W, H);
   const ctx = c.getContext('2d');
@@ -85,7 +107,7 @@ export async function buildFeatureGraphic({ W = 1024, H = 500, brand, theme, her
  * blank square — a silently-empty icon is worse than a clear error at build time.
  */
 export async function buildAppIcon({ W = 512, H = 512, brand, theme, outFile }) {
-  const th = { ...DEFAULT, ...(theme || {}) };
+  const th = ground(theme);
   if (!brand.logo || !fs.existsSync(brand.logo)) {
     throw new Error(
       "play-icon needs `brand.logo` — a square PNG of your app icon. Set it, or drop the 'play-icon' target " +
