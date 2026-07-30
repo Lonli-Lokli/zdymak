@@ -119,23 +119,44 @@ async function cmdVideo(flags) {
 
 async function cmdReel(flags) {
   const { cfg, outDir } = await open(flags);
-  const reel = cfg.reel;
-  if (!reel?.segments?.length) {
+  // `cfg.reel` is normalised to an ARRAY by loadConfig — one config can carry several cuts of the
+  // same footage (App Preview with score, Play promo silent, a framed social reel).
+  const all = (cfg.reel || []).filter((r) => r?.segments?.length);
+  if (!all.length) {
     console.warn('No `reel.segments` in the config — nothing to build. (See README: live-footage reel.)');
     return;
   }
-  const [w, h] = reel.size || [1080, 1920];
-  const spec = { w, h, fps: reel.fps || 30, profile: reel.profile || 'high', level: reel.level || '4.1' };
-  const outFile = path.join(outDir, `${flags.name || 'reel'}.mp4`);
+  // `--only a,b` picks entries by `name`. An unknown name is an ERROR, not a silent no-op: a typo
+  // would otherwise look like a successful run that quietly built nothing.
+  const nameOf = (r, i) => r.name || (all.length > 1 ? `reel-${i + 1}` : 'reel');
+  let selected = all;
+  if (flags.only) {
+    const want = flags.only.split(',').map((s) => s.trim());
+    const known = all.map(nameOf);
+    const missing = want.filter((n) => !known.includes(n));
+    if (missing.length) {
+      throw new Error(`--only: no reel named ${missing.join(', ')}. Known: ${known.join(', ')}`);
+    }
+    selected = all.filter((r, i) => want.includes(nameOf(r, i)));
+  }
   fs.mkdirSync(outDir, { recursive: true });
-  console.log(`zdymak reel • ${reel.segments.length} segment(s) → ${w}×${h}${reel.music ? ', ♪' : ''}`);
-  const { totalDur } = await buildMontage({
-    segments: reel.segments, brand: cfg.brand, theme: reel.theme, spec, // reel theme (light default), NOT cfg.theme
-    music: reel.music, sceneDur: reel.sceneDur, bpm: reel.bpm, beatsPerCut: reel.beatsPerCut,
-    transition: reel.transition, xfadeDur: reel.xfadeDur, outFile,
-  });
-  console.log(`  ✓ ${totalDur.toFixed(1)}s → ${path.relative(process.cwd(), outFile)}`);
-  warnAudio({ videoCount: 1, hasMusic: !!reel.music, label: 'the reel' });
+  for (const [i, reel] of all.entries()) {
+    if (!selected.includes(reel)) continue;
+    const [w, h] = reel.size || [1080, 1920];
+    const spec = { w, h, fps: reel.fps || 30, profile: reel.profile || 'high', level: reel.level || '4.1' };
+    // `--name` still renames a lone reel; with several, each carries its own `name` and the flag
+    // would silently make them overwrite one another.
+    const base = flags.name && selected.length === 1 ? flags.name : nameOf(reel, i);
+    const outFile = path.join(outDir, `${base}.mp4`);
+    console.log(`zdymak reel • ${base}: ${reel.segments.length} segment(s) → ${w}×${h}${reel.music ? ', ♪' : ''}`);
+    const { totalDur } = await buildMontage({
+      segments: reel.segments, brand: cfg.brand, theme: reel.theme, spec, // reel theme (light default), NOT cfg.theme
+      music: reel.music, sceneDur: reel.sceneDur, bpm: reel.bpm, beatsPerCut: reel.beatsPerCut,
+      transition: reel.transition, xfadeDur: reel.xfadeDur, outFile,
+    });
+    console.log(`  ✓ ${totalDur.toFixed(1)}s → ${path.relative(process.cwd(), outFile)}`);
+    warnAudio({ videoCount: 1, hasMusic: !!reel.music, label: `the ${base} reel` });
+  }
   console.log('Done.');
 }
 
@@ -262,7 +283,9 @@ function cmdHelp() {
 Usage:
   zdymak build       [--config <path>] [--out <dir>] [--clean] [--locale <ids>] [--force]  # everything
   zdymak video       [--config <path>] [--target <ids>] [--out <dir>] [--clean]
-  zdymak reel        [--config <path>] [--out <dir>] [--clean]   # LIVE-FOOTAGE montage from clips/images
+  zdymak reel        [--config <path>] [--out <dir>] [--clean] [--only <names>] [--name <n>]
+                  # LIVE-FOOTAGE montage from clips/images. "reel" may be an ARRAY — every entry
+                  # is built (App Preview + Play promo from one config); --only picks by name.
   zdymak screenshots [--config <path>] [--out <dir>] [--clean] [--locale <ids>]
   zdymak specs
   zdymak capture  --platform ios --bundle <id> --arg <handle> --states <a,b,c> [--suffix -light]

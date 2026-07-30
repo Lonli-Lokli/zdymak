@@ -149,19 +149,25 @@ export async function loadConfig(configPath) {
   });
 
   // Live-footage reel: resolve each segment's clip/image(s) + the music bed relative to the config file.
+  //
+  // `reel` accepts EITHER one entry or an array of them, and is normalised to an array here. An app
+  // routinely needs the same footage cut more than one way — an App Preview at 886×1920 with the score
+  // and a Play promo at 1080×1920 silent — and those differ in `size`/`music`/`segments`, none of which
+  // a flag can override. Before this, the second cut meant a second CONFIG FILE importing the first,
+  // which is a lot of ceremony for two fields and leaves two files to keep in step.
   const reel = raw.reel
-    ? {
-        ...raw.reel,
-        music: raw.reel.music?.path
-          ? { ...raw.reel.music, path: path.resolve(baseDir, raw.reel.music.path) }
+    ? (Array.isArray(raw.reel) ? raw.reel : [raw.reel]).map((entry) => ({
+        ...entry,
+        music: entry.music?.path
+          ? { ...entry.music, path: path.resolve(baseDir, entry.music.path) }
           : undefined,
-        segments: (raw.reel.segments || []).map((s) => ({
+        segments: (entry.segments || []).map((s) => ({
           ...s,
           clip: s.clip ? path.resolve(baseDir, s.clip) : undefined,
           image: s.image ? path.resolve(baseDir, s.image) : undefined,
           images: s.images ? s.images.map((p) => path.resolve(baseDir, p)) : undefined,
         })),
-      }
+      }))
     : undefined;
 
   return {

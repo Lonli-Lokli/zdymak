@@ -305,6 +305,11 @@ export interface ReelSegment {
  * Live-footage reel (real motion, not Ken Burns) — built by `zdymak reel`, independent of `targets`.
  */
 export interface ReelConfig {
+  /**
+   * Output basename — `<out>/<name>.mp4`, and what `zdymak reel --only <name>` selects. Defaults to
+   * `reel` for a lone entry, `reel-1`/`reel-2`/… when several are declared without names.
+   */
+  name?: string;
   size?: [number, number];
   fps?: number;
   profile?: string;
@@ -373,8 +378,14 @@ export interface Config {
    * scenes it doesn't translate keep their base caption (reported, never silent).
    */
   captions?: Record<string, string | CaptionTable>;
-  /** Live-footage reel, built by `zdymak reel`. */
-  reel?: ReelConfig;
+  /**
+   * Live-footage reel(s), built by `zdymak reel`.
+   *
+   * An ARRAY cuts the same footage several ways from one config — e.g. an App Preview at 886×1920
+   * with the score and a Play promo at 1080×1920 silent. `size`, `music` and `segments` cannot be
+   * overridden by a flag, so multiple cuts need multiple entries; give each a `name`.
+   */
+  reel?: ReelConfig | ReelConfig[];
   /** Output directory. Defaults to `store-assets`. */
   out?: string;
 }
@@ -406,7 +417,8 @@ export interface ResolvedDevice {
 
 export interface ResolvedConfig {
   brand: Required<Pick<Brand, 'ink' | 'title' | 'sub'>> & Brand & { fontPaths: string[] };
-  reel?: ReelConfig;
+  /** Always an ARRAY after `loadConfig`, even when the config declared a single entry. */
+  reel?: ReelConfig[];
   scenes: ResolvedScene[];
   devices: ResolvedDevice[];
   /** Caption tables with every JSON path already read. */

@@ -270,7 +270,7 @@ swapping in one frame late is the classic cause of a mystery screenshot diff.
 | `music` | Optional bed for **every** video: `{ path, offset, fadeIn, fadeOut, volume }` (silent if omitted). |
 | `devices` | Per-device **screenshots + reels** (see below). Configure only the devices you ship. |
 | `captions` | **Localized screenshot sets** — `{ locale: './captions/de.json' \| { sceneId: { title, sub } } }` (see below). |
-| `reel` | **Live-footage reel** — composite driven video `clip`s / `images` on a clean light matte, cross-dissolves (see **Live-footage reel** below). |
+| `reel` | **Live-footage reel** — composite driven video `clip`s / `images` on a clean light matte, cross-dissolves. One entry, or an **array** to cut the same footage several ways from one config (see **Live-footage reel** below). |
 | `out` | Output directory. |
 
 ### Theme options (`theme` / `stillTheme`)
@@ -730,6 +730,29 @@ reel: {
 - **Compliant App Store App Preview** — Apple's in-store slot wants *real footage, full-bleed, no device
   frame*. Point the reel at recordings (not stills) with `theme: { bleed: true }`, `size: [886, 1920]`,
   `level: '4.0'`, and no captions. (The framed light reel above is the marketing/social asset, not the slot.)
+
+### Several cuts from one config
+
+`reel` also takes an **array**. The same footage usually has to ship more than one way — an App Preview
+at 886×1920 that keeps the score, a Play promo at 1080×1920 that must be silent — and `size`, `music`
+and `segments` are exactly the fields no flag can override. Give each entry a `name`; it becomes
+`<out>/<name>.mp4`.
+
+```js
+reel: [
+  { name: 'appstore-preview', size: [886, 1920], level: '4.0', sceneDur: 20,
+    theme: { bleed: true }, music: { path: './assets/bed.mp3' },
+    segments: [{ clip: './rec-ios/play.mov' }] },
+  { name: 'play-promo', size: [1080, 1920], sceneDur: 27,       // silent: YouTube ContentID
+    theme: { bleed: true },
+    segments: [{ clip: './rec/play.mp4' }] },
+]
+```
+
+`zdymak reel` builds **every** entry; `--only appstore-preview` builds one (an unknown name is an
+error, not a silent no-op). `--name` still renames a lone reel, but is refused as a rename when
+several are selected — it would make them overwrite each other. A single object still works and still
+writes `reel.mp4`; unnamed entries in an array become `reel-1`, `reel-2`, …
 
 ## Where each file goes
 
