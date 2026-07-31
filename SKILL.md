@@ -129,6 +129,21 @@ for mobile-web, `--theme dark`, `--locale`, `--wait <selector>`, `--full-page`. 
 dep (`npm i -D playwright && npx playwright install chromium`). Shots are deterministic — animations are
 zeroed and fonts/images awaited — so re-runs only differ where the UI did.
 
+### Capturing in the shipping language
+`--language <tag>` captures the app itself in that language; `screenshots --locale` only translates the
+caption painted on top. Shipping the second without the first gives every locale a translated headline
+over a source-language screen, which is a picture of an app the shopper will not receive — and nothing
+downstream flags it, because every file is a valid PNG of a real screen.
+
+- **iOS:** launch arguments (`-AppleLanguages (ja) -AppleLocale ja_JP`), so no device state changes and
+  nothing needs restoring. The parentheses are load-bearing: `AppleLanguages` is an array, and a bare
+  tag is ignored silently — you get the base language, a green tick, and no warning.
+  `--applelocale` overrides the formatting locale (default: the tag with `-` as `_`).
+- **Android:** `cmd locale set-app-locales` (per-app override, **API 33+**), force-stopped so state one
+  is already translated and cleared in a `finally`. This one IS device state — a run killed mid-way
+  leaves the emulator in that language.
+- Capture one directory per language and give each its own `devices` entry, as with `--orientation`.
+
 ### Both orientations of a tablet
 Both stores show two orientations **in one slot**, so an app whose tablet layout genuinely changes on
 rotation should ship both — and one that merely stretches should not bother. Capture each into its own

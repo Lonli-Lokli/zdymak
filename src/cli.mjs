@@ -291,7 +291,13 @@ Usage:
   zdymak capture  --platform ios --bundle <id> --arg <handle> --states <a,b,c> [--suffix -light]
                   [--build --project <.xcodeproj> --scheme <name>] [--device <sim>] [--out <dir>] [--clean] [--keep]
                   [--orientation portrait|landscape-left|landscape-right]
+                  [--language <tag> [--applelocale <id>]]
                   # full workflow: start the app, drive each screen by a launch handle, snap store-ready PNGs
+                  # --language captures the app IN that language (ios: -AppleLanguages launch args, so no
+                  # device state is touched; android: cmd locale set-app-locales, API 33+, reset after).
+                  # "screenshots --locale" only translates the CAPTION — without this the picture under
+                  # it stays in whatever language the device was in. --applelocale overrides the derived
+                  # formatting locale (default: the tag with "-" as "_").
                   # --orientation turns the DEVICE (via the Simulator's own menu — simctl has no such
                   # command) and stands the framebuffer back up, since simctl's ignores rotation. It
                   # fails loudly if the device does not actually turn; the usual cause is the app's

@@ -43,6 +43,56 @@ const out2 = (cmd, args) => (spawnSync(cmd, args, { encoding: 'utf8', maxBuffer:
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const udidRe = /\(([0-9A-Fa-f-]{36})\)/;
 
+/* ── Capturing in a LANGUAGE other than the device's ───────────────────────────────────────────
+ *
+ * A store screenshot set is per-locale and the caption is only half of it. `screenshots --locale`
+ * paints a translated headline; it cannot touch the picture underneath, so a fully localized app
+ * still shipped nineteen locales' worth of shots showing its ENGLISH board with a Japanese or
+ * Arabic caption above it. That reads as an app the shopper is not going to get, and nothing
+ * downstream flags it because every file is a valid PNG of a real screen.
+ *
+ * iOS takes the language as LAUNCH ARGUMENTS, so no device state is mutated and nothing has to be
+ * put back: the flags ride the relaunch that already happens per state. `AppleLanguages` wants an
+ * ARRAY literal, which is why the value is parenthesised — a bare `ja` is quietly ignored and you
+ * get the base language back with a green tick and no warning.
+ *
+ * Android has no launch-arg equivalent. `cmd locale set-app-locales` is the per-app override added
+ * in API 33, and unlike the iOS route it is DEVICE STATE: set before the run and cleared after, or
+ * the emulator is left speaking Japanese for whatever captures next.
+ */
+function iosLanguageArgs(flags) {
+  if (!flags.language) return [];
+  // AppleLocale drives formatting (dates, numerals) rather than strings. Default it from the
+  // language so `--language ja` is enough for the common case; `--applelocale ja_JP` overrides for
+  // a region-specific set.
+  const locale = flags.applelocale || String(flags.language).replace(/-/g, '_');
+  return ['-AppleLanguages', `(${flags.language})`, '-AppleLocale', locale];
+}
+
+function androidLanguage(flags) {
+  if (!flags.language) return { reset() {} };
+  const pkg = String(flags.component || '').split('/')[0];
+  if (!pkg) throw new Error('--language on android needs --component <pkg/activity> to know which app to set.');
+  const set = (tag) =>
+    spawnSync('adb', ['shell', 'cmd', 'locale', 'set-app-locales', pkg, '--locales', tag], { encoding: 'utf8' });
+  const r = set(flags.language);
+  if (r.status !== 0) {
+    throw new Error(
+      `adb cmd locale set-app-locales failed — needs Android 13 (API 33) or newer: ${(r.stderr || r.stdout || '').trim()}`,
+    );
+  }
+  // The override lands on the next activity create; force-stop so the FIRST state is already
+  // translated rather than photographing the previous language once.
+  spawnSync('adb', ['shell', 'am', 'force-stop', pkg], { stdio: 'ignore' });
+  console.log(`▸ app locale → ${flags.language} on ${pkg}`);
+  return {
+    reset() {
+      set('');
+      spawnSync('adb', ['shell', 'am', 'force-stop', pkg], { stdio: 'ignore' });
+    },
+  };
+}
+
 /* ── Rotating an iOS simulator ─────────────────────────────────────────────────────────────────
  *
  * There is no `simctl` command for this. Orientation belongs to the Simulator APP, not to the device
@@ -322,10 +372,12 @@ async function captureIos(flags) {
     const dur = Number(flags.duration || 3);
     const reelArg = flags['reel-arg'] || '-marketingReel';
     const verb = recording ? `Recording ${dur}s clips` : 'Driving';
+    const langArgs = iosLanguageArgs(flags);
+    if (langArgs.length) console.log(`▸ launching in ${flags.language} (AppleLocale ${langArgs[3]})`);
     console.log(`▶︎ ${verb} for ${states.length} screens via "${flags.arg} <id>" on ${flags.bundle}…`);
     for (const [i, st] of states.entries()) {
       spawnSync('xcrun', ['simctl', 'terminate', udid, flags.bundle], { stdio: 'ignore' });
-      const launch = ['simctl', 'launch', udid, flags.bundle, flags.arg, st];
+      const launch = ['simctl', 'launch', udid, flags.bundle, ...langArgs, flags.arg, st];
       if (recording) launch.push(reelArg, 'YES'); // tell the harness to auto-animate this screen
       sh('xcrun', launch);
       await sleep(settle * 1000);
@@ -436,8 +488,21 @@ async function captureAndroid(flags) {
     await stripAlpha(file);
   };
 
-  androidDemo(true, flags); // clean marketing status bar (Google convention)
+  // The display override goes on FIRST, demo mode second — and even that is not enough on its own.
+  //
+  // `wm size` / `wm density` restart SystemUI, and a SystemUI restart DROPS demo mode. Entering demo
+  // first and relayouting second pins 09:41 onto a status bar that is about to be thrown away, so the
+  // capture ships with the wall clock on it. Doing it in this order narrows the window but does not
+  // close it: the restart is asynchronous, so a demo broadcast sent immediately after `wm size` can
+  // still land on the SystemUI that is on its way out. `recordAndroidStates` therefore RE-PINS the bar
+  // right before the recorder rolls, which is the assertion that actually holds.
+  //
+  // It fails silently in the worst way: every adb broadcast returns success, the run is green, and the
+  // only tell is the time in the corner of a finished asset. `--size`/`--density` is exactly the store
+  // VIDEO path (Play wants 1080x1920), which is why this hit the promo and never the screenshots.
   const display = androidDisplay(flags);
+  androidDemo(true, flags); // clean marketing status bar (Google convention)
+  const language = androidLanguage(flags); // per-app locale override; reset in the finally below
   try {
     // Full workflow: drive the app through screens via an intent-extra HANDLE (--component + --arg).
     if (flags.states) {
@@ -466,8 +531,13 @@ async function captureAndroid(flags) {
       console.log(`✓ ${out}  (alpha stripped, store-ready)`);
     }
   } finally {
-    display.reset();
+    // Teardown in reverse: leave demo mode while the override is still on, THEN restore the display.
+    // Resetting size first restarts SystemUI and takes demo mode with it, so the `exit` broadcast
+    // lands on a bar that never entered — harmless today, but it leaves the emulator's demo state
+    // decided by a race rather than by this function.
+    language.reset();
     androidDemo(false, flags);
+    display.reset();
   }
 }
 
@@ -565,6 +635,15 @@ async function recordAndroidStates(states, suffix, outDir, flags) {
     spawnSync('adb', ['shell', 'am', 'force-stop', flags.component.split('/')[0]], { stdio: 'ignore' });
     sh('adb', ['shell', 'am', 'start', '-n', flags.component, '--es', flags.arg, st]);
     await sleep(warm * 1000);
+
+    // Re-pin the marketing bar immediately before the take, the way the iOS path does. Demo mode is
+    // entered once at the top of captureAndroid, but a `--size`/`--density` override restarts SystemUI
+    // and takes demo mode with it — asynchronously, so it can outlive the broadcast that set it. By
+    // the time the recorder rolls the bar may be back to the wall clock, and nothing downstream can
+    // tell: the video is valid, the run is green, and the only symptom is the time in the corner.
+    // Four broadcasts here make the pin independent of the restart's timing.
+    androidDemo(true, flags);
+    await sleep(400); // let the re-pinned bar repaint before the first recorded frame
 
     const rec = spawn('adb', ['shell', 'screenrecord', '--bit-rate', String(flags.bitrate || 20000000),
       '--time-limit', String(limit), remote], { stdio: 'ignore' });

@@ -147,6 +147,52 @@ zdymak capture --platform web --url http://localhost:3000 --states /,/today,/stu
 There's also a single-shot mode (`--name welcome`) that snaps whatever is currently on screen, and
 `--record` for a screen recording you can feed to the live-footage `reel`.
 
+### Composing the shot: `tilt`, `deviceScale`, `deviceY`
+
+Both stores constrain screenshot **pixels**, not **layout**. Apple's specification covers size, file
+type and the no-alpha rule and says nothing about device frames, text overlays or composition; Play
+caps count and aspect ratio. So layout is the axis with the most room in it, and the cheapest way to
+stop two listings built from one house style looking like one product.
+
+```js
+theme: {
+  tilt: -6,          // degrees, about the device's own centre
+  deviceScale: 1.18, // >1 lets the body run off the frame edge
+  deviceY: 0.62,     // device centre as a fraction of height
+}
+```
+
+All three default to the previous centred-upright device, so an existing config renders unchanged
+until it opts in. They compose: `deviceScale` above 1 with a lowered `deviceY` is the "phone running
+off the bottom edge" layout, and adding `tilt` gives the angled-hero look.
+
+One Play-specific rule worth knowing: the **feature graphic must not contain a device frame** at all.
+That is a content rule on that asset alone, and it is easy to violate by inheriting a screenshot
+theme into `play-feature-graphic`.
+
+### `--language` — capture the app in the locale you're shipping to
+
+`screenshots --locale` translates the **caption**. It cannot touch the picture underneath, so a fully
+localized app still ships every locale's set showing its *source-language* UI with a translated
+headline over it — a picture of an app that shopper will not get. `--language` captures the screen
+itself in that language:
+
+```sh
+zdymak capture --platform ios --bundle com.x.app --arg -screen --states a,b,c   --language ja --out ./screenshots-ja
+```
+
+- **iOS** passes `-AppleLanguages (ja) -AppleLocale ja_JP` as **launch arguments**, so no device
+  state is mutated and there is nothing to put back. `AppleLanguages` needs an array literal, which
+  is why the value is parenthesised — a bare tag is silently ignored and you get the base language
+  back with a green tick. `--applelocale` overrides the formatting locale, which otherwise defaults
+  to the tag with `-` rewritten as `_`.
+- **Android** uses `cmd locale set-app-locales` (the per-app override, **API 33+**), force-stops so
+  the first state is already translated, and clears the override afterwards. Unlike the iOS route
+  this *is* device state: if a run dies between the two, the emulator is left in that language.
+
+Capture one directory per language and point a device entry at each, the same way `--orientation`
+does.
+
 ### `--orientation` — photograph a tablet both ways (iOS)
 
 Both stores accept either orientation **in a single slot** and will show them together, so an app

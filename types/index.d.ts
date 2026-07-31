@@ -165,6 +165,12 @@ export interface Theme {
   frame?: FrameId;
   /** Let the capture bleed to the frame edge (no matte margin). */
   bleed?: boolean;
+  /** Rotate the device about its own centre, in degrees. Default `0` (upright). */
+  tilt?: number;
+  /** Multiplier on the device width. Above `1` the body runs off the frame edge. Default `1`. */
+  deviceScale?: number;
+  /** Device centre as a fraction of frame height. Default follows `captionAnchor`. */
+  deviceY?: number;
   /**
    * Paint a clean status bar (time · signal · wifi · full battery) into the empty status-bar band some
    * captures carry — an Android Compose capture reserves the inset but can't contain the system UI.

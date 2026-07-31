@@ -48,6 +48,19 @@ export const DEFAULT_THEME = {
   cutThreshold: 42, // RGB-distance above which a boundary counts as a palette shift
   captionAnchor: 'bottom', // 'top' places the caption above the device (the bright store-shot layout)
   fit: 'cover', // screenLayer image fit: 'cover' (fill + crop) | 'contain' (whole capture, matte margins)
+
+  /* ── Device placement ────────────────────────────────────────────────────────────────────────
+   * Three knobs that decide how the phone SITS on the matte. Both stores are silent about layout
+   * (Apple's screenshot spec constrains pixel size, format and alpha and says nothing about frames,
+   * overlays or composition), so this is the axis with the most room in it and the one that most
+   * cheaply makes two listings from one house style look like two products.
+   *
+   * Every default here reproduces the previous centred-upright device exactly, so an existing
+   * config renders byte-identically until it opts in.
+   */
+  tilt: 0, // device rotation in degrees, about its own centre
+  deviceScale: 1, // multiplier on device width; >1 lets the body run off the frame edge
+  deviceY: null, // device centre as a fraction of height; null keeps the caption-aware default
 };
 
 /** The `theme`/`stillTheme` options an app author is expected to set — the doc-sync guard
@@ -58,6 +71,7 @@ export const PUBLIC_THEME_KEYS = [
   'bgTop', 'bgBottom', 'glow', 'glowAlpha', 'vignette', 'inset',
   'label', 'labelColor', 'subColor', 'handle', 'captionAnchor', 'fit',
   'headlineScale', 'frame', 'bleed', 'statusBar', 'statusBarTime', 'statusBarCellular', 'anchor',
+  'tilt', 'deviceScale', 'deviceY',
 ];
 
 /** Average RGB of a canvas (coarse grid sample) — used to decide hard-cut vs dissolve. */
@@ -250,18 +264,48 @@ export function premiumStill({ W, H, img, caption, brand, theme, frame }) {
 
   const topCaption = th.captionAnchor === 'top';
   const drawFrame = frame ? frameFor(frame) : null;
+
+  /* ONE placement transform, serving BOTH the framed device and the frameless card.
+   *
+   * It has to serve both or it serves almost nobody: `style: 'premium'` — the style store targets
+   * actually use — calls this function with no `frame` at all and takes the `screenLayer` path, so
+   * geometry living only in the framed branch would render every config that sets these knobs
+   * completely unchanged, with a green tick and no warning.
+   *
+   * The two paths park the device at different heights (the frameless card centres itself in a
+   * caption-aware band, the framed body on a fixed fraction), so `baseCy` is resolved per path and
+   * the transform rotates and scales about THAT point, then slides it to `deviceY`. Composing it
+   * this way means the knobs mean the same thing in both styles.
+   */
+  const frameless = !drawFrame;
+  const baseCy = frameless
+    ? (topCaption ? H * 0.58 : H * 0.5) // screenLayer's band centre: bandTop + bandH/2
+    : H * (topCaption ? 0.57 : 0.42);
+  const cy = th.deviceY != null ? H * th.deviceY : baseCy;
+  const scale = th.deviceScale ?? 1;
+  const tilt = ((th.tilt ?? 0) * Math.PI) / 180;
+
+  ctx.save();
+  if (tilt !== 0 || scale !== 1 || th.deviceY != null) {
+    ctx.translate(W / 2, cy);
+    ctx.rotate(tilt);
+    // The framed path takes its scale as a WIDTH so the bezel keeps its true line weight; the
+    // frameless card computes its own geometry internally, so a canvas scale is the only lever.
+    if (frameless) ctx.scale(scale, scale);
+    ctx.translate(-W / 2, -baseCy);
+  }
   if (drawFrame) {
-    const cy = H * (topCaption ? 0.57 : 0.42); // drop the device when the caption sits on top
     if (frame === 'watch') {
-      drawFrame(ctx, img, W / 2, cy, Math.min(W, H) * 0.6);
+      drawFrame(ctx, img, W / 2, baseCy, Math.min(W, H) * 0.6 * scale);
     } else {
       const budgetH = H * (topCaption ? 0.66 : 0.64); // vertical room for the device body
-      const screenW = Math.min(budgetH / (img.height / img.width), W * 0.8);
-      drawFrame(ctx, img, W / 2, cy, screenW);
+      const screenW = Math.min(budgetH / (img.height / img.width), W * 0.8) * scale;
+      drawFrame(ctx, img, W / 2, baseCy, screenW);
     }
   } else {
     ctx.drawImage(screenLayer(W, H, img, th), 0, 0);
   }
+  ctx.restore();
 
   drawLabel(ctx, W, H, caption, th, 1);
   paintVignette(ctx, W, H, th.vignette);
