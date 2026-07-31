@@ -282,7 +282,13 @@ export interface VideoSpec {
  * skips cleanly (screenshots AND videos), so a partial capture still composes what it has.
  */
 export interface DeviceGroup {
-  /** Where this device's captures live, relative to the config file. Defaults to `screenshotsDir`. */
+  /**
+   * Where this device's captures live, relative to the config file. Defaults to `screenshotsDir`.
+   *
+   * May contain a `{locale}` token (e.g. `'./captures/{locale}'`), resolved per render locale so a
+   * localized run frames that language's captures instead of re-captioning the source language. On
+   * the base pass the token resolves to `sourceLocale`.
+   */
   capturesDir?: string;
   /** Filename suffix for this device (e.g. `'-light'`). Defaults to the top-level `suffix`. */
   suffix?: string;
@@ -358,6 +364,8 @@ export interface Config {
   brand?: Brand;
   /** Default captures dir for the top-level `scenes`. Defaults to the config file's own directory. */
   screenshotsDir?: string;
+  /** What a `{locale}` token in `capturesDir` resolves to on the base pass. Defaults to `'en'`. */
+  sourceLocale?: string;
   /** Appended to `scene.id` to form the filename: `<id><suffix>.png`. */
   suffix?: string;
   /** The shared scene list — used by the top-level `targets` and by any device without its own. */

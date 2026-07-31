@@ -191,15 +191,23 @@ async function buildLocalizedScreenshots({ cfg, outDir, flags }) {
     const fellBack = new Set();
     for (const device of cfg.devices) {
       if (!device.screenshots.length) continue;
-      untranslatedScenes(device.scenes, table).forEach((id) => fellBack.add(id));
+      // Captures for THIS locale when `capturesDir` carries a `{locale}` token; otherwise the same
+      // source-language captures every locale has always used.
+      const scenes = device.scenesFor(locale);
+      untranslatedScenes(scenes, table).forEach((id) => fellBack.add(id));
       const written = await buildDeviceScreenshots({
-        device: { ...device, scenes: localizeScenes(device.scenes, table) },
+        device: { ...device, scenes: localizeScenes(scenes, table) },
         brand: localizeBrand(cfg.brand, table),
         theme: device.theme ?? cfg.stillTheme ?? cfg.theme,
         outDir: path.join(outDir, locale),
         force: !!flags.force,
       });
-      console.log(`  • ${device.name}: ${written.length}${written.length ? '' : ' — no captures found, skipped'}`);
+      // A per-locale captures dir that is simply MISSING would otherwise write nothing and say
+      // "skipped", which reads like a device this app does not ship rather than a gap in the run.
+      const miss = !written.length && device.perLocaleCaptures
+        ? ` — NO ${locale} CAPTURES (expected ${path.dirname(scenes[0]?.image ?? '')})`
+        : (written.length ? '' : ' — no captures found, skipped');
+      console.log(`  • ${device.name}: ${written.length}${miss}`);
     }
     if (fellBack.size) {
       console.log(`    ↳ ${fellBack.size} scene(s) kept the base caption (no ${locale} translation): ${[...fellBack].join(', ')}`);

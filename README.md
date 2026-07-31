@@ -190,8 +190,25 @@ zdymak capture --platform ios --bundle com.x.app --arg -screen --states a,b,c   
   the first state is already translated, and clears the override afterwards. Unlike the iOS route
   this *is* device state: if a run dies between the two, the emulator is left in that language.
 
-Capture one directory per language and point a device entry at each, the same way `--orientation`
-does.
+**Then point the renderer at those captures** with a `{locale}` token in `capturesDir`:
+
+```js
+devices: {
+  iphone: {
+    capturesDir: './captures/{locale}',            // ← resolved per render locale
+    screenshots: [{ target: 'appstore-iphone-6.9', style: 'premium' }],
+  },
+},
+sourceLocale: 'en',   // what {locale} means on the base pass, which has no locale. Default 'en'.
+```
+
+`zdymak screenshots --locale ja` then frames `./captures/ja/*.png` under the Japanese captions, so the
+picture and the headline finally agree. A `capturesDir` with no token ignores the locale entirely,
+which is what every existing config does, so nothing changes until you opt in.
+
+The token is resolved per render rather than at config load, because a scene binds its image path to
+its captures dir. A device whose per-locale directory is missing reports `NO <locale> CAPTURES` with
+the path it looked for, rather than the generic "skipped" that reads like a device you do not ship.
 
 ### `--orientation` — photograph a tablet both ways (iOS)
 

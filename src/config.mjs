@@ -29,6 +29,7 @@ const DEFAULT_BRAND = {
 export const CONFIG_KEYS = [
   'brand', 'screenshotsDir', 'suffix', 'scenes', 'targets', 'sceneDur', 'xfade',
   'timing', 'theme', 'stillTheme', 'music', 'devices', 'captions', 'reel', 'out',
+  'sourceLocale',
 ];
 
 /**
@@ -113,6 +114,8 @@ export async function loadConfig(configPath) {
 
   const screenshotsDir = raw.screenshotsDir ? path.resolve(baseDir, raw.screenshotsDir) : baseDir;
   const suffix = raw.suffix ?? '';
+  // What `{locale}` resolves to on the BASE (source-language) pass, which has no locale of its own.
+  const sourceLocale = raw.sourceLocale ?? 'en';
 
   // Top-level scenes are required UNLESS a `devices` map or a live-footage `reel` supplies the content.
   if (!raw.devices && !raw.reel && (!Array.isArray(raw.scenes) || raw.scenes.length === 0)) {
@@ -136,15 +139,36 @@ export async function loadConfig(configPath) {
 
   // Modular per-device config. An app lists ONLY the devices it ships; each has its own captures dir,
   // optional scene overrides, screenshot targets (+ style) and video targets. Missing captures skip cleanly.
+  /*
+   * `capturesDir` may carry a `{locale}` token, e.g. './captures/{locale}'.
+   *
+   * Without it a localized run translates the CAPTION and nothing else, so a fully translated app
+   * still ships every locale a picture of its source-language interface. That is worse than an
+   * untranslated set: the headline promises a localized app and the screen underneath denies it, and
+   * every file is a valid PNG of a real screen, so nothing downstream notices.
+   *
+   * The token has to be resolved per RENDER rather than at config load, because a scene's image path
+   * is bound to its captures dir here, before any locale is known. So each device keeps the raw
+   * template and hands back re-resolved scenes on demand. A dir with no token ignores the locale
+   * entirely, which is what every existing config does, so this changes nothing until it is used.
+   */
   const devices = Object.entries(raw.devices || {}).map(([name, d]) => {
-    const dir = d.capturesDir ? path.resolve(baseDir, d.capturesDir) : screenshotsDir;
+    const template = d.capturesDir ?? null;
     const suf = d.suffix ?? suffix;
+    const rawScenes = d.scenes || raw.scenes;
+    const dirFor = (locale) => (template
+      ? path.resolve(baseDir, template.replaceAll('{locale}', locale ?? sourceLocale))
+      : screenshotsDir);
     return {
       name,
-      scenes: resolveScenes(d.scenes || raw.scenes, baseDir, dir, suf),
+      scenes: resolveScenes(rawScenes, baseDir, dirFor(null), suf),
       screenshots: asList(d.screenshots),
       videos: asList(d.videos),
       theme: d.theme,
+      /** This device's scenes re-resolved against `locale`'s captures dir. */
+      scenesFor: (locale) => resolveScenes(rawScenes, baseDir, dirFor(locale), suf),
+      /** Whether this device actually keeps per-locale captures (drives the "no captures" warning). */
+      perLocaleCaptures: !!template && template.includes('{locale}'),
     };
   });
 

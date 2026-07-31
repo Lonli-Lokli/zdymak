@@ -142,7 +142,10 @@ downstream flags it, because every file is a valid PNG of a real screen.
 - **Android:** `cmd locale set-app-locales` (per-app override, **API 33+**), force-stopped so state one
   is already translated and cleared in a `finally`. This one IS device state — a run killed mid-way
   leaves the emulator in that language.
-- Capture one directory per language and give each its own `devices` entry, as with `--orientation`.
+- Capture one directory per language, then let `capturesDir: './captures/{locale}'` pick the right one
+  per render. `sourceLocale` (default `'en'`) is what `{locale}` means on the base pass. A dir with no
+  token ignores the locale, so existing configs are unaffected; a missing per-locale dir reports
+  `NO <locale> CAPTURES` with the path, rather than the generic "skipped".
 
 ### Both orientations of a tablet
 Both stores show two orientations **in one slot**, so an app whose tablet layout genuinely changes on
