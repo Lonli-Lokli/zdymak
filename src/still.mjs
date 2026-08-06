@@ -9,6 +9,7 @@
  */
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { premiumStill } from './premium.mjs';
+import { layoutStill } from './layout.mjs';
 import { drawCaption, hexA } from './canvas.mjs';
 import { loadCapture } from './statusbar.mjs';
 
@@ -64,7 +65,11 @@ function bleedStill({ W, H, img, caption, brand, theme }) {
  * density and gets scaled down with everything else — drawing it afterwards would size it to the output
  * frame and look pasted on.
  */
-export async function renderStill(style, { W, H, imgPath, caption, brand, theme, frame }) {
+export async function renderStill(style, { W, H, imgPath, caption, brand, theme, frame, members }) {
+  // A LAYOUT scene brings its own already-loaded members (several captures, each framed) instead of one
+  // capture path — so it never reaches loadCapture below, and its style is decided by the scene, not the
+  // target. See layout.mjs for why the placements are fractional.
+  if (members) return layoutStill({ W, H, members, caption, brand, theme });
   const img = await loadCapture(imgPath, theme, frame);
   if (style === 'framed') return premiumStill({ W, H, img, caption, brand, theme, frame: frame || 'phone' });
   if (style === 'premium') return premiumStill({ W, H, img, caption, brand, theme });

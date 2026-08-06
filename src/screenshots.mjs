@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { renderStill } from './still.mjs';
+import { loadLayoutMembers } from './layout.mjs';
 import { rgbPngBuffer } from './png.mjs';
 import { IMAGE_TARGETS } from './specs.mjs';
 import { inferFrame } from './frames.mjs';
@@ -80,7 +81,10 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir, for
 
     // Feature graphic (Play banner) is a single branded image, not a per-scene shot.
     if (spec.graphic) {
-      const hero = device.scenes.find((s) => fs.existsSync(s.image));
+      // `s.image` is null on a LAYOUT scene (its captures live on its members), and passing null to
+      // existsSync is a deprecation warning today and a throw in a future Node. A cluster is also the
+      // wrong thing to crop a feature graphic from, so skip those scenes outright.
+      const hero = device.scenes.find((s) => s.image && fs.existsSync(s.image));
       if (!hero) continue;
       const outFile = path.join(outDir, `${shot.target}.png`);
       await buildFeatureGraphic({ W, H, brand, theme: shot.theme || theme, heroPath: hero.image, outFile, frame: frame || 'android' });
@@ -95,7 +99,23 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir, for
 
     let n = 0;
     for (const scene of device.scenes) {
-      if (!fs.existsSync(scene.image)) continue; // graceful: this device lacks this scene's capture
+      // A LAYOUT scene composes several captures into one shot (the device-cluster page) instead of
+      // framing a single one, so it resolves its own members and skips the single-capture existence
+      // check below. It survives partial capture: absent members drop out, the rest still render, and
+      // the drops are reported rather than silently thinning the cluster.
+      let members;
+      if (scene.layout) {
+        const loaded = await loadLayoutMembers(scene.layout, {
+          W, H, theme: shot.theme || theme, exists: (p) => fs.existsSync(p),
+        });
+        if (!loaded.members.length) continue; // nothing captured yet — skip the scene, like any other
+        if (loaded.missing.length) {
+          console.log(`    layout "${scene.id || n + 1}": ${loaded.missing.length} member(s) missing, rendered without them — ${loaded.missing.join(', ')}`);
+        }
+        members = loaded.members;
+      } else if (!fs.existsSync(scene.image)) {
+        continue; // graceful: this device lacks this scene's capture
+      }
       if (!n) fs.mkdirSync(dir, { recursive: true }); // only once we have something to put in it
       n++;
       const still = await renderStill(style, {
@@ -107,6 +127,7 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir, for
         brand,
         theme: shot.theme || theme,
         frame,
+        members,
       });
       const file = path.join(dir, `${String(n).padStart(2, '0')}-${scene.id || n}.png`);
       fs.writeFileSync(file, rgbPngBuffer(still));

@@ -106,8 +106,15 @@ export type EffectId = 'none' | 'bw' | 'sepia' | 'cool' | 'vibrant' | 'soft-fade
 /** Still-rendering style. Inferred per target (framed device / premium window); override per shot. */
 export type RenderStyle = 'framed' | 'premium' | 'bleed' | 'reel';
 
-/** Device bezel drawn around a capture. Inferred from the target; override with `frame`. */
-export type FrameId = 'phone' | 'iphone' | 'android' | 'ipad' | 'tablet' | 'watch' | 'mac';
+/**
+ * Device bezel drawn around a capture. Inferred from the target; override with `frame`.
+ * `laptop`/`chromebook`/`desktop` draw a clamshell and are mainly for layout members; `mac` (and any
+ * unknown id) adds no body, since Mac captures already carry their own window chrome.
+ */
+export type FrameId =
+  | 'phone' | 'iphone' | 'android' | 'ipad' | 'tablet' | 'watch'
+  | 'laptop' | 'chromebook' | 'desktop'
+  | 'macbook' | 'mac-window' | 'mac';
 
 export interface Brand {
   /** Near-black base colour. */
@@ -188,11 +195,46 @@ export interface Theme {
   anchor?: 'center' | 'top';
 }
 
+/**
+ * One device in a LAYOUT scene's cluster. Position and size are FRACTIONS of the output canvas, never
+ * pixels, so a single layout renders correctly into every slot it is pointed at — a portrait App Store
+ * 6.9" shot and a landscape Play large-screen shot from the same few lines.
+ */
+export interface LayoutMember {
+  /** Capture id — resolves to `<capturesDir>/<id><suffix>.png`. Required unless `image` is given. */
+  id?: string;
+  /**
+   * Explicit image path (relative to the config file). Use this to pull a capture from ANOTHER
+   * platform's directory — how one cluster shows a phone, a tablet and a laptop together.
+   */
+  image?: string;
+  /** Device body to draw it in. Default `'phone'`. */
+  frame?: FrameId;
+  /** Centre X as a fraction of canvas width (0–1). Default `0.5`. */
+  x?: number;
+  /** Centre Y as a fraction of canvas height (0–1). Default `0.55`. */
+  y?: number;
+  /** SCREEN width as a fraction of canvas width (the body draws slightly wider). Default `0.3`. */
+  w?: number;
+  /** Rotation in degrees about the member's own centre. Default `0`. */
+  tilt?: number;
+  /** Per-member status-bar override; falls back to the shot's theme. */
+  statusBar?: boolean;
+}
+
 export interface Scene {
   /** Capture id — resolves to `<capturesDir>/<id><suffix>.png`. Required unless `image` is given. */
   id?: string;
   /** Explicit image path (relative to the config file), instead of `id`. */
   image?: string;
+  /**
+   * Compose SEVERAL captures into this one shot — the "works on every device" page — instead of framing
+   * a single capture. Members draw in array order: the first is furthest back, the last sits in front.
+   * A member whose capture is missing is skipped and reported; the rest still render.
+   *
+   * Replaces `id`/`image` on the scene that carries it. Screenshots only.
+   */
+  layout?: LayoutMember[];
   /** Headline. */
   title?: string;
   /** Subhead. */

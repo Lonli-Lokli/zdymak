@@ -245,7 +245,10 @@ async function cmdBuild(flags) {
   for (const device of cfg.devices) {
     // A device the app doesn't ship (or hasn't captured yet) skips cleanly — same contract as its
     // screenshots. Without this, one uncaptured device aborts the whole build for every other one.
-    const captured = device.scenes.filter((s) => fs.existsSync(s.image));
+    // LAYOUT scenes are excluded here, not merely tolerated: a device cluster is a screenshot idea, and
+    // it carries no single `image` for a video frame to animate. (Passing that null to existsSync is also
+    // a Node deprecation warning today and a throw later.)
+    const captured = device.scenes.filter((s) => !s.layout && s.image && fs.existsSync(s.image));
     if (device.videos.length) {
       if (!captured.length) {
         console.log(`  • ${device.name} videos: skipped — no captures found`);

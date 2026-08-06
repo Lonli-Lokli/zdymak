@@ -70,6 +70,18 @@ function loadCaptions(rawCaptions, baseDir) {
  */
 function resolveScenes(rawScenes, baseDir, dir, suffix) {
   return (rawScenes || []).map((s, i) => {
+    // A LAYOUT scene draws several captures at once and so has no single `image` of its own; its members
+    // carry the paths. Each member resolves like a scene would — an explicit `image` against the config
+    // file, a bare `id` against this device's captures dir — so a cluster can mix a capture from THIS
+    // platform with one shot elsewhere (`../android/captures/today-light.png`), which is the point.
+    if (s.layout) {
+      if (!Array.isArray(s.layout) || !s.layout.length) throw new Error(`Config error: scene[${i}].layout must be a non-empty array.`);
+      const layout = s.layout.map((m, j) => {
+        if (!m.image && !m.id) throw new Error(`Config error: scene[${i}].layout[${j}] needs an "id" or an "image".`);
+        return { ...m, image: m.image ? path.resolve(baseDir, m.image) : path.join(dir, `${m.id}${suffix}.png`) };
+      });
+      return { ...s, id: s.id || String(i + 1), layout, image: null, title: s.title || '', sub: s.sub || '' };
+    }
     if (!s.image && !s.id) throw new Error(`Config error: scene[${i}] needs an "id" or an "image".`);
     const image = s.image ? path.resolve(baseDir, s.image) : path.join(dir, `${s.id}${suffix}.png`);
     return { ...s, id: s.id || String(i + 1), image, title: s.title || '', sub: s.sub || '' };

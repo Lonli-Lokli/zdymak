@@ -237,8 +237,25 @@ re-encoded per locale.
   marketing look; tune via the optional `theme` block (brand-driven defaults apply if omitted). Web/social.
   Like the framed reel, it's **not** an App Preview (the matte/pill make it a marketing asset).
 
+## One shot, several devices (`layout`)
+A scene with a `layout` array composes SEVERAL captures into one screenshot — the "works on every device"
+cluster — instead of framing one. Each member has its own `image`/`id`, its own `frame`
+(`phone`/`android`/`ipad`/`tablet`/`watch`/`laptop`/`chromebook`/`mac`), and a placement given as
+FRACTIONS of the canvas: `x`, `y` (centre) and `w` (screen width). Array order is depth, first furthest
+back. The cluster is measured and auto-scaled to fill the band under the caption, so ONE layout serves a
+portrait App Store slot and a landscape Play slot without re-authoring; `theme.clusterFit: false` opts
+out. A member with no capture is skipped and reported, so it is safe to configure before every platform
+has been shot.
+
+Reach for this when the user wants a multi-device / "works everywhere" page. Do **not** hand-build such a
+composite as a pre-rendered PNG and feed it in as a normal scene — it will be drawn INSIDE whatever frame
+the target infers, i.e. a cluster of devices inside a phone bezel.
+
 ## Guardrails
 - Never submit the **device-framed** `social-reel` as an App Preview — Apple rejects device bezels there.
   Use the full-bleed `appstore-preview` for the App Store slot; `social-reel` is web/social/YouTube only.
+- A `layout` cluster is a composed graphic: fine for the App Store and your own site, **wrong for a Play
+  listing** (Google asks for interface-only shots). Never put one platform's hardware in another store's
+  listing — an Apple device cluster inside a Play listing advertises a competitor.
 - Keep any music **commercially licensed**; the engine is silent by default (previews autoplay muted).
 - Don't fabricate UI or overstate features in captions — App Review checks the preview matches the app.

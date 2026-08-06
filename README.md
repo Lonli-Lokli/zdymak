@@ -525,9 +525,55 @@ everywhere except the Play icon — zdymak always writes colour-type-2 PNG, so t
 ### Frames (`theme.frame` — normally inferred from the target)
 
 `iphone`/`phone` (Dynamic Island) · `android` (punch-hole) · `ipad`/`tablet` · `watch` (round body, crown)
-· `mac` (no bezel — the capture is already a window). Inference order: *watch|wear* → `watch`, then **any
-`play-*` target or *android*** → `android` (so `play-tablet` gets an Android body, not an iPad one), then
-*ipad|tablet* → `ipad`, then *iphone|phone* → `phone`, else none.
+· `laptop`/`chromebook`/`desktop` (clamshell, dark deck) · `macbook` (space-grey lid + aluminium deck,
+with real macOS window chrome inside) · `mac-window` (that window on its own) · `mac` (no bezel at all —
+the capture keeps its own chrome). Inference order: *watch|wear* → `watch`, then **any `play-*` target or *android*** →
+`android` (so `play-tablet` gets an Android body, not an iPad one), then *ipad|tablet* → `ipad`, then
+*iphone|phone* → `phone`, else none. The clamshell frames are never inferred — ask for one by name, which
+in practice means from a `layout` member.
+
+> `macbook`/`mac-window` crop the capture's OWN title bar (`screencapture -l` includes it) and draw a
+> consistent one, so every Mac shot carries the same chrome at the same weight. Prefer `macbook` in a
+> device cluster: bare `mac` has no body, so it floats as an anonymous screen that reads as any laptop.
+
+### `layout` — several captures in ONE shot ("works on every device")
+
+Every style above renders **one** capture per slot. A `layout` scene renders **several**: each member
+brings its own capture and its own frame, and they compose into a single device cluster under a shared
+headline. The members can come from different platforms — that is the point.
+
+```js
+scenes: [{
+  id: 'devices',
+  title: 'Your decks, every device.',
+  sub: 'Learn anywhere you are.',
+  layout: [
+    { image: './android/captures-tablet/today.png',    frame: 'tablet',  x: 0.30, y: 0.66, w: 0.34 },
+    { image: './android/captures-tablet/discover.png', frame: 'laptop',  x: 0.56, y: 0.62, w: 0.44 },
+    { image: './android/captures/study.png',           frame: 'android', x: 0.80, y: 0.72, w: 0.16 },
+  ],
+}]
+```
+
+- **`x` / `y` / `w` are FRACTIONS of the output canvas, never pixels.** One layout therefore renders into
+  a portrait App Store slot and a landscape Play large-screen slot without being re-authored.
+- **Array order is depth** — the first member is furthest back, the last sits in front. There is no
+  z-index; read the array top to bottom.
+- **The cluster auto-fits.** It is measured after drawing and scaled to fill the band under the caption,
+  so the arrangement you author survives any aspect ratio while its overall size adapts. Set
+  `theme.clusterFit: false` for raw fractions, `theme.clusterPad` to change the margin (default `0.06`).
+- **Members degrade individually.** One whose capture is missing is skipped, the rest still render, and
+  the drop is printed — a cluster is safe to configure before every platform has been captured.
+- **`frame: 'mac'`** (or any unframed id) draws the capture with no added body, for captures that already
+  carry their own window chrome.
+
+> A cluster laid out side by side fills a landscape slot well and leaves vertical air in a tall portrait
+> one — that is geometry, not a bug. When a portrait slot deserves a different arrangement, give that
+> device its own `scenes` with a stacked layout; the auto-fit handles the rest.
+>
+> A cluster is a *composed graphic*, so it belongs in an **App Store** set or on your own site — **not**
+> in a Play listing, where Google asks for interface-only shots. And keep it honest per store: a cluster
+> of Apple hardware inside a Play listing advertises a competitor's platform.
 
 > **Two compliance rules worth repeating**, because they pull in opposite directions:
 > **Apple** wants an App Preview to be footage *from inside the app* with no device frame — use

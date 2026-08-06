@@ -109,13 +109,13 @@ function coverCanvas(img, W, H) {
 }
 
 /** Paint the matte background (gradient + radial brand glow) onto the frame ctx. */
-function paintMatte(ctx, W, H, th) {
+export function paintMatte(ctx, W, H, th) {
   fillVerticalGradient(ctx, W, H, th.bgTop, th.bgBottom);
   radialGlow(ctx, W * 0.5, H * 0.4, W * 0.85, th.glow, th.glowAlpha);
 }
 
 /** Radial vignette (transparent centre → dark edges) over the whole frame. */
-function paintVignette(ctx, W, H, strength) {
+export function paintVignette(ctx, W, H, strength) {
   if (strength <= 0) return;
   const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.72);
   g.addColorStop(0, 'rgba(0,0,0,0)');
@@ -125,7 +125,7 @@ function paintVignette(ctx, W, H, strength) {
 }
 
 /** Bottom title pill + subtitle (Apple launch-montage label), fixed position, own fade. */
-function drawLabel(ctx, W, H, caption, th, alpha) {
+export function drawLabel(ctx, W, H, caption, th, alpha) {
   if (alpha <= 0.01 || (!caption.title && !caption.sub)) return;
   ctx.save();
   ctx.globalAlpha = alpha;
@@ -185,7 +185,7 @@ function drawLabel(ctx, W, H, caption, th, alpha) {
 }
 
 /** Persistent top handle (optional brand chrome). */
-function drawHandle(ctx, W, H, text, color) {
+export function drawHandle(ctx, W, H, text, color) {
   if (!text) return;
   ctx.save();
   ctx.textAlign = 'center';
