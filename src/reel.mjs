@@ -112,11 +112,11 @@ function drawPhone(ctx, screen, cx, cy, screenW) {
 }
 
 /** Icon + wordmark centred at (cx, y). */
-function drawLockup(ctx, logo, cx, y, iconSize, textSize, name, color) {
+function drawLockup(ctx, logo, cx, y, iconSize, textSize, name, color, gapRatio) {
   ctx.font = font(textSize, 'bold');
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
-  const gap = Math.round(iconSize * 0.32);
+  const gap = Math.round(iconSize * (Number.isFinite(gapRatio) ? gapRatio : 0.32));
   const textW = ctx.measureText(name).width;
   const hasIcon = !!logo;
   const total = (hasIcon ? iconSize + gap : 0) + textW;
@@ -220,7 +220,7 @@ function renderColdOpen(W, H, logo, brand, p, S) {
   const c = createCanvas(W, H);
   const ctx = c.getContext('2d');
   backgroundDark(ctx, W, H, p);
-  drawLockup(ctx, logo, W / 2, H * 0.42, Math.round(200 * S), Math.round(138 * S), brand.name, p.bookendTitle);
+  drawLockup(ctx, logo, W / 2, H * 0.42, Math.round(200 * S), Math.round(138 * S), brand.name, p.bookendTitle, brand.lockupGap);
   if (brand.tagline) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
@@ -235,7 +235,7 @@ function renderEndCard(W, H, logo, brand, p, S) {
   const c = createCanvas(W, H);
   const ctx = c.getContext('2d');
   backgroundDark(ctx, W, H, p);
-  drawLockup(ctx, logo, W / 2, H * 0.4, Math.round(180 * S), Math.round(124 * S), brand.name, p.bookendTitle);
+  drawLockup(ctx, logo, W / 2, H * 0.4, Math.round(180 * S), Math.round(124 * S), brand.name, p.bookendTitle, brand.lockupGap);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   if (brand.endline) {

@@ -52,33 +52,60 @@ export async function buildFeatureGraphic({ W = 1024, H = 500, brand, theme, her
 
   const leftX = 72;
   const iconSize = 92;
+  // Shifts the whole left-hand block — lockup, tagline, endline — down together. The default
+  // layout hangs it from the top, which leaves a game with a short tagline sitting in the upper
+  // corner with the bottom third of the graphic empty. One offset rather than four so the block
+  // keeps its own internal spacing.
+  const textY = Number.isFinite(brand.textOffsetY) ? brand.textOffsetY : 0;
   const logo = brand.logo && fs.existsSync(brand.logo) ? await loadImage(brand.logo) : null;
   if (logo) {
     ctx.save();
-    roundRectPath(ctx, leftX, 70, iconSize, iconSize, iconSize * 0.22);
+    roundRectPath(ctx, leftX, 70 + textY, iconSize, iconSize, iconSize * 0.22);
     ctx.clip();
-    ctx.drawImage(logo, leftX, 70, iconSize, iconSize);
+    ctx.drawImage(logo, leftX, 70 + textY, iconSize, iconSize);
     ctx.restore();
   }
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.font = font(76, 'bold');
   ctx.fillStyle = brand.title;
-  ctx.fillText(brand.name || 'App', leftX + (logo ? iconSize + 26 : 0), 70 + iconSize / 2 + 4);
+  const lockupGap = Number.isFinite(brand.lockupGap) ? iconSize * brand.lockupGap : 26;
+  ctx.fillText(brand.name || 'App', leftX + (logo ? iconSize + lockupGap : 0), 70 + textY + iconSize / 2 + 4);
 
   ctx.textBaseline = 'top';
   const [t1, t2] = splitTagline(brand.tagline);
   ctx.font = font(48, 'bold');
   ctx.fillStyle = brand.title;
-  if (t1) ctx.fillText(t1, leftX, 220);
+  if (t1) ctx.fillText(t1, leftX, 220 + textY);
   if (t2) {
     ctx.fillStyle = brand.sub;
-    ctx.fillText(t2, leftX, 278);
+    ctx.fillText(t2, leftX, 278 + textY);
   }
   if (brand.endsub) {
     ctx.font = font(28, 'regular');
     ctx.fillStyle = hexA(brand.sub, 0.85);
-    ctx.fillText(brand.endsub, leftX, 352);
+    ctx.fillText(brand.endsub, leftX, 352 + textY);
+  }
+
+  const fan = (brand.fan || []).filter((f) => fs.existsSync(f));
+  if (fan.length) {
+    const spread = brand.fanSpread ?? 0.17;
+    const cx = brand.fanX ?? W * 0.55;
+    const cy = brand.fanY ?? H * 0.92;
+    const h = brand.fanHeight ?? 300;
+    const mid = (fan.length - 1) / 2;
+    for (let i = 0; i < fan.length; i++) {
+      const img = await loadImage(fan[i]);
+      const w = (img.width / img.height) * h;
+      ctx.save();
+      ctx.translate(cx + (i - mid) * (w * 0.52), cy);
+      ctx.rotate((i - mid) * spread);
+      ctx.shadowColor = 'rgba(0,0,0,0.35)';
+      ctx.shadowBlur = 18;
+      ctx.shadowOffsetY = 6;
+      ctx.drawImage(img, -w / 2, -h, w, h);
+      ctx.restore();
+    }
   }
 
   if (heroPath && fs.existsSync(heroPath)) {

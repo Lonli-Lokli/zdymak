@@ -135,6 +135,31 @@ export interface Brand {
   endsub?: string;
   /** Logo path (relative to the config file) for the reel + feature graphic. */
   logo?: string | null;
+  /**
+   * Feature graphic: shifts the whole left-hand block — lockup, tagline, endline — down by this
+   * many pixels, keeping its internal spacing. The default layout hangs the block from the top,
+   * which strands a short tagline in the upper corner with the bottom third empty. Default 0.
+   */
+  textOffsetY?: number;
+  /**
+   * Gap between the icon and the wordmark, as a fraction of the icon's size. Applies to the feature
+   * graphic and to the reel's cold-open and end-card, so one value keeps the lockup consistent
+   * across both. Defaults to 0.32 on the reel, and to a flat 26px on the feature graphic.
+   */
+  lockupGap?: number;
+  /**
+   * Feature graphic: images fanned out like a hand of cards — each rotated a little further from
+   * the middle, overlapped, and drop-shadowed. Paths relative to the config file; ones that do not
+   * exist are skipped rather than failing the build.
+   */
+  fan?: string[];
+  /** Radians of rotation between neighbouring [fan] images. Default 0.17. */
+  fanSpread?: number;
+  /** Centre of the [fan], in pixels. Default: 55% across, 92% down. */
+  fanX?: number;
+  fanY?: number;
+  /** Height of each [fan] image in pixels; width follows its aspect ratio. Default 300. */
+  fanHeight?: number;
 }
 
 /**
