@@ -322,6 +322,9 @@ swapping in one frame late is the classic cause of a mystery screenshot diff.
 | `brand.fontPaths` | Optional custom TTFs (else: system font — San Francisco on macOS). |
 | `brand.name` / `.tagline` / `.endline` / `.endsub` / `.logo` | **Reel target only** — wordmark, cold-open tagline, end-card lines, and the icon PNG for the device-framed `social-reel` bookends. |
 | `brand.reel` | **Reel target only** — optional palette overrides (`bgTop`, `bgBottom`, `glowLight`, `matteTop`, `matteBottom`, `glowDark`, `titleColor`, `subColor`, `bookendTitle`, `bookendSub`). |
+| `brand.fan` + `.fanSpread` / `.fanX` / `.fanY` / `.fanHeight` | **Feature graphic only** — images fanned out like a hand of cards: each rotated a little further from the middle, overlapped and drop-shadowed. For a game whose graphic sells a deck rather than a screen. Missing files are skipped, not fatal. Defaults: 0.17 rad between neighbours, centred 55% across and 92% down, 300px tall. |
+| `brand.textOffsetY` | **Feature graphic only** — shifts the whole left-hand block (lockup, tagline, endline) down together, keeping its internal spacing. The default hangs it from the top, which strands a short tagline in the upper corner with the bottom third empty. |
+| `brand.lockupGap` | Icon-to-wordmark gap as a fraction of the icon size, applied to the feature graphic **and** the reel's cold-open and end-card, so one value keeps the lockup consistent across both. Default 0.32 on the reel. |
 | `screenshotsDir` + `suffix` | Resolve `scene.id` → `${screenshotsDir}/${id}${suffix}.png`. |
 | `scenes[]` | `{ id \| image, title, sub, move }`. `image` overrides the id lookup. |
 | `scenes[].move` | `pushIn` · `pushInSlow` · `pullBack` · `pullBackSlow` · `driftUp` · `driftDown` · `driftLeft` · `driftRight` · `still`. Omit to auto-vary. |

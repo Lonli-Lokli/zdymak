@@ -231,7 +231,14 @@ re-encoded per locale.
 ## Three styles (fixed per target; all read the same `scenes`)
 - **Full-bleed** (`appstore-preview`, `play-promo`) — screen fills the frame; required for App Previews.
 - **Device-framed** (`social-reel`) — iPhone bezel + brand background + logo cold-open/end-card
-  (needs `brand.name/tagline/endline/logo`). Web/social/YouTube.
+  (needs `brand.name/tagline/endline/logo`). Web/social/YouTube. `brand.lockupGap` tunes the
+  icon-to-wordmark gap here and on the feature graphic at once.
+
+The **feature graphic** takes `brand.fan` — a list of images fanned out like a hand of cards, each
+rotated further from the middle, overlapped and drop-shadowed — for a game selling a deck rather
+than a screen (`fanSpread`, `fanX`, `fanY`, `fanHeight` place it). `brand.textOffsetY` shifts the
+whole left-hand block down together when a short tagline would otherwise strand it in the top
+corner.
 - **Premium** (`premium-reel`) — the **Apple editing-vocabulary** preset: matte + glow + vignette,
   motion-then-freeze spring dolly, **palette-aware cuts**, bottom title pill. This is the default premium
   marketing look; tune via the optional `theme` block (brand-driven defaults apply if omitted). Web/social.
