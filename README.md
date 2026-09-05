@@ -472,9 +472,30 @@ Every asset is re-measured **after** it's written — `ffprobe` for video, the P
   Fix the config, or pass --force to write it regardless.
 ```
 
-Checked: exact pixel size (or one of the accepted sizes), duration window, alpha where forbidden, and the
-file cap (500 MB for App Previews, 1 MB for the Play icon). It reads the artefact rather than trusting
-our intent, so a renderer or encoder bug is caught too. `--force` downgrades it to a warning.
+Checked: exact pixel size (or one of the accepted sizes), duration window, alpha where forbidden, the
+file cap (500 MB for App Previews, 1 MB for the Play icon) — and whether **there is a screen in the
+screenshot**. It reads the artefact rather than trusting our intent, so a renderer or encoder bug is
+caught too. `--force` downgrades it to a warning.
+
+The blank check is on the **capture**, not the composed still, and runs before anything is framed.
+One shipped without it — a device frame containing pure white and a status bar, composed from a
+capture that came back empty, written with a tick and uploaded to a version that reached App Store
+review. zdymak was not wrong to write it: a capture tool photographs what the app draws and cannot
+know what it should have drawn. But nothing in the chain was looking at the pixels.
+
+Measuring the composed still was tried first and does not work. A still is a device frame on a
+background under a caption, so any measurement of it depends on the composition — a wide crop
+catches the background gradient (zdymak's own inset demo layout scores 204 on a frame whose screen
+is pure white), and a tight crop catches only screen, where a genuinely sparse screenshot is
+indistinguishable from an empty one. Across the portfolio there is no crop at which every blank
+scores below every real screen: the quietest real one lands on 9, exactly where the blanks are.
+
+A capture has no frame, background or caption — it is the app's screen and nothing else — so it
+needs no crop and no assumption about layout. Two signals, because either alone has a false
+positive: **under 400 distinct colours** *and* **over 95% a single colour**. A minimal screen can be
+low on colours and a splash can be flat, but a screen that is both drew nothing. Measured: blanks at
+1 and 199 colours / 100% and 98.7%; real screens at 781–4727 / 78% down to 9%. `--force` writes it
+anyway, like every other rule here.
 
 <br>
 

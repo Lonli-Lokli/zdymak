@@ -12,7 +12,7 @@ import { rgbPngBuffer } from './png.mjs';
 import { IMAGE_TARGETS } from './specs.mjs';
 import { inferFrame } from './frames.mjs';
 import { buildFeatureGraphic, buildAppIcon } from './graphic.mjs';
-import { validateImage } from './validate.mjs';
+import { validateImage, validateCapture } from './validate.mjs';
 
 /**
  * Apply a locale's caption table to a scene list. A scene the locale doesn't translate keeps its base
@@ -115,6 +115,11 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir, for
         members = loaded.members;
       } else if (!fs.existsSync(scene.image)) {
         continue; // graceful: this device lacks this scene's capture
+      } else {
+        // The capture exists — but is there a screen in it? Checked HERE, on the input, because a
+        // composed still cannot be measured reliably (see validateCapture). Failing before the
+        // compose also means the error names the capture to redo rather than the output to discard.
+        await validateCapture({ file: scene.image, force });
       }
       if (!n) fs.mkdirSync(dir, { recursive: true }); // only once we have something to put in it
       n++;
