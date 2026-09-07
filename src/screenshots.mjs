@@ -58,6 +58,23 @@ export function targetSize(spec, override) {
   throw new Error('screenshot target has no resolvable size');
 }
 
+/**
+ * A shot's theme, merged over the config's rather than replacing it.
+ *
+ * This was `shot.theme || theme`, and the `||` was the bug: an entry saying `theme: { anchor:
+ * 'top' }` meant "and anchor at the top", and got "and forget the palette, the vignette and the
+ * status-bar setting" — every key the config had set fell back to `DEFAULT_THEME`.
+ *
+ * It surfaced as **two status bars**. A config had `statusBar: false` because its captures
+ * already carry the device's own; the two Play entries that also set `anchor` lost it, fell back
+ * to `'auto'`, and had a second clock and battery painted above the real one. The styled entries
+ * beside them had no `theme` of their own and came out right, which is what made it look like a
+ * Play-specific fault rather than a merge.
+ */
+function shotTheme(theme, shot) {
+  return shot.theme ? { ...theme, ...shot.theme } : theme;
+}
+
 /** Build every screenshot for one resolved device group → array of written file paths. */
 export async function buildDeviceScreenshots({ device, brand, theme, outDir, force }) {
   const written = [];
@@ -73,7 +90,7 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir, for
     // The app icon is a branded square built from brand.logo — and the only target that keeps alpha.
     if (spec.icon) {
       const outFile = path.join(outDir, `${shot.target}.png`);
-      await buildAppIcon({ W, H, brand, theme: shot.theme || theme, outFile });
+      await buildAppIcon({ W, H, brand, theme: shotTheme(theme, shot), outFile });
       validateImage({ file: outFile, destination: spec, size: [W, H], force });
       written.push({ file: outFile, W, H, style: 'icon' });
       continue;
@@ -87,7 +104,7 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir, for
       const hero = device.scenes.find((s) => s.image && fs.existsSync(s.image));
       if (!hero) continue;
       const outFile = path.join(outDir, `${shot.target}.png`);
-      await buildFeatureGraphic({ W, H, brand, theme: shot.theme || theme, heroPath: hero.image, outFile, frame: frame || 'android' });
+      await buildFeatureGraphic({ W, H, brand, theme: shotTheme(theme, shot), heroPath: hero.image, outFile, frame: frame || 'android' });
       validateImage({ file: outFile, destination: spec, size: [W, H], force });
       written.push({ file: outFile, W, H, style: 'graphic' });
       continue;
@@ -106,7 +123,7 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir, for
       let members;
       if (scene.layout) {
         const loaded = await loadLayoutMembers(scene.layout, {
-          W, H, theme: shot.theme || theme, exists: (p) => fs.existsSync(p),
+          W, H, theme: shotTheme(theme, shot), exists: (p) => fs.existsSync(p),
         });
         if (!loaded.members.length) continue; // nothing captured yet — skip the scene, like any other
         if (loaded.missing.length) {
@@ -130,7 +147,7 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir, for
         caption: shot.caption === false ? { title: '', sub: '' } : { title: scene.title || '', sub: scene.sub || '' },
         imgPath: scene.image,
         brand,
-        theme: shot.theme || theme,
+        theme: shotTheme(theme, shot),
         frame,
         members,
       });
