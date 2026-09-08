@@ -35,6 +35,15 @@ export type ImageTargetId =
   | 'appstore-ipad-13-landscape'
   | 'appstore-watch'
   | 'appstore-mac'
+  /**
+   * The App Review Screenshot on an IN-APP PURCHASE — a different slot from the listing ones, and
+   * an older size table behind it. 1290x2796 and 1320x2868 are both refused there ("The dimensions
+   * of one or more screenshots are wrong") even though Apple lists both as valid 6.9" sizes and the
+   * listing slots take them; 640x920 is this target's default for that reason.
+   */
+  | 'appstore-iap-review'
+  /** The OPTIONAL 1024x1024 promotional image for an in-app purchase, flattened as Apple asks. */
+  | 'appstore-iap-promo'
   | 'play-phone'
   | 'play-tablet'
   /** The SAME two Play tablet slots as `play-tablet`, upright — capture with `--size 1600x2560`. */
@@ -70,6 +79,19 @@ export interface ImageTargetSpec {
   format: 'png';
   /** A single branded banner (the Play feature graphic), not a per-scene shot. */
   graphic?: boolean;
+  /** A branded SQUARE built from `brand.logo` — the Play icon and Apple's in-app purchase image. */
+  icon?: boolean;
+  /** Size cap the store enforces, in bytes. */
+  maxBytes?: number;
+  /**
+   * The interface alone — no bezel, no headline, no matte, whatever the target's name suggests.
+   *
+   * For a slot that is not a shop window. An in-app purchase review screenshot is looked at once,
+   * by a reviewer asking where in the app the item appears, and marketing furniture is an answer
+   * to a question nobody asked. Sets the default style to `bleed` and drops the caption; a shot
+   * can still override the style explicitly.
+   */
+  plain?: boolean;
   label: string;
 }
 

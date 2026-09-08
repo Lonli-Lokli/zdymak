@@ -406,6 +406,21 @@ rejects bezels here, which is why `social-reel` must never go in this slot.
 > **The iPad trap:** the iPad *preview* is 1200×1600 — nothing like the 2064×2752 iPad *screenshot*.
 > Submitting the screenshot dimensions as a preview is a routine rejection.
 
+### App Store — in-app purchase images
+
+An in-app purchase has **two image slots of its own**, on the purchase rather than on the listing, and
+only one of them is required.
+
+| Asset | Size | Required? | Target |
+|---|---|---|---|
+| App Review Screenshot | 640×920 *(see the trap below)* | **required** to submit the purchase | `appstore-iap-review` |
+| Promotional image | 1024×1024, 72 dpi, RGB, **flattened, no rounded corners** | only to promote the purchase on the product page, or for win-back offers | `appstore-iap-promo` |
+
+The review screenshot is **never shown to a customer** — a reviewer looks at it once to see where in
+the app the item appears — so `appstore-iap-review` renders the interface alone: no bezel, no headline,
+no matte. Win-back offers are an auto-renewable subscription feature, so a consumable or a
+non-consumable can leave the promotional slot empty and submit fine.
+
 ### Google Play — images
 
 | Asset | Size | Required? | Target |
@@ -527,6 +542,8 @@ specifications* and Google's *Add preview assets* pages.
 | `appstore-ipad-13-landscape` | 2752×2064 | the same iPad slot, turned | Optional — only if the layout actually changes on rotation (see `--orientation`) |
 | `appstore-mac` | 2880×1800 | Mac (16:10) | **Required** for Mac apps |
 | `appstore-watch` | 422×514 *(or 410×502 · 416×496 · 396×484 · 368×448 · 312×390)* | Apple Watch — Ultra 3 / Ultra 2 / Series 11 / 10 / 9…3 | **Required** for Watch apps. Pick ONE size and use it in every localization |
+| `appstore-iap-review` | 640×920 *(or 1242×2208 · 1284×2778 · 1242×2688 · 750×1334 · 640×1136 · 640×960 · 1024×768 · 2048×1536)* | The **App Review Screenshot** on an in-app purchase | **Required** to submit an IAP. Not a listing slot — see the warning below |
+| `appstore-iap-promo` | 1024×1024 | The **promotional image** on an in-app purchase | Optional — only if you promote the purchase on the product page, or run win-back offers. Flattened RGB, from `brand.logo` |
 | `play-phone` | 1080×1920 | Play phone | 2–8 per form factor; 320–3840 px per side, max 2:1 |
 | `play-tablet` | 2560×1440 | Play 7"/10" tablet + Chromebook | Recommended for large-screen visibility |
 | `play-tablet-portrait` | 1600×2560 | the same two Play slots, upright | Optional — capture with `--size 1600x2560`, not by rotating |
@@ -537,6 +554,15 @@ specifications* and Google's *Add preview assets* pages.
 
 Apple takes 1–10 screenshots per device type; Google takes 2–8 per form factor. Both reject transparency
 everywhere except the Play icon — zdymak always writes colour-type-2 PNG, so that's handled.
+
+> **The in-app purchase trap:** an IAP's App Review Screenshot looks like a listing screenshot and is
+> validated against a different, older table. App Store Connect's help says only that it must "meet any
+> of the screenshot specifications your app supports" — but **1290×2796 and 1320×2868 are both refused
+> there** with *"The dimensions of one or more screenshots are wrong"*, while the listing slots take
+> them without complaint. The purchase form predates those display classes. That is why
+> `appstore-iap-review` is its own target rather than a `size:` on a listing one, and why it defaults
+> to **640×920** — the size Apple's own IAP documentation asked for when the slot was built. If that
+> is refused too, work along its accepted list; they are ordered oldest-first on purpose.
 
 ### Styles (`style` on a shot — normally inferred)
 

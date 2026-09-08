@@ -39,6 +39,7 @@ get rejected or quietly under-perform.
 | A cinematic showcase | `premium-reel` | premium matte | Override `size` for landscape (Mac: `[2880, 1800]`). |
 | **App Store** screenshots | `appstore-iphone-6.9` (+`-6.5`), `appstore-ipad-13` (+`-landscape`), `appstore-mac`, `appstore-watch` | framed (inferred) | Marketing styling is **expected** here: frames, headlines, backgrounds. iPad/Mac/Watch shots are *required* if the app ships there. Pick ONE Watch size and keep it across localizations. |
 | **Google Play** screenshots | `play-phone`, `play-tablet` (+`-portrait`), `play-wear`, `play-feature-graphic` | `bleed` + `caption: false` for the upload | Google forbids device frames, added text and backgrounds on store screenshots (hard requirement for Wear OS). Render a plain set for upload and a styled set for the website — `dir` keeps both. The feature graphic is **required** even without a video. |
+| An **in-app purchase** review screenshot | `appstore-iap-review` | interface only (automatic) | Its own slot with its own OLDER size table — the listing sizes are refused. Defaults to 640×920; never pass a listing target's `size:` here. `appstore-iap-promo` is the optional 1024×1024 companion. |
 | Web-app screenshots | any target, captured with `--platform web` | as above | Playwright driver; states are URL paths. |
 
 Exact dimensions live in `zdymak specs` (printed from the code, so it can't drift). They're checked
@@ -193,6 +194,14 @@ use it in every locale).
 device frame. iPhone 886×1920 (`appstore-preview`) · **iPad 1200×1600** (`appstore-preview-ipad`) · Mac
 1920×1080 landscape (`appstore-preview-mac`). The iPad preview is NOT the iPad screenshot size — that
 mismatch is a routine rejection.
+**In-app purchase images** are a SEPARATE pair of slots, on the purchase and not on the listing:
+`appstore-iap-review` (**required** to submit an IAP) and `appstore-iap-promo` (1024×1024, flattened RGB,
+optional — only to promote the purchase on the product page; win-back offers are subscriptions-only).
+**The review screenshot is validated against an older table than the listing slots**: 1290×2796 and
+1320×2868 are refused there with "The dimensions of one or more screenshots are wrong" while the listing
+slots take them happily, so it defaults to **640×920** and never borrows a `size:` from a listing target.
+It is review-only and never shown to a customer, so it renders the interface alone — no frame, no
+caption, no matte.
 **Play images** JPEG/24-bit PNG, no alpha: phone 1080×1920 (2–8, max 2:1, 320–3840px) · tablet 2560×1440
 · Wear 1080×1080 1:1 (required for Wear) · feature graphic 1024×500 (**required**) · icon 512×512 ≤1MB
 (alpha OK). Wear OS: interface only (requirement). Phone/tablet: frames recommended against, taglines ≤20% allowed.

@@ -103,6 +103,32 @@ export const VIDEO_TARGETS = {
 export const IMAGE_TARGETS = {
   'appstore-iphone-6.9': { store: 'App Store', w: 1320, h: 2868, accepts: [[1320, 2868], [1290, 2796], [1260, 2736]], alpha: false, format: 'png', label: 'iPhone 6.9" (largest — Apple scales down for smaller iPhones; also accepts 1290×2796 and 1260×2736)' },
   'appstore-iphone-6.5': { store: 'App Store', accepts: [[1242, 2688], [1284, 2778]], alpha: false, format: 'png', label: 'iPhone 6.5" (accepts 1242×2688 or 1284×2778)' },
+
+  /**
+   * The App Review Screenshot on an IN-APP PURCHASE — a different slot, with a different table.
+   *
+   * It looks like a listing screenshot and is not one. App Store Connect's help says only that it
+   * must "meet any of the screenshot specifications your app supports", which reads as though the
+   * targets above would do — and they do not. **1290×2796 and 1320×2868 are both refused**, with
+   * "The dimensions of one or more screenshots are wrong", and both are sizes Apple's own
+   * screenshot specification lists for the 6.9" class and which the LISTING slots take without
+   * complaint. The purchase form is older than the listing form and validates against an older
+   * subset, so the newest display classes are exactly the ones it has never heard of.
+   *
+   * That is why this is its own target rather than a `size:` on a listing one. A store spec that
+   * differs by slot is precisely what this table exists to carry, and borrowing the neighbouring
+   * slot's sizes is how the wrong one gets chosen while looking documented.
+   *
+   * 640×920 leads: it is a real screenshot specification (Apple's 3.5" class), it is the size
+   * Apple's in-app purchase documentation asked for when this slot was built, and it is what
+   * people report being accepted after working down from the modern sizes. The rest are
+   * long-lived iPhone and iPad sizes that predate the failures — an app whose screen is nothing
+   * like 0.7:1 can pick one closer to its own shape.
+   *
+   * The image is never shown to a customer; it exists so a reviewer can see the item being
+   * offered. So it wants no bezel, no headline and no matte, which is what [plain] says.
+   */
+  'appstore-iap-review': { store: 'App Store', w: 640, h: 920, accepts: [[640, 920], [1242, 2208], [1284, 2778], [1242, 2688], [750, 1334], [640, 1136], [640, 960], [1024, 768], [2048, 1536]], alpha: false, format: 'png', plain: true, label: 'In-app purchase REVIEW screenshot (640×920 — review-only, never shown on the App Store; the purchase form refuses the newest listing sizes)' },
   'appstore-ipad-13': { store: 'App Store', w: 2064, h: 2752, alpha: false, format: 'png', label: 'iPad 13" (largest iPad class)' },
   // THE SAME SLOT, TURNED — not a second one. Both stores accept either orientation for a tablet
   // display type and will show both in one set, so an app whose tablet layout genuinely CHANGES on
@@ -123,6 +149,20 @@ export const IMAGE_TARGETS = {
   'play-wear': { store: 'Google Play', w: 1080, h: 1080, alpha: false, format: 'png', label: 'Play Wear OS (1:1 square, 384–3840px, no alpha)' },
   'play-feature-graphic': { store: 'Google Play', w: 1024, h: 500, alpha: false, format: 'png', graphic: true, label: 'Play feature graphic (1024×500, no alpha) — brand banner, not a per-scene shot' },
   'play-icon': { store: 'Google Play', w: 512, h: 512, alpha: true, format: 'png', graphic: true, icon: true, maxBytes: 1024 * 1024, label: 'Play app icon (512×512, 32-bit PNG — the one asset where alpha is allowed; ≤1MB). Built from brand.logo.' },
+
+  /**
+   * The OTHER in-app purchase image, and the optional one.
+   *
+   * Required only to promote the purchase on the app's own product page, or for win-back offers on
+   * an auto-renewable subscription — so an app that does neither leaves the slot empty and submits
+   * fine. Apple's requirements are exact, and unusually specific about the two things a canvas
+   * gets wrong by default: 1024×1024, 72 dpi, RGB, **flattened**, and **no rounded corners**.
+   *
+   * Built from `brand.logo` like the Play icon, and `alpha: false` is the difference that matters:
+   * the icon target keeps transparency because Play masks it to its own shape, and this one must
+   * not, because Apple asks for it flattened.
+   */
+  'appstore-iap-promo': { store: 'App Store', w: 1024, h: 1024, alpha: false, format: 'png', graphic: true, icon: true, label: 'In-app purchase PROMOTIONAL image (1024×1024, flattened RGB, no rounded corners) — optional, and only if the purchase is promoted on the product page' },
   // Not a store asset — the picture every LINK to the game shows. Same branded banner the Play
   // feature graphic uses, at the aspect the social platforms crop to, so a game gets one from the
   // pipeline it already runs instead of someone exporting a one-off by hand and letting it go stale.

@@ -127,30 +127,46 @@ export async function buildFeatureGraphic({ W = 1024, H = 500, brand, theme, her
 
 
 /**
- * The Play app icon — 512×512, 32-bit PNG, alpha allowed (the ONE store asset where it is).
+ * A branded square built from `brand.logo` — the Play app icon, and Apple's in-app purchase image.
  *
- * This is a branded graphic, not a per-scene screenshot: it renders `brand.logo` on the brand ground,
- * which is why the target carries `graphic: true`. If no logo is configured we refuse rather than emit a
- * blank square — a silently-empty icon is worse than a clear error at build time.
+ * One drawing, two destinations that disagree about exactly one thing. **Play's icon keeps its
+ * alpha** — it is the one store asset where transparency is legal, because Play masks the icon to
+ * its own shape and a squared-off corner would be baked in otherwise. **Apple's in-app purchase
+ * promotional image must be flattened** ("72 dpi, RGB, flattened and no rounded corners"), so it
+ * is painted onto the brand ground first and written through the RGB encoder.
+ *
+ * [flatten] is passed from the destination's own `alpha` rather than guessed here, so the rule
+ * lives in the spec table with every other thing a store insists on.
+ *
+ * This is a branded graphic, not a per-scene screenshot, which is why both targets carry
+ * `graphic: true`. If no logo is configured we refuse rather than emit a blank square — a
+ * silently-empty icon is worse than a clear error at build time.
  */
-export async function buildAppIcon({ W = 512, H = 512, brand, theme, outFile }) {
+export async function buildAppIcon({ W = 512, H = 512, brand, theme, outFile, flatten = false }) {
   const th = ground(theme);
   if (!brand.logo || !fs.existsSync(brand.logo)) {
     throw new Error(
-      "play-icon needs `brand.logo` — a square PNG of your app icon. Set it, or drop the 'play-icon' target " +
-      '(Play also accepts the icon uploaded straight to the Console, so this target is a convenience).',
+      "this target needs `brand.logo` — a square PNG of your app icon. Set it, or drop the target " +
+      '(both stores also accept the image uploaded straight to the console, so this is a convenience).',
     );
   }
   const c = createCanvas(W, H);
   const ctx = c.getContext('2d');
+  // Only where alpha is forbidden: a logo with transparency would otherwise be composited against
+  // nothing and arrive black, which is a worse failure than the one being prevented.
+  if (flatten) {
+    ctx.fillStyle = th.ink;
+    ctx.fillRect(0, 0, W, H);
+  }
   const logo = await loadImage(brand.logo);
   // Fill the square: Play shows the icon masked to its own shape, so bleed to the edges and let the
-  // store apply the mask. Any transparency in the source logo is preserved (alpha is legal here).
+  // store apply the mask. Any transparency in the source logo is preserved where alpha is legal.
   const a = logo.height / logo.width;
   let dw = W;
   let dh = W * a;
   if (dh < H) { dh = H; dw = H / a; }
   ctx.drawImage(logo, (W - dw) / 2, (H - dh) / 2, dw, dh);
-  fs.writeFileSync(outFile, c.toBuffer('image/png')); // RGBA — do NOT route through rgbPngBuffer
+  // `rgbPngBuffer` drops the alpha channel; the icon must NOT go through it.
+  fs.writeFileSync(outFile, flatten ? rgbPngBuffer(c) : c.toBuffer('image/png'));
   return { outFile, W, H };
 }

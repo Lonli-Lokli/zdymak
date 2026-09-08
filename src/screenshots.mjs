@@ -85,12 +85,20 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir, for
     const frame = shot.frame || inferFrame(shot.target); // device bezel for the `framed` style
     // Infer the style from the target: a framed device (phone/tablet/watch) → 'framed'; a frameless
     // target (Mac/desktop) → 'premium' (window on the matte). Overridable per shot (e.g. Watch → 'bleed').
-    const style = shot.style || (frame ? 'framed' : 'premium');
+    //
+    // A `plain` destination is neither: the interface alone, because the slot is not a shop window.
+    // An in-app purchase review screenshot is looked at once by a reviewer asking "where is this in
+    // the app", and a bezel or a headline is an answer to a question nobody asked. Still overridable
+    // per shot, but the default has to be right — `inferFrame` finds no device in the target's name
+    // and would otherwise fall through to `premium`, putting the app on a marketing matte.
+    const style = shot.style || (spec.plain ? 'bleed' : frame ? 'framed' : 'premium');
+    const captioned = shot.caption !== false && !spec.plain;
 
-    // The app icon is a branded square built from brand.logo — and the only target that keeps alpha.
+    // The app icon is a branded square built from brand.logo. Play's keeps alpha; Apple's in-app
+    // purchase promotional image must be flattened, which is what `alpha` decides.
     if (spec.icon) {
       const outFile = path.join(outDir, `${shot.target}.png`);
-      await buildAppIcon({ W, H, brand, theme: shotTheme(theme, shot), outFile });
+      await buildAppIcon({ W, H, brand, theme: shotTheme(theme, shot), outFile, flatten: !spec.alpha });
       validateImage({ file: outFile, destination: spec, size: [W, H], force });
       written.push({ file: outFile, W, H, style: 'icon' });
       continue;
@@ -144,7 +152,7 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir, for
         W, H,
         // `caption: false` renders the app interface alone — what Google Play asks for on store
         // screenshots ("no additional text, graphics, or backgrounds that are not part of the interface").
-        caption: shot.caption === false ? { title: '', sub: '' } : { title: scene.title || '', sub: scene.sub || '' },
+        caption: captioned ? { title: scene.title || '', sub: scene.sub || '' } : { title: '', sub: '' },
         imgPath: scene.image,
         brand,
         theme: shotTheme(theme, shot),
