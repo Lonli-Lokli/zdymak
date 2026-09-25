@@ -300,7 +300,7 @@ Usage:
   zdymak screenshots [--config <path>] [--out <dir>] [--clean] [--locale <ids>]
   zdymak specs
   zdymak capture  --platform ios --bundle <id> --arg <handle> --states <a,b,c> [--suffix -light]
-                  [--build --project <.xcodeproj> --scheme <name>] [--device <sim>] [--out <dir>] [--clean] [--keep]
+                  [--build --project <.xcodeproj> --scheme <name> [--derived-data <dir>]] [--device <sim>] [--out <dir>] [--clean] [--keep]
                   [--orientation portrait|landscape-left|landscape-right]
                   [--language <tag> [--applelocale <id>]]
                   # full workflow: start the app, drive each screen by a launch handle, snap store-ready PNGs
@@ -325,7 +325,9 @@ Usage:
   zdymak help
 
 Defaults: --config ${DEFAULT_CONFIG}. Needs ffmpeg on PATH (or $FFMPEG).
---clean: wipe the output folder first (capture clears stale PNGs but keeps the .dd build cache) — so the
+--build: iOS builds into Xcode's own DerivedData for the project (one per repo, shared with archives); pin another
+folder with --derived-data <dir>. Older versions left a .dd build in every output folder: delete those.
+--clean: wipe the output folder first (capture clears stale PNGs and MOVs, never subfolders) — so the
 folder ends up holding ONLY this run's assets, never a stale screenshot from a removed target/scene.
 README.md documents the config (brand, scenes, targets, theme, music, devices); SKILL.md is for agents.`);
 }

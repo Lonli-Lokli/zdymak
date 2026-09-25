@@ -309,8 +309,8 @@ async function captureIos(flags) {
   }
   const outDir = path.resolve(flags.out || 'shots');
   fs.mkdirSync(outDir, { recursive: true });
-  // --clean removes stale capture images first so the folder holds ONLY this run's screenshots. Keeps the
-  // `.dd` build cache (and any subdirs) so a rebuild stays incremental — only loose PNG/MOV files are cleared.
+  // --clean removes stale capture images first so the folder holds ONLY this run's screenshots; only loose PNG/MOV
+  // files are cleared, never subfolders.
   if (flags.clean) {
     let cleared = 0;
     for (const f of fs.readdirSync(outDir)) {
@@ -347,12 +347,20 @@ async function captureIos(flags) {
     try {
     if (flags.build !== undefined) {
       if (!flags.project || !flags.scheme) throw new Error('--build needs --project <.xcodeproj> and --scheme <name>.');
-      const dd = path.join(outDir, '.dd');
+      // ONE Xcode build folder per project: Xcode's own DerivedData, the same one `xcodebuild archive` and Xcode
+      // itself use, so a capture reuses their work and leaves no copy behind. It used to be `<out>/.dd`, a fresh
+      // 2–6 GB build in every output folder and every worktree; one repo collected 22 of them. --derived-data <dir>
+      // still pins a folder for a caller that needs one.
+      const target = ['-project', flags.project, '-scheme', flags.scheme, '-configuration', 'Debug', '-destination', `id=${udid}`];
+      const dd = typeof flags['derived-data'] === 'string' ? ['-derivedDataPath', path.resolve(flags['derived-data'])] : [];
       console.log(`▶︎ Building ${flags.scheme} for the simulator (this is the slow step)…`);
-      sh('xcodebuild', ['build', '-project', flags.project, '-scheme', flags.scheme, '-configuration', 'Debug',
-        '-destination', `id=${udid}`, '-derivedDataPath', dd, '-allowProvisioningUpdates']);
-      const app = out2('bash', ['-lc', `ls -dt "${dd}"/Build/Products/Debug-iphonesimulator/*.app 2>/dev/null | head -1`]).trim();
-      if (!app) throw new Error(`No .app under ${dd}/Build/Products/Debug-iphonesimulator`);
+      sh('xcodebuild', ['build', ...target, ...dd, '-allowProvisioningUpdates']);
+      // Where that build put the app, from Xcode rather than from a guess at its folder layout.
+      let settings = [];
+      try { settings = JSON.parse(out2('xcodebuild', ['-showBuildSettings', '-json', ...target, ...dd])); } catch { /* reported below */ }
+      const built = settings.map((t) => t.buildSettings ?? {}).find((b) => b.WRAPPER_EXTENSION === 'app') ?? {};
+      const app = built.TARGET_BUILD_DIR && built.WRAPPER_NAME ? path.join(built.TARGET_BUILD_DIR, built.WRAPPER_NAME) : '';
+      if (!app || !fs.existsSync(app)) throw new Error(`xcodebuild built ${flags.scheme} but reported no .app (looked for ${app || 'TARGET_BUILD_DIR/WRAPPER_NAME'})`);
       console.log(`▶︎ Installing ${path.basename(app)}…`);
       sh('xcrun', ['simctl', 'install', udid, app]);
     }
@@ -458,8 +466,8 @@ async function captureAndroid(flags) {
   }
   const outDir = path.resolve(flags.out || 'shots');
   fs.mkdirSync(outDir, { recursive: true });
-  // --clean removes stale capture images first so the folder holds ONLY this run's screenshots. Keeps the
-  // `.dd` build cache (and any subdirs) so a rebuild stays incremental — only loose PNG/MOV files are cleared.
+  // --clean removes stale capture images first so the folder holds ONLY this run's screenshots; only loose PNG/MOV
+  // files are cleared, never subfolders.
   if (flags.clean) {
     let cleared = 0;
     for (const f of fs.readdirSync(outDir)) {

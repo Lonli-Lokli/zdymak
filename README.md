@@ -676,8 +676,12 @@ zdymak build --clean  # wipe the output folder first, so ONLY this run's assets 
 
 **`--clean`** (on `build` / `screenshots` / `video` / `capture`) empties the target folder before writing,
 so a removed target or renamed scene can't leave a stale screenshot behind — every file is produced by this
-run. On `capture` it clears only stale PNG/MOV captures and keeps the `.dd` build cache (rebuilds stay
-incremental).
+run. On `capture` it clears only stale PNG/MOV captures, never subfolders.
+
+**`--build`** (iOS `capture`) builds into Xcode's own DerivedData for the project: the one folder per repo that
+`xcodebuild archive` and Xcode already use, so a capture reuses their work and leaves no copy behind. Pin another
+folder with `--derived-data <dir>`. Versions before 0.26 built into `<out>/.dd` in every output folder, 2–6 GB each;
+delete those.
 
 `zdymak specs` lists every image target and its exact dimensions. A device that only ships iPhone simply
 omits the others — that's the "use only part of it" contract.
