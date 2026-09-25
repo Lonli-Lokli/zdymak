@@ -400,6 +400,12 @@ export interface ReelSegment {
   /** An image sequence shown in order. */
   images?: string[];
   caption?: { title?: string; sub?: string };
+  /** This segment's length in seconds, overriding the reel's `sceneDur` — a short title card, a long round. */
+  dur?: number;
+  /** Seconds into `clip` to start from, so one long take can supply several beats. */
+  from?: number;
+  /** Playback rate for `clip` (2 = twice as fast): the footage is re-timed, not the app hurried. */
+  speed?: number;
 }
 
 /**

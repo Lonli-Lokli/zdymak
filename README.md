@@ -882,7 +882,10 @@ reel: {
 ```
 
 - **`clip`** = a recording (real motion). **`image`** / **`images`** = one still or a sequence shown within
-  the segment (a "multiple photos per page" beat). **`transition`** = `dissolve` (default) or `cut`. The screen
+  the segment (a "multiple photos per page" beat). Each segment may carry its own **`dur`** (seconds, overriding
+  `sceneDur` — a two-second title card beside a six-second round), and a clip may carry **`from`** (seconds into
+  the take to start at, so one long recording supplies several beats) and **`speed`** (`2` plays the footage at
+  twice the pace; the recording is re-timed, never the app). **`transition`** = `dissolve` (default) or `cut`. The screen
   sits in an **iPhone frame** by default (`theme.frame`: `'phone'` | `false` for a bare rounded screen). Matte
   colours / `inset` / `radius` / `shadow` / caption anchor default to a clean **light** look; override via the
   reel `theme`. Run `zdymak reel` → `<out>/reel.mp4`.

@@ -19,6 +19,7 @@
  *     music: { path, volume, fadeIn, fadeOut, offset },
  *     segments: [
  *       { clip: './rec/study.mov',   caption: { title, sub } },  // real motion (a recording)
+ *       { clip: './rec/long.mov', from: 42, speed: 2, dur: 3.5 },  // a moment from a long take, at 2x, 3.5s
  *       { images: ['a.png','b.png'], caption: { title, sub } },  // multiple photos / page
  *       { image: './shots/welcome.png', caption: { title, sub } }, // one still (gets a slow push-in)
  *     ],
@@ -223,7 +224,7 @@ function captionPng(W, H, caption, th, capCenterY) {
  * Composite ONE source (video clip or still image) onto the matte for `dur` seconds → an intermediate mp4.
  * A video plays its real motion (held on the last frame if shorter than `dur`); a still holds.
  */
-function compositeSource({ src, dur, W, H, fps, th, tmp, idx, sub, lay, mattePath, vignettePath, captionPath }) {
+function compositeSource({ src, dur, from = 0, speed = 1, W, H, fps, th, tmp, idx, sub, lay, mattePath, vignettePath, captionPath }) {
   const vid = isVideo(src);
   const [sw, sh] = probe(src, 'stream=width,height').map(Number); // ffprobe reads video + image dims alike
   // `bleed`: the source FILLS the whole frame (no matte / frame / shadow) — for a compliant App Store App
@@ -266,15 +267,19 @@ function compositeSource({ src, dur, W, H, fps, th, tmp, idx, sub, lay, mattePat
   // A video plays its own motion; a STILL gets a slow, never-freezing push-in (a frozen still reads as
   // dead — the Ken-Burns trap Apple avoids by keeping the camera always subtly moving).
   const frames = Math.ceil(dur * fps) + 4;
+  // `speed` re-times the footage itself (2 = twice as fast), so a clip plays faster rather than the app
+  // being hurried into skipping its own animations. Stills have no timeline to re-time.
+  const retime = vid && speed !== 1 ? `setpts=PTS/${speed},` : '';
   const screenFilter = bleed
-    ? `[1:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,format=rgba[s]` // cover
+    ? `[1:v]${retime}scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,format=rgba[s]` // cover
     : vid
-      ? `[1:v]scale=${fw}:${fh},setsar=1,format=rgba[s]`
+      ? `[1:v]${retime}scale=${fw}:${fh},setsar=1,format=rgba[s]`
       : `[1:v]scale=${Math.round(fw * 1.14)}:${Math.round(fh * 1.14)},zoompan=z='min(zoom+0.0008,1.12)':`
         + `d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${fw}x${fh}:fps=${fps},setsar=1,format=rgba[s]`;
 
   // Inputs: 0 matte · 1 src · 2 mask · 3 back(shadow+body) · 4 front(island) · 5 caption · 6 vignette
-  const srcIn = vid ? ['-i', src] : ['-loop', '1', '-i', src];
+  // `from` seeks INTO the clip, so one long take can supply several beats without cutting files by hand.
+  const srcIn = vid ? [...(from > 0 ? ['-ss', from.toFixed(3)] : []), '-i', src] : ['-loop', '1', '-i', src];
   const args = [
     '-loop', '1', '-i', mattePath,
     ...srcIn,
@@ -328,6 +333,14 @@ export async function buildMontage({ segments, brand, theme, spec, music, sceneD
   // gives beat-matched hard cuts. `tail` extends each segment so the xfade always has overlap material.
   const D = transition === 'cut' ? 0 : (xfadeDur ?? 0.3);
   const tail = D > 0 ? D + 0.2 : 0;
+  // A segment's own `dur` overrides the shared hold — a title card wants two seconds, a round being played
+  // wants six, and one rhythm for both makes the card drag or the footage rush.
+  const holds = segments.map((seg, i) => {
+    if (seg.dur == null) return hold;
+    if (!(seg.dur > 0)) throw new Error(`reel segment[${i}]: dur must be a positive number of seconds, got ${seg.dur}`);
+    return seg.dur;
+  });
+  const sum = (n) => holds.slice(0, n).reduce((a, b) => a + b, 0);
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'zdymak-montage-'));
   try {
@@ -353,10 +366,10 @@ export async function buildMontage({ segments, brand, theme, spec, music, sceneD
       writePng(captionPng(W, H, seg.caption, th, lay.capCenterY), captionPath);
       const sources = seg.images || (seg.clip ? [seg.clip] : seg.image ? [seg.image] : []);
       if (!sources.length) throw new Error(`reel segment[${i}] needs a clip, image, or images`);
-      const per = hold / sources.length;
+      const per = holds[i] / sources.length;
       const subs = sources.map((src, j) => compositeSource({
         // the LAST sub of the segment carries the dissolve tail so the segment has xfade overlap material
-        src, dur: per + (j === sources.length - 1 ? tail : 0), W, H, fps, th, tmp,
+        src, dur: per + (j === sources.length - 1 ? tail : 0), from: seg.from, speed: seg.speed, W, H, fps, th, tmp,
         idx: i, sub: sources.length > 1 ? j : null, lay, mattePath, vignettePath, captionPath,
       }));
       segClips.push({ file: concatClips(subs, tmp, i), palette: seg.palette ?? null });
@@ -376,22 +389,22 @@ export async function buildMontage({ segments, brand, theme, spec, music, sceneD
     let totalDur;
     if (segClips.length === 1) {
       filter += '[n0]copy[vout];';
-      totalDur = hold;
+      totalDur = holds[0];
     } else if (D === 0) {
       // transition:'cut' → robust end-to-end concat (beat-matched hard cuts)
       filter += `${segClips.map((_, i) => `[n${i}]`).join('')}concat=n=${segClips.length}:v=1[vout];`;
-      totalDur = segClips.length * hold;
+      totalDur = sum(segClips.length);
     } else {
       // dissolve → xfade chain; each shows solo for `hold`, then a D-second cross-dissolve into the next
       let cur = 'n0';
       let offset = 0;
       for (let i = 1; i < segClips.length; i++) {
-        offset += hold;
+        offset += holds[i - 1];
         const out = i === segClips.length - 1 ? 'vout' : `x${i}`;
         filter += `[${cur}][n${i}]xfade=transition=fade:duration=${D.toFixed(3)}:offset=${offset.toFixed(3)}[${out}];`;
         cur = out;
       }
-      totalDur = segClips.length * hold + tail;
+      totalDur = sum(segClips.length) + tail;
     }
 
     // 3) optional music bed (trim/loop to length, fade, volume).
