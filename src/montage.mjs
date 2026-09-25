@@ -269,7 +269,11 @@ function compositeSource({ src, dur, from = 0, speed = 1, W, H, fps, th, tmp, id
   const frames = Math.ceil(dur * fps) + 4;
   // `speed` re-times the footage itself (2 = twice as fast), so a clip plays faster rather than the app
   // being hurried into skipping its own animations. Stills have no timeline to re-time.
-  const retime = vid && speed !== 1 ? `setpts=PTS/${speed},` : '';
+  // A recording starts at zero only when it is played from its start. Seeked (`from`), its first frame
+  // keeps the timestamp it had in the take, and until it arrives the overlay has nothing to draw over
+  // the matte — which is LIGHT by default, so the cut into the clip flashed near-white. Rebased first,
+  // then re-timed, so `speed` scales time measured from the frame the segment actually opens on.
+  const retime = vid ? `setpts=PTS-STARTPTS${speed !== 1 ? `,setpts=PTS/${speed}` : ''},` : '';
   const screenFilter = bleed
     ? `[1:v]${retime}scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,format=rgba[s]` // cover
     : vid
