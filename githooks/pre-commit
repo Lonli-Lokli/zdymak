@@ -1,0 +1,27 @@
+#!/bin/sh
+# Pre-commit hook. Install: cp githooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+# --- No committed Python (owner, 2026-09-29: "temporary tooling can use whatever is better including python, but
+# committed code must not be python if I specifically not allowed it"; "add to all repos same rule/hook/approach").
+# Refuses a commit that adds, copies, modifies or renames-in a *.py file unless its path is listed in .python-allowed at
+# the repository's root (only the owner edits that list). Python already committed and left untouched is not blocked.
+# Self-contained on purpose: it needs no other file, so it works on every branch.
+py_staged=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.py$' || true)
+if [ -n "$py_staged" ]; then
+  py_allow="$(git rev-parse --show-toplevel)/.python-allowed"
+  py_bad=""
+  for f in $py_staged; do
+    if [ -f "$py_allow" ] && grep -v '^#' "$py_allow" | grep -qxF "$f"; then continue; fi
+    py_bad="$py_bad
+  $f"
+  done
+  if [ -n "$py_bad" ]; then
+    echo "Committed code must not be Python (owner's rule). Not allowed:$py_bad" >&2
+    echo "Write it in Kotlin (or Node where the tool already is Node), or keep it outside the repository as temporary" >&2
+    echo "tooling. Only the owner may add a path to .python-allowed." >&2
+    exit 1
+  fi
+fi
+# --- end of the no-Python guard
+
+exit 0

@@ -1,0 +1,3 @@
+# Python files the owner explicitly allows to be committed or changed, one repository-relative path per line.
+# Only the owner edits this list (owner, 2026-09-29: "committed code must not be python if I specifically not allowed
+# it"). Enforced by the pre-commit hook's no-Python guard. Empty: nothing is allowed.
