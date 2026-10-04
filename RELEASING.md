@@ -1,38 +1,47 @@
 # Releasing zdymak
 
-Publishing is automated via **npm Trusted Publishing (OIDC)** — no `NPM_TOKEN`, no secret to rotate or
-leak. It's the path npm now recommends after deprecating 2FA-bypass tokens (those lose publish ability
-~Jan 2027). Provenance is generated automatically.
+Publishing is automated via **npm Trusted Publishing (OIDC)**: no `NPM_TOKEN`, no secret to rotate or leak, and
+provenance is generated automatically (the repo and the package are public). It is the path npm and GitHub recommend
+now that long-lived tokens are gone: **classic tokens were revoked on 2025-12-09**, `npm login` gives a two-hour
+session that still asks for your OTP to publish, and a granular write token lives at most 90 days. Trusted publishing
+needs none of those.
 
-## One-time setup (≈2 minutes)
+## One-time setup, per package
 
-1. **First publish** (creates the package name). From a clean checkout, with 2FA on your npm account:
-   ```sh
-   npm publish --access public
-   ```
-   (Chicken-and-egg: a trusted publisher can only be attached to a package that exists.)
+The package already exists, so there is no chicken-and-egg. As the npm owner, from a terminal:
 
-2. **Attach the trusted publisher.** npmjs.com → the `zdymak` package → **Settings → Trusted Publishers →
-   Add** → GitHub Actions · repo `<you>/zdymak` · workflow `publish.yml`. (Leave environment blank unless
-   you use one.)
+```sh
+npm login                                        # a two-hour session; publishing from it needs your OTP
+npm trust github zdymak --file publish.yml --repo Lonli-Lokli/zdymak --allow-publish
+npm trust list zdymak                           # confirm the entry is there
+```
 
-That's it — from now on CI publishes with zero tokens.
+(Or on npmjs.com: the package → **Settings → Trusted Publishers → Add** → GitHub Actions, repo
+`Lonli-Lokli/zdymak`, workflow `publish.yml`. The workflow filename must match exactly, extension included.)
+Once the first publish through GitHub has succeeded, tighten the package: **Settings → Publishing access →
+"Require two-factor authentication and disallow tokens"**, so nothing but trusted publishing (or an interactive
+session) can ever publish it.
 
 ## Every release
 
 ```sh
-npm version patch          # or minor / major — bumps package.json + tags
+npm version patch -m "release: v%s"      # or minor / major — checks nothing is dirty, bumps package.json, tags
 git push --follow-tags
 gh release create "v$(node -p "require('./package.json').version")" --generate-notes
 ```
 
-Creating the GitHub **Release** fires `.github/workflows/publish.yml`, which runs `npm publish` over OIDC.
-The Release step is your human approval gate.
+Creating the GitHub **Release** fires `.github/workflows/publish.yml`, which installs, runs `npm run verify` (via
+`prepublishOnly`) and publishes over OIDC with provenance. The Release step is your human approval gate.
+
+Run the last two lines as the **account that owns the repository** (`Lonli-Lokli`): `gh auth status` must name it, and a
+different logged-in account that has no push access cannot create the Release. **Do not combine this with
+`npm run release:*`**: that script publishes from your laptop first, the workflow's publish then fails because the
+version already exists, and the package ends up with no provenance.
 
 ## Local publish (escape hatch)
 
-For the **first** publish, or publishing without CI, one command bumps + publishes + pushes the tag (npm
-prompts for your 2FA OTP — no stored token):
+For publishing without CI, one command bumps + publishes + pushes the tag. Run `npm login` first (a two-hour
+session, since classic tokens no longer exist); npm then prompts for your 2FA OTP at publish time. It carries no provenance:
 
 ```sh
 npm run release:patch      # or release:minor / release:major
