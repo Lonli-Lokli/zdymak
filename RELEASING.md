@@ -8,35 +8,45 @@ needs none of those.
 
 ## One-time setup, per package
 
-The package already exists, so there is no chicken-and-egg. As the npm owner, from a terminal:
+The package already exists, so there is no chicken-and-egg. Sign in to npmjs.com as the package owner, open the package →
+**Settings → Trusted publishing**, and add a **GitHub Actions** publisher:
 
-```sh
-npm login                                        # a two-hour session; publishing from it needs your OTP
-npm trust github zdymak --file publish.yml --repo Lonli-Lokli/zdymak --allow-publish
-npm trust list zdymak                           # confirm the entry is there
-```
+| field | value |
+|---|---|
+| Organization or user | `Lonli-Lokli` |
+| Repository | `zdymak` |
+| Workflow filename | `publish.yml` (the name only, with the extension) |
+| Environment | leave empty |
+| Allowed actions | tick **`npm publish`**. Without it the workflow's publish is refused. |
 
-(Or on npmjs.com: the package → **Settings → Trusted Publishers → Add** → GitHub Actions, repo
-`Lonli-Lokli/zdymak`, workflow `publish.yml`. The workflow filename must match exactly, extension included.)
-Once the first publish through GitHub has succeeded, tighten the package: **Settings → Publishing access →
-"Require two-factor authentication and disallow tokens"**, so nothing but trusted publishing (or an interactive
-session) can ever publish it.
+Every field is case-sensitive and a saved entry cannot be edited: to change it, delete it and add it again. The same entry
+can be made from a terminal with `npm login` then
+`npm trust github zdymak --file publish.yml --repo Lonli-Lokli/zdymak --allow-publish` (`npm trust list zdymak` shows it);
+that command exists in npm 11.16 but is not on the npm docs page, so treat the website as the reference.
 
-## Every release
+Once the first publish through GitHub has succeeded, tighten the package: **Settings → Publishing access → "Require
+two-factor authentication and disallow tokens"**, so nothing but trusted publishing (or an interactive session) can publish it.
 
-```sh
-npm version patch -m "release: v%s"      # or minor / major — checks nothing is dirty, bumps package.json, tags
-git push --follow-tags
-gh release create "v$(node -p "require('./package.json').version")" --generate-notes
-```
+## Every release: push, then publish a Release
 
-Creating the GitHub **Release** fires `.github/workflows/publish.yml`, which installs, runs `npm run verify` (via
-`prepublishOnly`) and publishes over OIDC with provenance. The Release step is your human approval gate.
+1. Push your commits to `master`.
+2. On GitHub: **Releases → Draft a new release → Choose a tag → type `v1.2.3` (a new tag) → Publish release.** Or from a
+   terminal, as the account that owns the repository: `gh release create v1.2.3 --generate-notes --target master`.
 
-Run the last two lines as the **account that owns the repository** (`Lonli-Lokli`): `gh auth status` must name it, and a
-different logged-in account that has no push access cannot create the Release. **Do not combine this with
-`npm run release:*`**: that script publishes from your laptop first, the workflow's publish then fails because the
-version already exists, and the package ends up with no provenance.
+That is all. **The tag is the version.** You do not run `npm version`, edit `package.json`, or push a tag. Publishing the
+Release is the human approval gate, and it starts `.github/workflows/publish.yml`, which:
+
+- refuses a Release that is not on `master`;
+- installs, takes the version from the tag (`v1.2.3` becomes `1.2.3`; a tag that is not a version stops the release);
+- refuses a version that is already on npm;
+- runs `npm run verify` (through `prepublishOnly`), so a release that fails the drift guards or the tests publishes nothing;
+- publishes over OIDC with provenance;
+- writes the released version back into `package.json` on `master` as a `release: v1.2.3` commit (pull before your next push).
+
+A tag like `v1.3.0-rc.1` is published under the `next` dist-tag, so `npm install` never picks it up, and is not written back.
+
+**Do not run `npm run release:*` for a normal release.** That script publishes from your laptop first, so the workflow's
+publish then fails because the version exists, and the package ends up with no provenance.
 
 ## Local publish (escape hatch)
 

@@ -1,31 +1,109 @@
-# Publish zdymak to npm via TRUSTED PUBLISHING (OIDC) — no NPM_TOKEN secret.
+# Publish to npm when a GitHub Release is published. THE TAG IS THE VERSION.
 #
-# One-time setup (see RELEASING.md):
-#   1. npmjs.com → the `zdymak` package → Settings → Trusted Publishers → add:
-#        provider = GitHub Actions · repo = <you>/zdymak · workflow = publish.yml
-#   2. First publish creates the package (a single manual `npm publish` with 2FA), then step 1.
+# The whole release is: push your commits, then publish a Release named `v<version>` (the Releases page, or
+# `gh release create v1.2.3 --generate-notes`). Nothing is bumped by hand, no `npm version`, no tag pushed from a laptop.
+# This workflow takes the version from the tag, verifies, publishes with provenance, and writes the version back to
+# package.json on the default branch. Publishing the Release is the human approval gate.
 #
-# Release flow: bump the version + create a GitHub Release → this workflow publishes it.
-#   npm version patch   &&   git push --follow-tags   &&   gh release create "v$(node -p "require('./package.json').version")" --generate-notes
+# Authentication is npm TRUSTED PUBLISHING (OIDC): no NPM_TOKEN, nothing to rotate or leak. One-time setup per package,
+# see RELEASING.md: the package's trusted publisher must name THIS repository and THIS file name (publish.yml), and must
+# allow `npm publish`. Every field is case-sensitive.
+#
+# IDENTICAL in vydanne and zdymak: the package name is read from package.json.
 name: publish
 
 on:
   release:
-    types: [published] # the Release is the human approval gate (aligns with npm staged publishing)
+    types: [published]
 
-permissions:
-  contents: read
-  id-token: write # REQUIRED: lets the job mint the OIDC token npm trades for publish access
+# Two releases at once would race for the same dist-tag; they queue instead.
+concurrency:
+  group: publish
+  cancel-in-progress: false
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # REQUIRED: lets the job mint the OIDC token npm trades for publish access
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      dist-tag: ${{ steps.tag.outputs.dist-tag }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the next step needs the default branch's history
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      - run: npm install -g npm@latest # trusted publishing needs npm ≥ 11.5.1
+
+      - run: npm install -g npm@latest # trusted publishing needs npm >= 11.5.1
+
+      # A Release can be created from any branch. Only what is on the default branch ships.
+      - name: Assert the release is on the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/$DEFAULT_BRANCH"; then
+            echo "::error::This release is not on $DEFAULT_BRANCH. Publish the Release from a commit that is on it."
+            exit 1
+          fi
+
       - run: npm ci
-      - run: npm publish --provenance --access public
+
+      # After `npm ci` so npm rewrites package.json AND the lockfile together. Refuses a tag that is not a version.
+      - name: Take the version from the tag
+        id: tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: node scripts/release-from-tag.mjs "$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse a version that is already on npm
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          name=$(node -p "require('./package.json').name")
+          if npm view "$name@$VERSION" version >/dev/null 2>&1; then
+            echo "::error::$name@$VERSION is already on npm. A version can be published once: cut the next one."
+            exit 1
+          fi
+
+      # prepublishOnly runs `npm run verify` first, so a release that fails the drift guards or the tests publishes nothing.
+      - name: Publish
+        env:
+          DIST_TAG: ${{ steps.tag.outputs.dist-tag }}
+        run: npm publish --provenance --access public --tag "$DIST_TAG"
+
+  # Keeps package.json on the default branch at the released version, so the repo never shows a stale number. A separate
+  # job with its own permission: the publish job above never holds write access to the repository. If branch protection
+  # stops the push, the package is already published and only this housekeeping fails.
+  sync-version:
+    needs: publish
+    if: needs.publish.outputs.dist-tag == 'latest'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Write the released version back
+        env:
+          VERSION: ${{ needs.publish.outputs.version }}
+        run: |
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          if git diff --quiet; then
+            echo "package.json already says $VERSION"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "release: v$VERSION [skip ci]"
+          git push
