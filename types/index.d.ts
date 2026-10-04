@@ -497,7 +497,73 @@ export interface Config {
   reel?: ReelConfig | ReelConfig[];
   /** Output directory. Defaults to `store-assets`. */
   out?: string;
+  /**
+   * The app's own logic around every command, in the order given (the first is outermost). Each entry is a function
+   * `(ctx, next)` or an object `{ name, commands, run }` that limits it. Code before `await next()` may refuse with
+   * `ctx.fail(reason)`; code after it can inspect what the command made. Wraps build, video, reel, screenshots, capture
+   * and check. See the README, "Middleware".
+   */
+  middleware?: Middleware[];
 }
+
+/** What a middleware entry is handed. `config` is the raw config as the file exports it, or null when there is none. */
+export interface MiddlewareContext {
+  tool: 'zdymak';
+  version: string;
+  /** The command: `build`, `video`, `reel`, `screenshots`, `capture` or `check`. */
+  command: string;
+  /** The parsed `--flags`. */
+  flags: Record<string, string | boolean>;
+  /** The positional arguments after the command (the files given to `check`, say). */
+  args: string[];
+  /** Everything after the command name, unparsed. */
+  argv: string[];
+  config: Config | null;
+  configPath: string;
+  /** Where the command writes: `--out`, else `shots` for `capture`, else the config's `out`; null for `check`. */
+  outDir: string | null;
+  /** `Date.now()` when the command was about to start. */
+  startedAt: number;
+  /** Files under `outDir` (default `.png`, `.mp4`, `.mov`) written during this run, sorted. */
+  changedFiles(exts?: string[]): string[];
+  cwd: string;
+  env: Record<string, string | undefined>;
+  log(...args: unknown[]): void;
+  warn(...args: unknown[]): void;
+  /** Refuse: stops the command, prints the reason and exits 1. */
+  fail(reason: string): never;
+}
+
+export type MiddlewareFunction = (ctx: MiddlewareContext, next: () => Promise<unknown>) => unknown;
+
+export interface MiddlewareObject {
+  /** Shown in messages; defaults to the function's own name. */
+  name?: string;
+  /** Run only for these commands. */
+  commands?: string | string[];
+  run: MiddlewareFunction;
+}
+
+export type Middleware = MiddlewareFunction | MiddlewareObject;
+
+/** Thrown by `ctx.fail`. The CLI prints it as a refusal and exits 1. */
+export declare class MiddlewareRefusal extends Error {
+  middleware: string;
+  reason: string;
+}
+
+export declare function normalizeMiddleware(list: unknown, tool?: string): Array<{ name: string; commands: string[] | null; stores: string[] | null; run: MiddlewareFunction }>;
+export declare function runMiddleware<T>(list: unknown, ctx: Record<string, unknown> & { tool: string; command: string }, final: () => Promise<T>): Promise<T>;
+
+/**
+ * How empty is this capture? `colours` is the distinct colour count (sampled every second pixel) and `dominant` the share
+ * of the most common colour. null when the file cannot be decoded. The same measurement `zdymak check` applies.
+ */
+export declare function captureBlankness(file: string): Promise<{ colours: number; dominant: number } | null>;
+/** A capture under this many distinct colours AND over `BLANK_DOMINANCE` of one colour drew nothing. */
+export declare const BLANK_COLOURS: number;
+export declare const BLANK_DOMINANCE: number;
+
 
 /**
  * Identity helper — returns the config unchanged, but gives editors the type in a plain `.mjs` file.

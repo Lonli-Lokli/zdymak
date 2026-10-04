@@ -25,11 +25,13 @@
     "docs:diagram": "node scripts/build-diagram.mjs",
     "check:docs": "node scripts/check-docs.mjs",
     "check:types": "tsc --noEmit -p tsconfig.json && node scripts/check-types.mjs",
-    "verify": "npm run check:docs && npm run check:types",
+    "verify": "npm run check:docs && npm run check:types && npm run check:middleware && npm run check:cli",
     "prepublishOnly": "npm run verify",
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
-    "release:major": "node scripts/release.mjs major"
+    "release:major": "node scripts/release.mjs major",
+    "check:middleware": "node --test scripts/middleware.test.mjs",
+    "check:cli": "node --test scripts/cli.test.mjs"
   },
   "engines": {
     "node": ">=18"

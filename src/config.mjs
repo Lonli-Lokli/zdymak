@@ -16,6 +16,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { normalizeMiddleware } from './middleware.mjs';
 
 const DEFAULT_BRAND = {
   ink: '#0b0b0a', title: '#F5F5F4', sub: '#BBF7D0', fontPaths: [],
@@ -29,7 +30,7 @@ const DEFAULT_BRAND = {
 export const CONFIG_KEYS = [
   'brand', 'screenshotsDir', 'suffix', 'scenes', 'targets', 'sceneDur', 'xfade',
   'timing', 'theme', 'stillTheme', 'music', 'devices', 'captions', 'reel', 'out',
-  'sourceLocale',
+  'sourceLocale', 'middleware',
 ];
 
 /**
@@ -222,6 +223,9 @@ export async function loadConfig(configPath) {
     theme: raw.theme, // premium-technique styling override for VIDEOS (matte, vignette, label, cuts)
     stillTheme: raw.stillTheme, // screenshot-only matte override; falls back to `theme` when unset
     out: path.resolve(baseDir, raw.out || 'store-assets'),
+    // The app's own logic around every command: `[(ctx, next) => …]` or `{ name, commands, run }`. Validated here so a
+    // malformed entry fails at config load. The CLI reads it before dispatch; see middleware.mjs.
+    middleware: normalizeMiddleware(raw.middleware, 'zdymak'),
     baseDir,
   };
 }

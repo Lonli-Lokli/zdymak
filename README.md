@@ -943,6 +943,62 @@ writes `reel.mp4`; unnamed entries in an array become `reel-1`, `reel-2`, …
 
 <br>
 
+## Middleware — your own checks around any command
+
+A pipeline has rules that belong to your app, not to zdymak: "never frame a capture from a build that was not signed off",
+"copy the output where the store tool reads it", "run our own look at the pixels". `middleware` in the config is where
+that logic goes, so it runs whoever calls zdymak and from wherever, not only from the one script that remembered to.
+
+```js
+// zdymak.config.mjs
+export default {
+  // …
+  middleware: [
+    // an object limits an entry to the commands it names
+    {
+      name: 'verify-captures',
+      commands: ['capture', 'screenshots'],
+      async run(ctx, next) {
+        const result = await next();                       // the command itself
+        for (const file of ctx.changedFiles(['.png'])) {   // what THIS run wrote under ctx.outDir
+          if (await looksWrong(file)) ctx.fail(`${file} failed our own check`);
+        }
+        return result;                                      // returning nothing keeps the command's own result
+      },
+    },
+    // a bare function runs for every wrapped command
+    async (ctx, next) => { ctx.log(`${ctx.command} starting`); return next(); },
+  ],
+};
+```
+
+The first entry is outermost. Before `await next()` you may refuse; after it you may inspect what the command made.
+`ctx.fail(reason)` stops the run, prints `refused by middleware 'verify-captures': …` and exits 1. An entry that never
+calls `next()` skips the command, and says so. `ctx` carries `command`, `flags`, `args` and `argv`, the raw `config`
+(read straight from the file, so a config that cannot render yet can still carry a check), `configPath`, `outDir` (the
+folder the command writes to: `--out`, else `shots` for `capture`, else the config's `out`), `changedFiles(exts)` (files
+under `outDir` written during this run), `cwd`, `env` and `version`.
+
+It wraps `build`, `video`, `reel`, `screenshots`, `capture` and `check`; not `specs` or help. A malformed entry is an
+error when the config loads. Middleware runs with the full power of the file it lives in, so it is not a sandbox. The same
+`middleware` key, with the same semantics, is in [vydanne](https://github.com/Lonli-Lokli/vydanne), so a check written for
+one reads the same in the other.
+
+### `zdymak check` — is there a screen in this capture?
+
+```sh
+zdymak check shots/            # files and folders, searched recursively
+zdymak check a.png b.png --json
+```
+
+The blank-capture measurement that `build` and `screenshots` apply to their input, as a command of its own, so a CI job,
+a release gate or a device test can ask zdymak instead of re-implementing it: a capture with under 400 distinct colours
+and over 95% of one colour drew nothing. It exits 1 on a blank or unreadable file; `--force` reports without failing,
+`--json` prints `{ file, colours, dominant, blank, unreadable }` per file. The same function is exported as
+`captureBlankness`, with the thresholds `BLANK_COLOURS` and `BLANK_DOMINANCE`.
+
+<br>
+
 ## Programmatic use
 
 ```js

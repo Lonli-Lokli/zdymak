@@ -6,6 +6,7 @@
  *   zdymak screenshots [--config <path>] [--out <dir>] [--locale <ids>]  # per-device store screenshots
  *   zdymak specs                                          # print the store spec matrix
  *   zdymak capture --platform ios|android --name <screen> [--record] [--out <dir>]
+ *   zdymak check   <png|dir>… [--json] [--force]        # is there a screen in each capture?
  *   zdymak help
  */
 import path from 'node:path';
@@ -20,7 +21,9 @@ import { buildDeviceScreenshots, localizeScenes, localizeBrand, untranslatedScen
 import { VIDEO_TARGETS, IMAGE_TARGETS, videoTarget } from './specs.mjs';
 import { runCapture } from './capture/index.mjs';
 import { resolveVideo, paletteAt } from './destinations.mjs';
-import { validateVideo, validateImage } from './validate.mjs';
+import { validateVideo, validateImage, captureBlankness, BLANK_COLOURS, BLANK_DOMINANCE } from './validate.mjs';
+import { normalizeMiddleware, runMiddleware } from './middleware.mjs';
+import { pathToFileURL } from 'node:url';
 
 function parseFlags(argv) {
   const flags = {};
@@ -274,6 +277,60 @@ async function cmdBuild(flags) {
   console.log('Done.');
 }
 
+/** PNGs from a mix of files and folders (folders are searched recursively). */
+function pngsIn(paths) {
+  const out = [];
+  const walk = (p) => {
+    const st = fs.statSync(p);
+    if (st.isDirectory()) {
+      for (const name of fs.readdirSync(p).sort()) if (name !== 'node_modules' && !name.startsWith('.')) walk(path.join(p, name));
+    } else if (p.toLowerCase().endsWith('.png')) {
+      out.push(p);
+    }
+  };
+  for (const p of paths) {
+    if (!fs.existsSync(p)) throw new Error(`check: no such file or folder: ${p}`);
+    walk(p);
+  }
+  return out;
+}
+
+/**
+ * `zdymak check <png|dir>…` — is there a screen in each capture? The same measurement `build` and `screenshots` apply
+ * to their input (see validate.mjs: under BLANK_COLOURS distinct colours AND over BLANK_DOMINANCE of one colour), as its
+ * own command so anything that photographs an app — a CI job, a release gate, a device test — can ask zdymak instead
+ * of re-implementing it. Exits 1 on a blank or unreadable file; `--force` reports but exits 0.
+ */
+async function cmdCheck(flags, rest) {
+  const files = pngsIn(rest);
+  if (!files.length) throw new Error('check: pass PNG files or folders, e.g. zdymak check shots/');
+  const results = [];
+  for (const file of files) {
+    const m = await captureBlankness(file);
+    results.push({
+      file,
+      colours: m ? m.colours : null,
+      dominant: m ? m.dominant : null,
+      blank: !!m && m.colours < BLANK_COLOURS && m.dominant > BLANK_DOMINANCE,
+      unreadable: !m,
+    });
+  }
+  const bad = results.filter((r) => r.blank || r.unreadable);
+  if (flags.json) {
+    console.log(JSON.stringify(results, null, 2));
+  } else {
+    console.log(`zdymak check • ${results.length} capture(s)`);
+    for (const r of results) {
+      const rel = path.relative(process.cwd(), r.file) || r.file;
+      if (r.unreadable) console.log(`  ✗ ${rel}  UNREADABLE — not a PNG this tool can decode`);
+      else if (r.blank) console.log(`  ✗ ${rel}  BLANK — ${r.colours} distinct colours, ${(r.dominant * 100).toFixed(1)}% one colour: the app drew nothing`);
+      else console.log(`  ✓ ${rel}  ${r.colours} colours, ${(r.dominant * 100).toFixed(1)}% dominant`);
+    }
+  }
+  if (bad.length && !flags.force) process.exitCode = 1;
+  else if (bad.length) console.warn(`⚠︎ ${bad.length} capture(s) failed the check; --force reports them without failing`);
+}
+
 function cmdSpecs() {
   console.log('\nVIDEO targets (produce an .mp4):');
   for (const [id, s] of Object.entries(VIDEO_TARGETS)) {
@@ -298,6 +355,10 @@ Usage:
                   # LIVE-FOOTAGE montage from clips/images. "reel" may be an ARRAY — every entry
                   # is built (App Preview + Play promo from one config); --only picks by name.
   zdymak screenshots [--config <path>] [--out <dir>] [--clean] [--locale <ids>]
+  zdymak check    <png|dir>… [--json] [--force]
+                  # is there a screen in each capture? The measurement build/screenshots apply to their input (a
+                  # capture with under 400 distinct colours AND over 95% one colour drew nothing), as a command
+                  # of its own for CI, release gates and device tests. Exits 1 on a blank or unreadable file.
   zdymak specs
   zdymak capture  --platform ios --bundle <id> --arg <handle> --states <a,b,c> [--suffix -light]
                   [--build --project <.xcodeproj> --scheme <name> [--derived-data <dir>]] [--device <sim>] [--out <dir>] [--clean] [--keep]
@@ -329,25 +390,81 @@ Defaults: --config ${DEFAULT_CONFIG}. Needs ffmpeg on PATH (or $FFMPEG).
 folder with --derived-data <dir>. Older versions left a .dd build in every output folder: delete those.
 --clean: wipe the output folder first (capture clears stale PNGs and MOVs, never subfolders) — so the
 folder ends up holding ONLY this run's assets, never a stale screenshot from a removed target/scene.
-README.md documents the config (brand, scenes, targets, theme, music, devices); SKILL.md is for agents.`);
+README.md documents the config (brand, scenes, targets, theme, music, devices, middleware); SKILL.md is for agents.
+middleware: the config's "middleware" array wraps build, video, reel, screenshots, capture and check — see the README.`);
+}
+
+const VERSION = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+
+/** Commands the config's `middleware` wraps: everything that produces or inspects an asset. specs and help do neither. */
+const WRAPPED = new Set(['build', 'video', 'reel', 'screenshots', 'capture', 'check']);
+
+/**
+ * What middleware is handed. The config is read RAW here, not through loadConfig: `capture` and `check` work with no
+ * config at all, and a config that cannot render (no scenes yet) must still be able to carry a gate. `outDir` and
+ * `changedFiles()` let an after-hook find what THIS run produced without each command having to report it.
+ */
+async function middlewareContext(cmd, flags, rest, argv) {
+  const configPath = path.resolve(flags.config || DEFAULT_CONFIG);
+  let raw = null;
+  if (!configPath.endsWith('.json') && fs.existsSync(configPath)) {
+    const mod = await import(pathToFileURL(configPath).href);
+    raw = mod.default ?? mod.config ?? mod;
+  }
+  let outDir = null;
+  if (cmd !== 'check') {
+    if (flags.out) outDir = path.resolve(flags.out);
+    else if (cmd === 'capture') outDir = path.resolve('shots');
+    else if (raw) outDir = path.resolve(path.dirname(configPath), raw.out || 'store-assets');
+  }
+  const startedAt = Date.now();
+  const changedFiles = (exts = ['.png', '.mp4', '.mov']) => {
+    const found = [];
+    const walk = (dir) => {
+      if (!fs.existsSync(dir)) return;
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) {
+          if (e.name !== 'node_modules' && !e.name.startsWith('.')) walk(p);
+        } else if (exts.includes(path.extname(e.name).toLowerCase()) && fs.statSync(p).mtimeMs >= startedAt - 1000) {
+          found.push(p);
+        }
+      }
+    };
+    if (outDir) walk(outDir);
+    return found.sort();
+  };
+  return {
+    list: normalizeMiddleware(raw?.middleware, 'zdymak'),
+    ctx: { tool: 'zdymak', version: VERSION, command: cmd, flags, args: rest, argv, config: raw, configPath, outDir, startedAt, changedFiles, cwd: process.cwd(), env: process.env },
+  };
 }
 
 export async function run(argv = process.argv.slice(2)) {
   const [cmd, ...rest0] = argv;
   const { flags, rest } = parseFlags(rest0);
   try {
-    switch (cmd) {
-      case 'build': await cmdBuild(flags); break;
-      case 'video': await cmdVideo(flags); break;
-      case 'reel': await cmdReel(flags); break;
-      case 'screenshots': await cmdScreenshots(flags); break;
-      case 'specs': cmdSpecs(); break;
-      case 'capture': await runCapture(flags, rest); break;
-      case 'help': case undefined: case '--help': case '-h': cmdHelp(); break;
-      default:
-        console.error(`Unknown command "${cmd}".\n`);
-        cmdHelp();
-        process.exitCode = 1;
+    const dispatch = async () => {
+      switch (cmd) {
+        case 'build': await cmdBuild(flags); break;
+        case 'video': await cmdVideo(flags); break;
+        case 'reel': await cmdReel(flags); break;
+        case 'screenshots': await cmdScreenshots(flags); break;
+        case 'specs': cmdSpecs(); break;
+        case 'capture': await runCapture(flags, rest); break;
+        case 'check': await cmdCheck(flags, rest); break;
+        case 'help': case undefined: case '--help': case '-h': cmdHelp(); break;
+        default:
+          console.error(`Unknown command "${cmd}".\n`);
+          cmdHelp();
+          process.exitCode = 1;
+      }
+    };
+    if (WRAPPED.has(cmd)) {
+      const { list, ctx } = await middlewareContext(cmd, flags, rest, rest0);
+      await runMiddleware(list, ctx, dispatch);
+    } else {
+      await dispatch();
     }
   } catch (e) {
     console.error(`\n✗ ${e.message}`);

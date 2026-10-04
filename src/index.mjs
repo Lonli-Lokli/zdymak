@@ -25,3 +25,5 @@ export { VIDEO_TARGETS, IMAGE_TARGETS, videoTarget } from './specs.mjs';
 export { TRANSITIONS, TRANSITION_IDS, transitionFor } from './transitions.mjs';
 export { EFFECTS, EFFECT_IDS, effectFor } from './effects.mjs';
 export { run } from './cli.mjs';
+export { captureBlankness, validateCapture, BLANK_COLOURS, BLANK_DOMINANCE } from './validate.mjs';
+export { MiddlewareRefusal, normalizeMiddleware, runMiddleware } from './middleware.mjs';

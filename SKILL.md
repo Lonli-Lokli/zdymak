@@ -267,6 +267,17 @@ Reach for this when the user wants a multi-device / "works everywhere" page. Do 
 composite as a pre-rendered PNG and feed it in as a normal scene — it will be drawn INSIDE whatever frame
 the target infers, i.e. a cluster of devices inside a phone bezel.
 
+## Middleware and `check` — the app's own rules, and a pixel check anyone can call
+
+`zdymak check <png|dir>…` tells you whether each capture has a screen in it (the blank-capture measurement `build` already
+applies to its input): exit 1 on a blank or unreadable file, `--json` for machines. Use it instead of re-implementing the
+measurement in a CI job or a release gate.
+
+The config key `middleware` takes `(ctx, next)` functions or `{ name, commands, run }` objects, first entry outermost, around
+build, video, reel, screenshots, capture and check. Before `await next()` an entry may refuse with `ctx.fail(reason)`; after it
+it can inspect what the run made via `ctx.changedFiles()` and `ctx.outDir`. The config is passed raw, so a config that cannot
+render yet can still carry a check. The same key exists in vydanne. Full example: README, "Middleware".
+
 ## Guardrails
 - Never submit the **device-framed** `social-reel` as an App Preview — Apple rejects device bezels there.
   Use the full-bleed `appstore-preview` for the App Store slot; `social-reel` is web/social/YouTube only.
