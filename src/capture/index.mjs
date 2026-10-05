@@ -242,8 +242,37 @@ async function uprightCapture(file, orientation) {
   fs.writeFileSync(file, rgbPngBuffer(c));
 }
 
+/**
+ * The UDID of the simulator named exactly `name` on the NEWEST runtime that has one. Installing a runtime gives
+ * every model a second device of the same name, and simctl lists runtimes oldest first, so the first match was the
+ * older iOS: a capture that should be on iOS 27 quietly ran on 26. Exact, because "iPhone 18 Pro" is a prefix of
+ * "iPhone 18 Pro Max".
+ */
+function newestSimNamed(name) {
+  let runtime = [];
+  let best = null;
+  for (const line of out2('xcrun', ['simctl', 'list', 'devices', 'available']).split('\n')) {
+    const header = line.match(/^-- \S+ ([\d.]+) --/);
+    if (header) {
+      runtime = header[1].split('.').map(Number);
+      continue;
+    }
+    const udid = line.trim().startsWith(`${name} (`) ? line.match(udidRe)?.[1] : null;
+    if (udid && (!best || compareVersions(runtime, best.runtime) > 0)) best = { udid, runtime };
+  }
+  return best?.udid ?? null;
+}
+
+const compareVersions = (a, b) => {
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const d = (a[i] ?? 0) - (b[i] ?? 0);
+    if (d) return d;
+  }
+  return 0;
+};
+
 /** Boot (or reuse/create) an iOS simulator → UDID. Prefers --udid, then an already-booted sim, then a
- *  device matching --device (default iPhone 16 Pro Max), creating one if needed. */
+ *  device matching --device (default iPhone 18 Pro Max), creating one if needed. */
 /**
  * Boot (or reuse/create) a simulator. Returns `{ udid, booted, created }` — the two booleans are the
  * TEARDOWN receipt: they say what this process changed, so the cleanup can undo exactly that and leave a
@@ -260,13 +289,12 @@ function bootIosSim(flags) {
     const booted = out2('xcrun', ['simctl', 'list', 'devices', 'booted']).match(udidRe);
     if (booted) return { udid: booted[1], booted: false, created: false }; // the user's own sim — leave it alone
   }
-  const name = flags.device || 'iPhone 16 Pro Max';
+  const name = flags.device || 'iPhone 18 Pro Max';
   let created = false;
-  let udid = out2('xcrun', ['simctl', 'list', 'devices', 'available'])
-    .split('\n').find((l) => l.includes(name) && udidRe.test(l))?.match(udidRe)?.[1];
+  let udid = newestSimNamed(name);
   if (!udid) {
     const devtype = out2('xcrun', ['simctl', 'list', 'devicetypes']).split('\n')
-      .find((l) => l.includes(name))?.match(/(com\.apple[^\s)]+)/)?.[1];
+      .find((l) => l.trim().startsWith(`${name} (`))?.match(/(com\.apple[^\s)]+)/)?.[1];
     const runtime = out2('xcrun', ['simctl', 'list', 'runtimes', 'ios']).split('\n').reverse()
       .find((l) => /com\.apple[^\s)]+/.test(l))?.match(/(com\.apple[^\s)]+)/)?.[1];
     if (!devtype || !runtime) throw new Error(`Could not resolve a simulator for "${name}".`);
@@ -330,7 +358,7 @@ async function captureIos(flags) {
 
   // FULL WORKFLOW: drive the app through screens by a launch-arg HANDLE, capturing each.
   //   zdymak capture --platform ios --bundle com.x.app --arg -screen --states a,b,c --suffix -light
-  //     [--build --project X.xcodeproj --scheme S] [--device "iPhone 16 Pro Max"] [--settle 3]
+  //     [--build --project X.xcodeproj --scheme S] [--device "iPhone 18 Pro Max"] [--settle 3]
   if (flags.states) {
     if (!flags.bundle || !flags.arg) {
       throw new Error('state capture needs --bundle <id> and --arg <launch-handle> (e.g. -marketingScreen).');
