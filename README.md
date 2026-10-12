@@ -357,7 +357,7 @@ so a typical `stillTheme` only sets colours. Override any key per shot.
 | `captionAnchor` | `bottom` (video) · `top` (stills) | Caption above (`top`) or below (`bottom`) the device. |
 | `fit` | `cover` · `contain` (frameless stills) | `cover` fills + crops; `contain` shows the **whole** capture (e.g. a Mac window) with matte margins. |
 | `headlineScale` | `0.062` | Caption headline size as a fraction of the frame's short edge — bump it for bigger, bolder headlines. |
-| `statusBar` | `auto` | Paint a clean status bar (time · signal · wifi · **full** battery) into the empty status-bar band a capture may carry. `auto` draws it only when such a band is detected, `true` forces it, `false` skips. |
+| `statusBar` | `auto` | Paint a clean status bar (time · signal · wifi · **full** battery) into the empty status-bar band a capture may carry. `auto` draws it only when such a band is detected, `true` forces it, `false` skips. `column` draws the **closed iPhone Duo's status column** down the right edge instead (see [below](#the-closed-iphone-duo-a-status-column-not-a-bar)); opt in per shot, it is never the default. |
 | `statusBarTime` | `9:41` | The clock shown in that status bar. |
 | `statusBarCellular` | inferred | Draw cell-signal bars. On for phones, off for tablets (Wi-Fi models) and landscape captures — a Wi-Fi-only device showing signal bars is a detail that's simply false. Google asks for battery/WiFi/cell **full**, so phones show all three. |
 | `anchor` | `center` | Cover-fit anchor when the capture is taller than the slot. `top` crops from the bottom only, keeping the status bar and the screen's own heading. |
@@ -399,6 +399,8 @@ Sources: Apple [Screenshot specifications](https://developer.apple.com/help/app-
 > type (the API name is reported as `APP_IPHONE_DUO`; Apple has not documented it), so the four targets
 > share one slot of ten — and like the iPad's two orientations they all write `01-….png`, so rename one
 > set on the way to the upload folder. Capture on the iPhone Duo simulator (Xcode 27.1 or later).
+> Closed, iOS 27.1 has no status bar across the top: it stands one in a column down the right edge, which
+> `theme: { statusBar: 'column' }` draws ([The closed iPhone Duo: a status column, not a bar](#the-closed-iphone-duo-a-status-column-not-a-bar)).
 
 ### App Store — creative assets (iOS 27 / iPadOS 27)
 
@@ -747,6 +749,36 @@ delete those.
 
 `zdymak specs` lists every image target and its exact dimensions. A device that only ships iPhone simply
 omits the others — that's the "use only part of it" contract.
+
+### The closed iPhone Duo: a status column, not a bar
+
+Closed, the iPhone Duo has no status bar across the top. iOS 27.1 reserves a column **84 pt wide down the
+right edge** of the 466×678 pt outer display, full height, and the app gets the other 382 pt. Top to
+bottom it holds the camera, the clock, and one round glyph: Wi-Fi inside a ring that is the battery, with
+the cell signal as four dots in the ring's open foot (measured on the iPhone Duo simulator, Xcode 27.1).
+Below that the column belongs to the app. `statusBar: 'auto'` cannot draw this, and on such a capture it
+would take the app's flat top rows for a band, so the closed Duo's shot opts in:
+
+```js
+duoOuter: {
+  capturesDir: './captures/ios-duo-outer',
+  screenshots: [{ target: 'appstore-iphone-duo-outer', theme: { statusBar: 'column' } }],
+},
+```
+
+The capture reserves the column as a flat band of the app's own edge colour, the way a headless capture
+reserves the top inset. zdymak paints the clock and the glyph at the top of it (full battery, full
+signal, `statusBarTime` for the clock, the glyph colour picked light or dark from the band), sized from
+the capture's width as the Duo's 466 pt. **It draws nothing unless the right edge is a band of identical
+pixels over the top 160 pt that is wide enough to hold the clock and the ring**, so app pixels are never
+covered; a capture without one is left exactly as it is. Three things it deliberately does not do: draw
+the camera (a punch-hole in the glass that Apple publishes no measurements for), copy the simulator's
+charging bolt and empty-signal dots, or guess at landscape (where iOS stands the column when the closed
+Duo is turned has not been measured, so a landscape capture is left alone).
+
+The simulator it was measured on showed `09:41`: its region kept a 24-hour clock (its Safari spelt
+"Favourites"), not something the Duo does. The default stays `9:41`, like every other shot zdymak draws a
+clock into; `statusBarTime` sets either.
 
 <br>
 
@@ -1239,6 +1271,7 @@ declared in the `.d.ts`. Both run on `prepublishOnly`.
 - [x] **iOS 27 App Store assets** — the iPhone Duo slot (four sizes, a plain Duo frame), the product page
       header / search results / universal graphics around Apple's art safe areas, and the header and
       search videos as measured `reel` destinations.
+- [x] **The closed iPhone Duo's status column** — `statusBar: 'column'`, measured on the iOS 27.1 simulator.
 
 See **SKILL.md** if you drive this with Claude Code.
 

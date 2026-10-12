@@ -51,7 +51,8 @@ against Apple's *Screenshot / App preview specifications* and Google's *Add prev
 **Status bars.** An Android Compose capture reserves the status-bar inset but can't contain the system UI,
 so the shot has an empty band. `statusBar: 'auto'` (default) detects that band and paints a clean bar
 (9:41 · full signal/wifi/battery) — exactly the state Google asks for. Square (watch) captures are skipped.
-iOS XCUITest captures already include a real status bar, so nothing is drawn there.
+iOS XCUITest captures already include a real status bar, so nothing is drawn there. The closed iPhone Duo
+has a status COLUMN down the right edge instead of a bar: `statusBar: 'column'` draws it (opt-in per shot).
 
 ## It can take the screenshots too (don't assume the user must supply them)
 `zdymak capture --platform ios|android|web` DRIVES the app through each screen and writes a store-ready
@@ -258,8 +259,11 @@ The first header made from defaults was rejected by its owner, for reasons that 
   9:41 there. Without it the island lands on the app's top-right controls.
 - **The closed iPhone Duo has no top status bar.** iOS 27.1 stands the status bar and camera in a column
   down the RIGHT edge: 84 of 466 points (measured on the Duo simulator), the app gets 382. Reserve that
-  column, nothing at the top, and set `statusBar: false` on that shot ('auto' would read the app's flat
-  top rows as a band). The open screen's bars cannot be measured by script; check them by hand.
+  column as a flat band of the app's edge colour, nothing at the top, and set `theme: { statusBar:
+  'column' }` on that shot: zdymak draws the clock and the round Wi-Fi/battery/signal glyph at the top of
+  the column, only if the band is flat and wide enough there, and never the camera. Not 'auto' ('auto'
+  would read the app's flat top rows as a band). Portrait only; a landscape capture is left alone. The
+  open screen's bars cannot be measured by script; check them by hand.
 - **One Duo set holds ten**: closed and open together. Six closed plus four open (a device-level
   `scenes` list on the open one) fits; name both folders in vydanne's `bridge.apple.iphoneduo.dirs`.
 - **Pin what the capture shows**: the theme (an app that follows the system renders dark on a Mac in

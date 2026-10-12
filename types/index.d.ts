@@ -250,6 +250,12 @@ export interface Brand {
  * Matte + caption styling. `theme` styles VIDEOS; `stillTheme` styles SCREENSHOTS (falling back to
  * `theme`); a per-shot / per-device `theme` overrides both for that item.
  */
+/**
+ * How a capture gets its status bar: `'auto'` (a bar across the top, only into an empty band found there),
+ * `true` (forced), `false` (none), or `'column'` (the closed iPhone Duo's column down the right edge).
+ */
+export type StatusBarMode = 'auto' | 'column' | boolean;
+
 export interface Theme {
   /** Matte gradient, top colour. */
   bgTop?: string;
@@ -291,8 +297,14 @@ export interface Theme {
    * Paint a clean status bar (time · signal · wifi · full battery) into the empty status-bar band some
    * captures carry — an Android Compose capture reserves the inset but can't contain the system UI.
    * `'auto'` (default) draws it only when such a band is detected; `true` forces it; `false` skips.
+   *
+   * `'column'` is the closed iPhone Duo instead (iOS 27.1): no bar across the top, but a column 84 pt wide
+   * down the RIGHT edge, with the clock and one round Wi-Fi/battery/signal glyph stacked at its top. Drawn
+   * only into a flat band at the right edge that is wide enough to hold them, over the top 160 pt; sized
+   * from the capture's width as the Duo's 466 pt; portrait captures only. Never the default — opt in per
+   * shot on the closed Duo's target.
    */
-  statusBar?: 'auto' | boolean;
+  statusBar?: StatusBarMode;
   /** Clock shown in that status bar. Defaults to `'9:41'`. */
   statusBarTime?: string;
   /**
@@ -328,7 +340,7 @@ export interface LayoutMember {
   /** Rotation in degrees about the member's own centre. Default `0`. */
   tilt?: number;
   /** Per-member status-bar override; falls back to the shot's theme. */
-  statusBar?: boolean;
+  statusBar?: StatusBarMode;
 }
 
 export interface Scene {

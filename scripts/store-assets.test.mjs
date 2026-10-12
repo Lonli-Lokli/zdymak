@@ -17,6 +17,8 @@ import { pngInfo, sizeViolations, videoViolations, inRange, validateImage } from
 import { resolveVideo, resolveReel } from '../src/destinations.mjs';
 import { h264Level } from '../src/encode.mjs';
 import { rgbPngBuffer } from '../src/png.mjs';
+import { withStatusBar, drawStatusBar, detectBlankBand, detectBlankColumn, loadCapture } from '../src/statusbar.mjs';
+import { registerFonts } from '../src/fonts.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const bin = path.join(root, 'bin', 'zdymak.mjs');
@@ -141,6 +143,159 @@ test('every Duo target renders framed at its exact size as a no-alpha PNG', asyn
     assert.deepEqual([info.w, info.h], DUO[target], target);
     assert.equal(info.colourType, 2, `${target} must be RGB, no alpha`);
   }
+});
+
+// ─── The closed Duo's status column ─────────────────────────────────────────────────────────────
+
+registerFonts(); // what the CLI does first; the clock's width decides whether the column fits
+
+/** A busy canvas (8-px blocks, no two neighbours alike): app pixels everywhere unless painted over. */
+function busy(w, h) {
+  const c = createCanvas(w, h);
+  const g = c.getContext('2d');
+  for (let y = 0; y < h; y += 8) {
+    for (let x = 0; x < w; x += 8) {
+      g.fillStyle = `rgb(${(x * 7 + y) % 256},${(y * 3 + x * 5) % 256},${(x + y * 11) % 256})`;
+      g.fillRect(x, y, 8, 8);
+    }
+  }
+  return c;
+}
+
+/** The closed Duo at @3x as an app headless-captures it: busy app, and a flat column `band` px wide. */
+function duoOuter(band = 252, colour = '#f4f1e8') {
+  const c = busy(1398, 2034);
+  const g = c.getContext('2d');
+  g.fillStyle = colour;
+  g.fillRect(1398 - band, 0, band, 2034);
+  return c;
+}
+
+const pixels = (c) => c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+
+/** Every pixel that differs between two same-sized pixel arrays, as its bounding box and count. */
+function changed(a, b, W) {
+  const box = { n: 0, x0: Infinity, x1: -1, y0: Infinity, y1: -1 };
+  for (let i = 0; i < a.length; i += 4) {
+    if (a[i] === b[i] && a[i + 1] === b[i + 1] && a[i + 2] === b[i + 2]) continue;
+    const x = (i / 4) % W;
+    const y = Math.floor(i / 4 / W);
+    box.n++;
+    box.x0 = Math.min(box.x0, x); box.x1 = Math.max(box.x1, x);
+    box.y0 = Math.min(box.y0, y); box.y1 = Math.max(box.y1, y);
+  }
+  return box;
+}
+
+/** The colour on the ring's left side, at the height of its centre (the column's geometry, @3x). */
+const ringPixel = (c) => [...c.getContext('2d').getImageData(1398 - 144 - 56, 385, 1, 1).data].slice(0, 3);
+
+test('a flat 252-px right column gets the clock and the ring inside it, and not one pixel outside it', () => {
+  const c = duoOuter();
+  const before = pixels(c);
+  assert.equal(detectBlankColumn(c.getContext('2d'), 1398, 2034), 252);
+  withStatusBar(c, 'column');
+  const box = changed(before, pixels(c), 1398);
+  assert.ok(box.n > 2000, `expected glyphs drawn, got ${box.n} pixels`);
+  assert.ok(box.x0 >= 1398 - 252, `drew at x=${box.x0}, left of the column`);
+  // Where the simulator stands them: the clock's digits from ~87 pt, the signal dots ending by ~151 pt.
+  assert.ok(box.y0 >= 3 * 84 && box.y1 <= 3 * 154, `glyphs at y ${box.y0}–${box.y1}`);
+  // The glyphs share one centre line, 48 pt in from the right edge.
+  assert.ok(Math.abs((box.x0 + box.x1) / 2 - (1398 - 3 * 48)) <= 3, `centred at ${(box.x0 + box.x1) / 2}`);
+  const [r, g, b] = ringPixel(c);
+  assert.ok(r < 60 && g < 60 && b < 60, `ring on a light band expected dark, got ${[r, g, b]}`);
+});
+
+test('a dark column takes light glyphs, and the band says whether to draw, never how big', () => {
+  const dark = duoOuter(252, '#101418');
+  withStatusBar(dark, 'column');
+  const [r, g, b] = ringPixel(dark);
+  assert.ok(r > 200 && g > 200 && b > 200, `ring on a dark band expected light, got ${[r, g, b]}`);
+  // A wider flat margin beside the column (an app whose background runs into it) changes nothing drawn.
+  const narrow = duoOuter(252);
+  const wide = duoOuter(330);
+  withStatusBar(narrow, 'column');
+  withStatusBar(wide, 'column');
+  const strip = (c) => c.getContext('2d').getImageData(1398 - 252, 0, 252, 600).data;
+  assert.deepEqual(strip(narrow), strip(wide));
+});
+
+test('a capture with no flat column, or one too narrow or interrupted, is left untouched', () => {
+  const cases = {
+    'no column at all': busy(1398, 2034),
+    'a column too narrow for the clock': duoOuter(150),
+    'a column with one app pixel where the ring goes': (() => {
+      const c = duoOuter();
+      const g = c.getContext('2d');
+      g.fillStyle = '#ff0000';
+      g.fillRect(1260, 380, 1, 1);
+      return c;
+    })(),
+    'a landscape capture (the column was measured upright)': (() => {
+      const c = busy(2034, 1398);
+      const g = c.getContext('2d');
+      g.fillStyle = '#f4f1e8';
+      g.fillRect(2034 - 252, 0, 252, 1398);
+      return c;
+    })(),
+  };
+  for (const [name, c] of Object.entries(cases)) {
+    const before = pixels(c);
+    withStatusBar(c, 'column');
+    assert.equal(changed(before, pixels(c), c.width).n, 0, name);
+  }
+});
+
+test('the column is opt-in: auto still draws the same top bar as before, and never takes the column', () => {
+  // The existing case: an Android-style capture with an empty strip across the top.
+  const W = 1080;
+  const H = 2400;
+  const make = () => {
+    const c = busy(W, H);
+    const g = c.getContext('2d');
+    g.fillStyle = '#f4f1e8';
+    g.fillRect(0, 0, W, 150);
+    return c;
+  };
+  const auto = make();
+  withStatusBar(auto, 'auto');
+  const byDefault = make();
+  withStatusBar(byDefault);
+  const expected = make();
+  const eg = expected.getContext('2d');
+  assert.equal(detectBlankBand(eg, W, H), 150);
+  drawStatusBar(eg, W, Math.min(150, Math.round(H * 0.052)), { color: '#0b0b0a' });
+  assert.deepEqual(pixels(auto), pixels(expected), "'auto' is the top bar, drawn exactly as it always was");
+  assert.deepEqual(pixels(byDefault), pixels(expected), 'no mode is auto');
+  const box = changed(pixels(make()), pixels(auto), W);
+  assert.ok(box.n > 0 && box.y1 < 150, 'auto paints inside the top band only');
+  // A Duo capture with a flat column and a busy top: auto finds no top band and leaves it alone.
+  const duo = duoOuter();
+  const before = pixels(duo);
+  withStatusBar(duo, 'auto');
+  assert.equal(changed(before, pixels(duo), 1398).n, 0, 'auto never takes the column for a band');
+});
+
+test('theme statusBar: column reaches the capture through loadCapture, and its clock is statusBarTime', async () => {
+  const file = path.join(tmp, 'duo-column', 'a.png');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, duoOuter().toBuffer('image/png'));
+  const plain = await loadCapture(file, { statusBar: 'column' }, 'duo');
+  const zero = await loadCapture(file, { statusBar: 'column', statusBarTime: '09:41' }, 'duo');
+  assert.ok(changed(pixels(duoOuter()), pixels(plain), 1398).n > 2000, 'the column is drawn');
+  // The clock's row: a leading zero makes it wider. Below it, the ring and the dots do not move.
+  const inkWidth = (c) => {
+    const d = c.getContext('2d').getImageData(1398 - 252, 3 * 84, 252, 3 * 16).data;
+    let x0 = 252;
+    let x1 = -1;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] < 128) { const x = (i / 4) % 252; x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
+    }
+    return x1 - x0;
+  };
+  assert.ok(inkWidth(zero) > inkWidth(plain), `'09:41' should be wider than '9:41'`);
+  const below = (c) => c.getContext('2d').getImageData(1398 - 252, 3 * 105, 252, 3 * 50).data;
+  assert.deepEqual(below(zero), below(plain));
 });
 
 // ─── Creative assets: header, search, universal ────────────────────────────────────────────────

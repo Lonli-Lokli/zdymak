@@ -13,6 +13,10 @@
  *
  * Nothing is ever drawn over app pixels: the band is detected as a run of IDENTICAL rows at the top, and
  * the bar is painted only inside it.
+ *
+ * The closed iPhone Duo has no bar at all. iOS 27.1 stands its status in a COLUMN down the right edge
+ * (`statusBar: 'column'`, `drawStatusColumn`), detected the same way: a run of identical columns at the
+ * right, and nothing painted unless the whole of what is painted fits inside it.
  */
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { roundRectPath, font } from './canvas.mjs';
@@ -118,14 +122,186 @@ export function drawStatusBar(ctx, W, bandH, { time = DEFAULT_TIME, color = '#0b
   ctx.restore();
 }
 
+// ─── The status column: the closed iPhone Duo, iOS 27.1 ─────────────────────────────────────────────
+//
+// Measured on the iPhone Duo simulator (Xcode 27.1 RC, iOS 27.1 runtime, 2026-10-12), in points. The
+// closed display is 466×678 pt; iOS reserves a column 84 pt wide down the RIGHT edge, full height, and
+// nothing across the top, so the app's safe area is the other 382. Top to bottom the column holds the
+// camera (a punch-hole in the glass: hardware, unmeasured, and never drawn — inventing a detail Apple
+// does not publish is exactly what the frames refuse to do), the clock, then one round glyph: Wi-Fi inside
+// a ring that is the battery, whose open foot carries the cell signal as four dots. Below that the column
+// is the app's, which is why only the top of it has to be empty.
+//
+// What the simulator shows that a store shot must not: it charges (a green ring, broken at the top by a
+// bolt) and has no SIM (four grey dots). A shot gets what the bar gets — a full battery and full signal,
+// as Google asks and Apple's own marketing shows — so the ring is closed over the top and drawn in the
+// glyph colour, like every other battery zdymak draws, and the dots are solid.
+
+/** The closed Duo's display width, in points: the column is sized from the capture's width over this. */
+const DUO_OUTER_PT = 466;
+
+/**
+ * The column's geometry, in points. `cx` is from the RIGHT edge, every `y` from the top. The glyphs are
+ * not centred in the 84-pt column: they sit 36 pt in from its left edge (48 from the right), measured.
+ */
+const COLUMN = {
+  width: 84, // the reserved column
+  cx: 48, // the glyphs' shared centre line
+  timeBaseline: 98.8, // the clock's baseline: its digits stand 86.8–98.8, 12 pt tall and 41 wide
+  timeSize: 16.67, // the clock's size in SF, which with `timeWeight` matches those digits
+  timeWeight: 650, // heavier than the bar's semibold, as the column's clock is
+  ringY: 128.3, // the ring's centre
+  ringR: 18.67, // the ring's centre line (40.5 pt across outside)
+  ringW: 3.2, // the ring's stroke
+  ringOpen: 55, // degrees either side of straight down where the ring's round ends sit
+  dotR: 2, // the signal dots: 4 pt across
+  dotOrbit: 20.6, // on a circle just outside the ring's centre line
+  dots: [-29, -9.7, 9.7, 29], // degrees from straight down
+  wifiDrop: 8.67, // Wi-Fi's apex, below the ring's centre
+  wifiWedge: 4.33, // the filled wedge's radius
+  wifiArcs: [7.67, 12.25], // the two arcs' centre lines
+  wifiW: 2.75, // the arcs' stroke
+  bottom: 160, // everything painted ends above this (the lowest dot ends at 150.6)
+  margin: 2, // clear space the glyphs keep from the app's pixels beside them
+};
+
+/**
+ * Width in px of the uniform band down the RIGHT edge over the top `rows` rows, or 0 if there isn't a
+ * plausible one. The column's twin of `detectBlankBand`: a column of pixels counts only if EVERY pixel in
+ * it matches the top-right corner (no sampling — a clock's hairline must not slip between samples), and a
+ * band narrower than 2% of the width is a coincidence. Bounded to 40% of the width.
+ */
+export function detectBlankColumn(ctx, W, H, rows = H) {
+  const h = Math.max(1, Math.min(H, Math.ceil(rows)));
+  const span = Math.max(1, Math.floor(W * 0.4));
+  const data = ctx.getImageData(W - span, 0, span, h).data;
+  const at = (x, y) => { const i = (y * span + x) * 4; return [data[i], data[i + 1], data[i + 2]]; };
+  const [r0, g0, b0] = at(span - 1, 0);
+  const same = (c) => Math.abs(c[0] - r0) <= 3 && Math.abs(c[1] - g0) <= 3 && Math.abs(c[2] - b0) <= 3;
+  let w = 0;
+  scan: for (; w < span; w++) {
+    const x = span - 1 - w;
+    for (let y = 0; y < h; y++) if (!same(at(x, y))) break scan;
+  }
+  return w >= W * 0.02 ? w : 0;
+}
+
+/** Degrees → radians. */
+const rad = (deg) => (deg * Math.PI) / 180;
+
+/**
+ * Set the clock's face on `ctx` and return a function that puts the variation back. The weight is set
+ * twice on purpose: as a variation, which San Francisco (a variable font, registered at one weight) obeys
+ * and a static face ignores, and in the font string, which a static face takes as a synthetic bold.
+ */
+function clockFace(ctx, s) {
+  ctx.font = font(COLUMN.timeSize * s, '600');
+  const before = ctx.fontVariationSettings;
+  ctx.fontVariationSettings = `'wght' ${COLUMN.timeWeight}`;
+  return () => { ctx.fontVariationSettings = before; };
+}
+
+/**
+ * How far from the right edge, in px, the column's glyphs reach — the clock or the ring, whichever is
+ * wider — plus the margin they keep. The band has to be at least this wide for anything to be drawn.
+ */
+function columnReach(ctx, W, time) {
+  const s = W / DUO_OUTER_PT;
+  ctx.save();
+  const restore = clockFace(ctx, s);
+  const half = Math.max(ctx.measureText(time).width / 2, (COLUMN.ringR + COLUMN.ringW / 2) * s);
+  restore();
+  ctx.restore();
+  return Math.ceil(COLUMN.cx * s + half + COLUMN.margin * s);
+}
+
+/**
+ * Paint the closed Duo's status column: the clock, then Wi-Fi inside a full battery ring, with four
+ * signal dots in its foot when `cellular`. Vector-drawn like the bar, and sized from the capture's width
+ * as the Duo's 466 pt, never from the band it found — two screens with different margins must not get
+ * different clocks.
+ */
+export function drawStatusColumn(ctx, W, { time = DEFAULT_TIME, color = '#0b0b0a', cellular = true } = {}) {
+  const s = W / DUO_OUTER_PT;
+  const cx = W - COLUMN.cx * s;
+
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  const restore = clockFace(ctx, s);
+  ctx.fillText(time, cx, COLUMN.timeBaseline * s);
+  restore();
+
+  // The battery: a ring open at the foot, its round ends 55° either side of straight down. Canvas angles
+  // run clockwise from +x, so straight down is 90° and the ring sweeps from 145° over the top to 35°.
+  const cy = COLUMN.ringY * s;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = COLUMN.ringW * s;
+  ctx.beginPath();
+  ctx.arc(cx, cy, COLUMN.ringR * s, rad(90 + COLUMN.ringOpen), rad(90 - COLUMN.ringOpen));
+  ctx.stroke();
+
+  // The cell signal: four dots along the ring's open foot. A Wi-Fi-only capture leaves the foot open.
+  if (cellular) {
+    for (const a of COLUMN.dots) {
+      ctx.beginPath();
+      ctx.arc(cx + COLUMN.dotOrbit * s * Math.sin(rad(a)), cy + COLUMN.dotOrbit * s * Math.cos(rad(a)), COLUMN.dotR * s, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Wi-Fi: a filled wedge and two arcs, all cut by the same lines 45° either side of straight up. A round
+  // cap reaches past its arc's end by half the stroke, so each arc stops that much short of the line.
+  const ay = cy + COLUMN.wifiDrop * s;
+  const up = 270;
+  const j = 0.8 * s; // the wedge's corners are rounded by stroking it with a round join
+  const wy = ay - (j / 2) * Math.SQRT2; // ...which fattens it by j/2, so its apex moves up to keep the tip
+  ctx.lineWidth = j;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx, wy);
+  ctx.arc(cx, wy, COLUMN.wifiWedge * s - j, rad(up - 45), rad(up + 45));
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.lineWidth = COLUMN.wifiW * s;
+  for (const r of COLUMN.wifiArcs) {
+    const trim = (COLUMN.wifiW / 2 / r) * (180 / Math.PI);
+    ctx.beginPath();
+    ctx.arc(cx, ay, r * s, rad(up - 45 + trim), rad(up + 45 - trim));
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * The column's half of `withStatusBar`. Portrait only: the column was measured on the closed Duo held
+ * upright, and where iOS stands it in landscape has not been, so a landscape capture is left as it is.
+ */
+function withStatusColumn(canvas, opts) {
+  const ctx = canvas.getContext('2d');
+  const { width: W, height: H } = canvas;
+  if (W >= H) return canvas;
+  const time = opts.time || DEFAULT_TIME;
+  const band = detectBlankColumn(ctx, W, H, (COLUMN.bottom * W) / DUO_OUTER_PT);
+  if (!band || band < columnReach(ctx, W, time)) return canvas;
+  const px = ctx.getImageData(W - 1, 0, 1, 1).data;
+  drawStatusColumn(ctx, W, { ...opts, time, color: opts.color || (isLight(px) ? '#0b0b0a' : '#f5f5f4') });
+  return canvas;
+}
+
 /**
  * If the capture reserves an empty status-bar band, fill it with a clean bar. Returns the canvas either
  * way, so callers can use it unconditionally.
  *
- * `mode`: 'auto' (default — only when a band is detected) · true (force, using a 6% band) · false (skip).
+ * `mode`: 'auto' (default — only when a band is detected) · true (force, using a 6% band) · false (skip) ·
+ * 'column' (the closed iPhone Duo's column down the right edge — only when that column is found empty).
  */
 export function withStatusBar(canvas, mode = 'auto', opts = {}) {
   if (mode === false) return canvas;
+  if (mode === 'column') return withStatusColumn(canvas, opts);
   const ctx = canvas.getContext('2d');
   const { width: W, height: H } = canvas;
   // A (near-)square capture is a watch face. Watches have no marketing status bar, and their corners fall
