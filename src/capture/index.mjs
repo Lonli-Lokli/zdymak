@@ -562,6 +562,11 @@ async function captureAndroid(flags) {
       }
       console.log(`Done → ${outDir}`);
     } else {
+      // The demo broadcasts above land ASYNCHRONOUSLY, and androidDemo re-enters demo mode from scratch (exit,
+      // enter, then the slots), so a screencap taken at once can catch SystemUI mid-redraw. Niva's Play phone set,
+      // one `--name` shot per state, came out with the network icon as the live "3G", white on a light bar, or
+      // missing, shot to shot (2026-10-12). Give the bar a moment, as the state loop's settle already does.
+      await sleep(Number(flags.barSettle ?? 1500));
       const out = path.join(outDir, `${flags.name || 'shot'}.png`);
       await grab(out);
       console.log(`✓ ${out}  (alpha stripped, store-ready)`);
