@@ -20,7 +20,7 @@ import { buildMontage } from './montage.mjs';
 import { buildDeviceScreenshots, localizeScenes, localizeBrand, untranslatedScenes } from './screenshots.mjs';
 import { VIDEO_TARGETS, IMAGE_TARGETS, videoTarget } from './specs.mjs';
 import { runCapture } from './capture/index.mjs';
-import { resolveVideo, paletteAt } from './destinations.mjs';
+import { resolveVideo, resolveReel, paletteAt } from './destinations.mjs';
 import { validateVideo, validateImage, captureBlankness, BLANK_COLOURS, BLANK_DOMINANCE } from './validate.mjs';
 import { normalizeMiddleware, runMiddleware } from './middleware.mjs';
 import { pathToFileURL } from 'node:url';
@@ -145,20 +145,31 @@ async function cmdReel(flags) {
   fs.mkdirSync(outDir, { recursive: true });
   for (const [i, reel] of all.entries()) {
     if (!selected.includes(reel)) continue;
-    const [w, h] = reel.size || [1080, 1920];
-    const spec = { w, h, fps: reel.fps || 30, profile: reel.profile || 'high', level: reel.level || '4.1' };
+    // The destination is decided by the CONFIG's name, not by `--name`, which only renames the file.
+    const { destId, destination, spec, theme } = resolveReel(reel, nameOf(reel, i));
+    const { w, h } = spec;
     // `--name` still renames a lone reel; with several, each carries its own `name` and the flag
     // would silently make them overwrite one another.
     const base = flags.name && selected.length === 1 ? flags.name : nameOf(reel, i);
     const outFile = path.join(outDir, `${base}.mp4`);
-    console.log(`zdymak reel • ${base}: ${reel.segments.length} segment(s) → ${w}×${h}${reel.music ? ', ♪' : ''}`);
+    const to = destId ? ` (${destId})` : '';
+    console.log(`zdymak reel • ${base}${to}: ${reel.segments.length} segment(s) → ${w}×${h} @${spec.fps}${reel.music ? ', ♪' : ''}`);
     const { totalDur } = await buildMontage({
-      segments: reel.segments, brand: cfg.brand, theme: reel.theme, spec, // reel theme (light default), NOT cfg.theme
+      segments: reel.segments, brand: cfg.brand, theme, spec, // reel theme (light default), NOT cfg.theme
       music: reel.music, sceneDur: reel.sceneDur, bpm: reel.bpm, beatsPerCut: reel.beatsPerCut,
       transition: reel.transition, xfadeDur: reel.xfadeDur, outFile,
     });
     console.log(`  ✓ ${totalDur.toFixed(1)}s → ${path.relative(process.cwd(), outFile)}`);
-    warnAudio({ videoCount: 1, hasMusic: !!reel.music, label: `the ${base} reel` });
+    // Measured against the destination it answers to, like every `video` target — size (or range),
+    // duration window, frame rate, file cap. A reel that answers to none is not measured.
+    if (destination) {
+      validateVideo({ file: outFile, destination, size: reel.size, force: !!flags.force });
+    }
+    if (destination?.muted === 'always' && reel.music) {
+      console.warn(`⚠︎ audio: ${destId} always plays muted — the music in the ${base} reel is never heard there.`);
+    }
+    // A creative asset must "work silently first" (Apple), so a silent one is the design, not an omission.
+    warnAudio({ videoCount: 1, hasMusic: !!reel.music, label: `the ${base} reel`, silentByDesign: !!destination?.muted });
   }
   console.log('Done.');
 }
@@ -331,16 +342,29 @@ async function cmdCheck(flags, rest) {
   else if (bad.length) console.warn(`⚠︎ ${bad.length} capture(s) failed the check; --force reports them without failing`);
 }
 
+/** How a target's size reads: one size, a list, or a range with the size zdymak writes by default. */
+function dimText(s) {
+  if (s.range) return `${s.w}×${s.h} (any ${s.range.ratio.join(':')} from ${s.range.min.join('×')} to ${s.range.max.join('×')})`;
+  if (s.accepts && !(s.accepts.length === 1 && s.accepts[0][0] === s.w && s.accepts[0][1] === s.h)) {
+    return s.accepts.map((a) => a.join('×')).join(' | ');
+  }
+  return `${s.w}×${s.h}`;
+}
+
 function cmdSpecs() {
+  const pad = (o) => Math.max(...Object.keys(o).map((k) => k.length)) + 1;
   console.log('\nVIDEO targets (produce an .mp4):');
+  const vp = pad(VIDEO_TARGETS);
   for (const [id, s] of Object.entries(VIDEO_TARGETS)) {
     const dur = s.minSec ? `${s.minSec}–${s.maxSec}s` : 'any length';
-    console.log(`  ${id.padEnd(20)} ${s.w}×${s.h} @${s.fps}  H.264 ${s.profile}@${s.level}  ${dur}  — ${s.store}`);
+    const fps = s.fpsAllowed ? s.fpsAllowed.join('|') : s.fps;
+    const via = s.reelOnly ? '  [zdymak reel]' : '';
+    console.log(`  ${id.padEnd(vp)} ${dimText(s)} @${fps}  H.264 ${s.profile}@${s.level}  ${dur}${via}  — ${s.store}`);
   }
   console.log('\nIMAGE targets (store screenshots — `zdymak screenshots` / `build`):');
+  const ip = pad(IMAGE_TARGETS);
   for (const [id, s] of Object.entries(IMAGE_TARGETS)) {
-    const dim = s.accepts ? s.accepts.map((a) => a.join('×')).join(' | ') : `${s.w}×${s.h}`;
-    console.log(`  ${id.padEnd(24)} ${dim}${s.alpha === false ? '  (no alpha)' : ''}  — ${s.store}`);
+    console.log(`  ${id.padEnd(ip)} ${dimText(s)}${s.alpha === false ? '  (no alpha)' : ''}  — ${s.store}`);
   }
   console.log('');
 }

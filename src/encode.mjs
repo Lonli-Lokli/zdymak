@@ -13,7 +13,7 @@ import fs from 'node:fs';
  * Smallest H.264 level that fits this frame size + rate (macroblocks and MB/s per Annex A), floored at
  * the target's own level so we never *under*-declare what a store asked for.
  */
-function h264Level(W, H, fps, floor) {
+export function h264Level(W, H, fps, floor) {
   const mbs = Math.ceil(W / 16) * Math.ceil(H / 16);
   const rate = mbs * fps;
   const TABLE = [

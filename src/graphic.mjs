@@ -1,13 +1,21 @@
 /**
- * Feature graphic — Google Play's 1024×500 listing banner (no alpha). A brand matte with the logo +
- * wordmark + tagline on the left and a tilted device (a hero capture in a frame) bleeding off the right.
- * Ported/generalized from a production store-asset pipeline; brand-driven.
+ * Branded graphics — one image per target, built from the brand and one hero capture, never per scene.
+ *
+ *   Feature graphic — Google Play's 1024×500 listing banner (no alpha), and the social card. A brand matte
+ *   with the logo + wordmark + tagline on the left and a tilted device (a hero capture in a frame)
+ *   bleeding off the right. Ported/generalized from a production store-asset pipeline; brand-driven.
+ *
+ *   Creative assets — the App Store's iOS 27 product page header, search results image and universal
+ *   asset. The same parts, laid out around Apple's art safe area because the store crops them
+ *   (see `buildCreativeGraphic`).
+ *
+ *   App icon — a branded square from `brand.logo` (the Play icon, Apple's in-app purchase image).
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
-import { font, hexA, roundRectPath, fillVerticalGradient, radialGlow } from './canvas.mjs';
-import { frameFor, drawAndroidPhoneFrame } from './frames.mjs';
+import { font, hexA, roundRectPath, fillVerticalGradient, radialGlow, wrapLines } from './canvas.mjs';
+import { frameFor, drawAndroidPhoneFrame, screenAspectFor } from './frames.mjs';
 import { rgbPngBuffer } from './png.mjs';
 
 const DEFAULT = { matteTop: '#052E16', matteBottom: '#0b0b0a', glow: null, glowAlpha: 0.22 };
@@ -39,6 +47,28 @@ function splitTagline(t) {
   if (!t) return ['', ''];
   const m = t.match(/^(.*?[.!?])\s+(.*)$/);
   return m ? [m[1], m[2]] : [t, ''];
+}
+
+/**
+ * `brand.fan` — images fanned out like a hand of cards, each rotated a little further from the middle,
+ * overlapped and drop-shadowed, standing on (cx, cy): `cy` is where the cards' bottom edges meet.
+ * Missing files are skipped. Shared by the feature graphic and the App Store creative assets.
+ */
+async function drawFan(ctx, paths, { cx, cy, h, spread, blur, offsetY }) {
+  const fan = (paths || []).filter((f) => fs.existsSync(f));
+  const mid = (fan.length - 1) / 2;
+  for (let i = 0; i < fan.length; i++) {
+    const img = await loadImage(fan[i]);
+    const w = (img.width / img.height) * h;
+    ctx.save();
+    ctx.translate(cx + (i - mid) * (w * 0.52), cy);
+    ctx.rotate((i - mid) * spread);
+    ctx.shadowColor = 'rgba(0,0,0,0.35)';
+    ctx.shadowBlur = blur;
+    ctx.shadowOffsetY = offsetY;
+    ctx.drawImage(img, -w / 2, -h, w, h);
+    ctx.restore();
+  }
 }
 
 /** Build the 1024×500 feature graphic → writes a no-alpha PNG. `frame`: which device frame for the hero. */
@@ -87,26 +117,14 @@ export async function buildFeatureGraphic({ W = 1024, H = 500, brand, theme, her
     ctx.fillText(brand.endsub, leftX, 352 + textY);
   }
 
-  const fan = (brand.fan || []).filter((f) => fs.existsSync(f));
-  if (fan.length) {
-    const spread = brand.fanSpread ?? 0.17;
-    const cx = brand.fanX ?? W * 0.55;
-    const cy = brand.fanY ?? H * 0.92;
-    const h = brand.fanHeight ?? 300;
-    const mid = (fan.length - 1) / 2;
-    for (let i = 0; i < fan.length; i++) {
-      const img = await loadImage(fan[i]);
-      const w = (img.width / img.height) * h;
-      ctx.save();
-      ctx.translate(cx + (i - mid) * (w * 0.52), cy);
-      ctx.rotate((i - mid) * spread);
-      ctx.shadowColor = 'rgba(0,0,0,0.35)';
-      ctx.shadowBlur = 18;
-      ctx.shadowOffsetY = 6;
-      ctx.drawImage(img, -w / 2, -h, w, h);
-      ctx.restore();
-    }
-  }
+  await drawFan(ctx, brand.fan, {
+    cx: brand.fanX ?? W * 0.55,
+    cy: brand.fanY ?? H * 0.92,
+    h: brand.fanHeight ?? 300,
+    spread: brand.fanSpread ?? 0.17,
+    blur: 18,
+    offsetY: 6,
+  });
 
   if (heroPath && fs.existsSync(heroPath)) {
     const hero = await loadImage(heroPath);
@@ -123,6 +141,221 @@ export async function buildFeatureGraphic({ W = 1024, H = 500, brand, theme, her
   fs.mkdirSync(path.dirname(outFile), { recursive: true });
   fs.writeFileSync(outFile, rgbPngBuffer(c));
   return { outFile, W, H };
+}
+
+/**
+ * App Store CREATIVE ASSETS (iOS 27 / iPadOS 27): the product page header (21:9), the search results
+ * image (3:2) and the universal 16:9 asset that can serve as both.
+ *
+ * The same brand system as the feature graphic — lockup, tagline, the `fan`, one hero capture — but
+ * not the same picture scaled up, because these are CROPPED by the store and the feature graphic is
+ * not. One file is shown differently on iPhone and iPad and in each orientation, and Apple's only
+ * published rule is "be sure your focal point artwork is within the center of your composition". Its
+ * templates are more exact: each canvas carries an ART SAFE AREA (`safe` on the target, see specs.mjs),
+ * and that rectangle is what this layout is built around:
+ *
+ *   - the lockup and tagline sit wholly INSIDE it, in its left part, sized to fit it;
+ *   - the hero sits in its right part, and may run past its right edge and a little above and below
+ *     it, so the half nearest the words is always the half that survives a crop;
+ *   - the fan stands in the margin to the LEFT of it, rising from the bottom edge — decoration, which
+ *     the widest view shows and a narrow crop may lose without the picture losing its point.
+ *
+ * The hero should be a LANDSCAPE capture where the app has one. A phone frame squeezed into a 21:9
+ * strip is a small upright rectangle in a sea of matte; a real landscape table fills the strip and is
+ * the "firsthand experience" Apple asks the search image to show. A landscape hero is drawn as the
+ * screen itself — rounded, shadowed, no bezel — so a capture taken on any device advertises no
+ * particular hardware (Apple: "Don't include logos or references to other platforms"); `frame` asks
+ * for a body by name when one is wanted. A portrait hero gets the iPhone frame by default.
+ *
+ * Not drawn here, on purpose: `brand.endsub`. It is the honest-offer line ("Free · no ads") of the end
+ * card and the feature graphic, and Apple's guidance for these assets rules out pricing and asks for
+ * "a short phrase that enhances your visual rather than describes it" — the tagline is that phrase.
+ * The pixel knobs of the feature graphic (`fanX`/`fanY`/`fanHeight`, `textOffsetY`) do not apply
+ * either: they are pixels of a 1024×500 canvas, and this layout is placed from the safe area instead.
+ */
+
+/** Text column's share of the safe area's width; the hero takes the rest. */
+const TEXT_SHARE = 0.44;
+/** Block proportions, in units of the icon size k: wordmark, gap under the lockup, tagline size. */
+const WORDMARK = 0.83; // the feature graphic's 76px type on a 92px icon
+const LOCKUP_GAP_BELOW = 0.55;
+const TAGLINE = 0.52; // the feature graphic's 48px on 92
+const TAGLINE_LH = 1.2;
+
+/**
+ * Where everything goes, as pure geometry, so the safe-area promise is testable without drawing.
+ * `heroAspect` is the hero SCREEN's height/width; `framed` leaves room for a body around it.
+ * Every rect is `{ x, y, w, h }` in canvas pixels; `fan` is the point its cards stand on, and a height.
+ */
+export function creativeLayout({ W, H, safe, heroAspect, framed = false }) {
+  const [sx, sy, sw, sh] = safe;
+  const pad = Math.round(sw * 0.03);
+  const text = { x: sx + pad, y: sy + pad, w: Math.round(sw * TEXT_SHARE - pad * 1.5), h: sh - pad * 2 };
+
+  // The hero's box starts after the text column and may reach the canvas's own margin on the right and
+  // 15% of the safe height past the safe area above and below. A body is ~7% bigger than its screen.
+  const k = framed ? 1.07 : 1;
+  const x0 = sx + Math.round(sw * TEXT_SHARE) + pad;
+  const boxW = W - Math.round(W * 0.04) - x0;
+  const boxH = sh * 1.3;
+  let w = boxW / k;
+  let h = w * heroAspect;
+  if (h > boxH / k) {
+    h = boxH / k;
+    w = h / heroAspect;
+  }
+  const outerW = w * k;
+  const outerH = h * k;
+  // A hero that fits in what is left of the safe area is centred in it; one that does not starts at
+  // the column and runs out to the right, so its part nearest the words is the part that is safe.
+  const room = sx + sw - x0;
+  const ox = outerW <= room ? x0 + (room - outerW) / 2 : x0;
+  const hero = { x: Math.round(ox), y: Math.round(sy + sh / 2 - outerH / 2), w: Math.round(outerW), h: Math.round(outerH) };
+
+  // The fan is decoration, so it goes OUTSIDE the safe area, in whichever margin holds the bigger cards:
+  // the one to the left of it, or the band below the words. Either way its cards run off the bottom
+  // edge, like a hand held below the table — the part a crop loses first is the part that matters
+  // least. Sized so it never reaches the words: three cards at 52% overlap span about twice one card,
+  // and a card is about 0.73 as wide as it is tall, so a fan is ~1.5× as wide as it is tall.
+  const sink = 0.12; // how far below the bottom edge the cards stand
+  const leftH = Math.min(H * 0.5, sx * 0.6);
+  const band = H - (sy + sh);
+  const belowH = Math.min(band / (1 - sink), (text.w * 1.1) / 1.5);
+  const fan = leftH >= belowH
+    ? { cx: Math.round(sx * 0.46), cy: Math.round(H + leftH * sink), h: Math.round(leftH) }
+    : { cx: Math.round(text.x + text.w / 2), cy: Math.round(H + belowH * sink), h: Math.round(belowH) };
+  return { safe: { x: sx, y: sy, w: sw, h: sh }, text, hero, fan };
+}
+
+/**
+ * Fit the lockup and tagline into `box`: the largest icon size k at which every line fits the width and
+ * the whole block fits the height. Returns what to draw; nothing is drawn here.
+ *
+ * Each sentence of the tagline keeps its own line if it can. Wrapping is the fallback for a sentence
+ * too long to set at a readable size, and only taken when it buys a third more size: "Hold less. /
+ * Know more." broken into "Know / more." to gain a few pixels reads as a mistake, while a German
+ * sentence twice as long genuinely needs the second line.
+ */
+function fitIdentity(ctx, brand, hasLogo, box) {
+  const name = brand.name || 'App';
+  const gap = Number.isFinite(brand.lockupGap) ? brand.lockupGap : 0.28; // the feature graphic's 26px on 92
+  const parts = splitTagline(brand.tagline).filter(Boolean);
+  const blockH = (n) => 1 + (n ? LOCKUP_GAP_BELOW + n * TAGLINE * TAGLINE_LH : 0);
+  ctx.font = font(100 * WORDMARK, 'bold');
+  const lockupW100 = (hasLogo ? 100 + 100 * gap : 0) + ctx.measureText(name).width;
+  const kMax = Math.min(box.h / blockH(parts.length), (box.w * 100) / lockupW100);
+
+  // One line per sentence: shrink until the widest sentence fits.
+  ctx.font = font(100 * TAGLINE, 'bold');
+  const widest100 = Math.max(1, ...parts.map((p) => ctx.measureText(p).width));
+  const kWhole = Math.min(kMax, (box.w * 100) / widest100);
+  const whole = parts.map((text, j) => ({ text, second: j > 0 }));
+
+  // Wrapped: the size settles as the line count does (fewer lines → bigger type → more wrapping).
+  let k = kMax;
+  let lines = whole;
+  for (let i = 0; i < 6; i++) {
+    ctx.font = font(Math.round(k * TAGLINE), 'bold');
+    lines = parts.flatMap((p, j) => wrapLines(ctx, p, box.w).map((text) => ({ text, second: j > 0 })));
+    // A single word wider than the column cannot wrap: shrink to it.
+    const w = Math.max(0, ...lines.map((l) => ctx.measureText(l.text).width));
+    const next = Math.min(k, w > box.w ? k * (box.w / w) : k, box.h / blockH(lines.length));
+    if (next >= k - 0.5) break;
+    k = next;
+  }
+  const useWhole = kWhole >= k * 0.75;
+  const kk = Math.floor(useWhole ? kWhole : k);
+  const chosen = useWhole ? whole : lines;
+  return { k: kk, name, gap, lines: chosen, height: kk * blockH(chosen.length) };
+}
+
+/** The hero: the screen itself on the matte, or inside a named frame. `rect` is the outer box. */
+function drawHero(ctx, img, rect, frame) {
+  const draw = frame && frame !== 'none' ? frameFor(frame) : null;
+  if (draw) {
+    draw(ctx, img, rect.x + rect.w / 2, rect.y + rect.h / 2, rect.w / 1.07);
+    return;
+  }
+  const r = Math.round(Math.min(rect.w, rect.h) * 0.035);
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.45)';
+  ctx.shadowBlur = Math.round(rect.w * 0.035);
+  ctx.shadowOffsetY = Math.round(rect.w * 0.012);
+  roundRectPath(ctx, rect.x, rect.y, rect.w, rect.h, r);
+  ctx.fillStyle = '#000';
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  roundRectPath(ctx, rect.x, rect.y, rect.w, rect.h, r);
+  ctx.clip();
+  // The rect already has the capture's aspect, so this is a plain scale, not a crop.
+  ctx.drawImage(img, rect.x, rect.y, rect.w, rect.h);
+  ctx.restore();
+}
+
+/**
+ * Build one App Store creative asset → a no-alpha PNG. `safe` is the art safe area in THIS canvas's
+ * pixels (the caller scales the target's when a `size:` override changes the canvas). `frame`: a frame
+ * id for the hero, `'none'` for the bare screen; unset picks by the hero's shape (see above).
+ * `fan: false` leaves the cards out.
+ */
+export async function buildCreativeGraphic({ W, H, safe, brand, theme, heroPath, outFile, frame, fan = true }) {
+  const th = ground(theme);
+  const hero = heroPath && fs.existsSync(heroPath) ? await loadImage(heroPath) : null;
+  const heroFrame = frame ?? (hero && hero.height > hero.width ? 'phone' : 'none');
+  const framed = heroFrame !== 'none' && !!frameFor(heroFrame);
+  const aspect = hero ? screenAspectFor(heroFrame, hero) : 9 / 16;
+  const lay = creativeLayout({ W, H, safe, heroAspect: aspect, framed });
+
+  const c = createCanvas(W, H);
+  const ctx = c.getContext('2d');
+  fillVerticalGradient(ctx, W, H, th.matteTop, th.matteBottom);
+  // The glow sits where the words meet the hero, so the light falls on the part every crop keeps.
+  radialGlow(ctx, lay.hero.x, lay.safe.y + lay.safe.h / 2, Math.max(W, H) * 0.5, th.glow || brand.sub, th.glowAlpha);
+
+  if (fan !== false) {
+    await drawFan(ctx, brand.fan, {
+      cx: lay.fan.cx, cy: lay.fan.cy, h: lay.fan.h,
+      spread: brand.fanSpread ?? 0.17,
+      blur: Math.round(lay.fan.h * 0.06), // the feature graphic's 18px on its 300px cards
+      offsetY: Math.round(lay.fan.h * 0.02),
+    });
+  }
+  if (hero) drawHero(ctx, hero, lay.hero, heroFrame);
+
+  const logo = brand.logo && fs.existsSync(brand.logo) ? await loadImage(brand.logo) : null;
+  const id = fitIdentity(ctx, brand, !!logo, lay.text);
+  const { k } = id;
+  let y = Math.round(lay.text.y + (lay.text.h - id.height) / 2);
+  const x = lay.text.x;
+  if (logo) {
+    ctx.save();
+    roundRectPath(ctx, x, y, k, k, k * 0.22);
+    ctx.clip();
+    ctx.drawImage(logo, x, y, k, k);
+    ctx.restore();
+  }
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.font = font(Math.round(k * WORDMARK), 'bold');
+  ctx.fillStyle = brand.title;
+  ctx.fillText(id.name, x + (logo ? k + k * id.gap : 0), y + k / 2 + k * 0.04);
+  y += k;
+  if (id.lines.length) {
+    y += k * LOCKUP_GAP_BELOW;
+    ctx.textBaseline = 'top';
+    ctx.font = font(Math.round(k * TAGLINE), 'bold');
+    for (const line of id.lines) {
+      // The tagline's second sentence in the accent colour, as on the feature graphic.
+      ctx.fillStyle = line.second ? brand.sub : brand.title;
+      ctx.fillText(line.text, x, y);
+      y += k * TAGLINE * TAGLINE_LH;
+    }
+  }
+
+  fs.mkdirSync(path.dirname(outFile), { recursive: true });
+  fs.writeFileSync(outFile, rgbPngBuffer(c));
+  return { outFile, W, H, layout: lay };
 }
 
 

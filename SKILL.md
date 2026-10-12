@@ -40,6 +40,9 @@ get rejected or quietly under-perform.
 | **App Store** screenshots | `appstore-iphone-6.9` (+`-6.5`), `appstore-ipad-13` (+`-landscape`), `appstore-mac`, `appstore-watch` | framed (inferred) | Marketing styling is **expected** here: frames, headlines, backgrounds. iPad/Mac/Watch shots are *required* if the app ships there. Pick ONE Watch size and keep it across localizations. |
 | **Google Play** screenshots | `play-phone`, `play-tablet` (+`-portrait`), `play-wear`, `play-feature-graphic` | `bleed` + `caption: false` for the upload | Google forbids device frames, added text and backgrounds on store screenshots (hard requirement for Wear OS). Render a plain set for upload and a styled set for the website — `dir` keeps both. The feature graphic is **required** even without a video. |
 | An **in-app purchase** review screenshot | `appstore-iap-review` | interface only (automatic) | Its own slot with its own OLDER size table — the listing sizes are refused. Defaults to 640×920; never pass a listing target's `size:` here. `appstore-iap-promo` is the optional 1024×1024 companion. |
+| **iPhone Duo** screenshots | `appstore-iphone-duo-outer` / `-inner` (+`-landscape` of each) | framed by `duo` / `duo-inner` (inferred) | ONE "iPhone Duo" slot takes all four sizes (1398×2034, 2007×2853, and both turned). Optional now, **required from April 2027** for apps built with the iOS 27.1 SDK. Capture on the Duo simulator (Xcode 27.1+): the frame keeps the display's true shape and crops any other capture, with a warning. The frame has NO Dynamic Island, camera or crease — Apple publishes none; never add them. |
+| The App Store **product page header / search image** (iOS 27+) | `appstore-header` (3840×1646), `appstore-search` (3:2, 1920×1280–3840×2560), or `appstore-universal` (5244×2950, both) | branded graphic | Like the feature graphic: lockup, tagline, fan, ONE hero — laid out around Apple's art safe area (from its own template). Give it a **landscape** hero with `hero: '<scene id>'`; a phone in a 21:9 strip is the wrong picture. Optional assets. |
+| The App Store **header / search video** (iOS 27+) | a `reel` entry with `destination: 'appstore-header-video'` / `'appstore-search-video'` | live footage | `zdymak reel` only — `video`/`build` refuse these. 5–30 s, 30 or 60 fps, loops, muted (search: always). Landscape footage with `theme: { bleed: true }`. A 3840-wide encode is heavy: build it alone. |
 | Web-app screenshots | any target, captured with `--platform web` | as above | Playwright driver; states are URL paths. |
 
 Exact dimensions live in `zdymak specs` (printed from the code, so it can't drift). They're checked
@@ -207,6 +210,30 @@ caption, no matte.
 (alpha OK). Wear OS: interface only (requirement). Phone/tablet: frames recommended against, taglines ≤20% allowed.
 **Play video** is a YouTube URL, not a file — render `play-promo`, upload, paste the link. Keep it silent
 unless the track is cleared (ContentID → forced ads → Play violation).
+**iPhone Duo** (checked 12 Oct 2026) outer 1398×2034 / 2034×1398, inner 2007×2853 / 2853×2007, one slot.
+Optional now; required from April 2027 for apps built with the iOS 27.1 SDK.
+**App Store creative assets** (iOS/iPadOS 27+, optional, checked 12 Oct 2026), no alpha: header image
+3840×1646 JPEG/PNG · search image 3:2 from 1920×1280 to 3840×2560 JPEG/PNG · universal 5244×2950 PNG only
+(one file for both) · header video 3840×1646 and search video 3:2 (same range), 30 or 60 fps, 5–30 s,
+.mov/.m4v/.mp4, loop, muted (search always). No pricing, URLs, ©, unearned awards, Apple recognitions, or
+other platforms' logos. Apple's help publishes no safe area; its Sketch template does (header 1646×661
+centred, search 2168×1030 centred, universal 1402×962 centred across and 334 px above centre), and the
+`appstore-header`/`-search`/`-universal` graphics keep the words inside it. Tell the user to check
+App Store Connect's Preview before submitting.
+
+## App Store creative graphics and videos (iOS 27)
+Treat them like the feature graphic, not like screenshots: one image per target, built from the brand
+(`brand.logo` + `name` lockup, `tagline`, `fan`) and ONE hero capture. Before writing the config:
+- **Find a landscape capture** (a Play tablet set, an iPad landscape set) and name it with `hero:
+  '<scene id>'` on the shot. Without `hero` the first landscape capture is used; a named hero that is
+  missing is an error. Landscape heroes are drawn as the bare screen; `frame: '<id>'` asks for a body.
+- `brand.endsub` is NOT drawn (Apple rules out pricing; "Free" reads as pricing), and the feature
+  graphic's pixel knobs (`fanX`/`fanY`/`fanHeight`, `textOffsetY`) do not apply. `fan: false` drops the cards.
+- Two of the same target need `dir` or they overwrite each other.
+- Videos are `reel` entries with `destination: 'appstore-header-video' | 'appstore-search-video'` (the
+  destination fills size/fps/level and sets `theme.frame: false`); use landscape clips and `theme: { bleed:
+  true }`. They are measured after the encode (size, 5–30 s, 30/60 fps) and refused on a violation.
+  Search plays muted always — don't spend a music bed there.
 
 ## Store cut vs social-ad cut (per-scene `cut` / `effect`)
 `social-reel` supports **34 transitions** and **25 effects**, chosen per scene:
@@ -286,3 +313,8 @@ render yet can still carry a check. The same key exists in vydanne. Full example
   listing — an Apple device cluster inside a Play listing advertises a competitor.
 - Keep any music **commercially licensed**; the engine is silent by default (previews autoplay muted).
 - Don't fabricate UI or overstate features in captions — App Review checks the preview matches the app.
+- Don't invent iPhone Duo hardware (an island, a camera dot, a crease) — Apple has published none of it,
+  and a picture of a device that does not look like that is a claim the listing cannot back.
+- An App Store creative asset must not show another platform: a landscape hero from an Android capture
+  is fine only if it shows the app alone (no Android status or navigation bar) and is drawn frameless
+  or in an Apple frame — never in the `android` body.

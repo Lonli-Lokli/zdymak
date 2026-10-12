@@ -1,7 +1,8 @@
 /**
  * Device frames for the `framed` screenshot style — an iPhone bezel (Dynamic Island), an iPad bezel, or a
- * round Apple-Watch ring, with the capture drawn inside. The screen rect follows the capture's OWN aspect,
- * so nothing is cropped. Ported from a production store-asset pipeline; pure rendering.
+ * round Apple-Watch ring (and the iPhone Duo's two displays), with the capture drawn inside. The screen rect
+ * follows the capture's OWN aspect, so nothing is cropped — except on the Duo, whose shape is the point
+ * (see DUO). Ported from a production store-asset pipeline; pure rendering.
  *
  * (Mac captures are already windowed — traffic-light title bar — so Mac uses the plain premium still; no
  *  extra window frame is drawn here.)
@@ -129,6 +130,91 @@ export function drawIpadFrame(ctx, img, cx, cy, screenW, opts = {}) {
   paintScreen(ctx, img, sx, sy, screenW, screenH);
   ctx.restore();
   return { bodyH, bodyY, screen: { x: sx, y: sy, w: screenW, h: screenH, r: Math.round(screenW * 0.035) } };
+}
+
+/**
+ * iPhone Duo — the two displays of Apple's book-style foldable, drawn as the honest minimum.
+ *
+ * What Apple publishes (its screenshot specification, 2026-10-12): the outer display is 1398×2034 and
+ * the inner 2007×2853, both @3x, so ≈466×678 pt and ≈669×951 pt. What it does not publish: the corner
+ * radii, the bezels, where either camera sits, what the hinge looks like. So this draws a dark body,
+ * an even bezel and rounded corners, and nothing that would be a claim about hardware:
+ *
+ *   - NO Dynamic Island. None is documented for either display, and the island is the single most
+ *     recognisable thing about the iPhone frame next door — drawing one would say "this is an iPhone 17
+ *     with a strange aspect", which is what a reviewer would notice first.
+ *   - NO camera. The outer one is reported as a top-left punch-hole, never by Apple; the inner is
+ *     reported as under-display, which a drawing would show as nothing anyway.
+ *   - NO crease on the inner display. It folds down the middle when held landscape, but a crease is a
+ *     line painted across the app's own interface, and a screenshot is a picture of that interface.
+ *
+ * The radii and bezels below are proportions chosen to sit between the iPhone and iPad frames (the
+ * outer display is phone-class, the inner tablet-ish), taken from the SHORT side so a turned display
+ * keeps the same corners. Change them here, once, when Apple publishes the real ones.
+ *
+ * Unlike every other frame in this file, the screen keeps the DISPLAY's aspect rather than the
+ * capture's. A body that followed a 6.9" capture would be a tall phone labelled Duo, and the only
+ * thing that makes a Duo picture a Duo picture is its proportions. A capture of another shape is
+ * cover-fitted (cropped) instead, and `buildDeviceScreenshots` warns when that happens.
+ */
+const DUO = {
+  duo: { display: [1398, 2034], bezel: 0.034, radius: 0.11 },
+  'duo-inner': { display: [2007, 2853], bezel: 0.026, radius: 0.065 },
+};
+
+/** Height/width of a Duo display, upright or turned; landscape when the capture is wider than tall. */
+export function duoAspect(id, landscape) {
+  const [w, h] = DUO[id].display;
+  return landscape ? w / h : h / w;
+}
+
+function drawDuo(id) {
+  const { bezel: bz, radius: rr } = DUO[id];
+  return function drawDuoFrame(ctx, img, cx, cy, screenW, opts = {}) {
+    const landscape = typeof img === 'function' ? (opts.aspect ?? 2) < 1 : img.width > img.height;
+    const screenH = screenW * duoAspect(id, landscape);
+    const short = Math.min(screenW, screenH);
+    const bezel = Math.round(short * bz);
+    const screenR = Math.round(short * rr);
+    const bodyW = screenW + bezel * 2;
+    const bodyH = screenH + bezel * 2;
+    const bodyX = Math.round(cx - bodyW / 2);
+    const bodyY = Math.round(cy - bodyH / 2);
+    const sx = bodyX + bezel;
+    const sy = bodyY + bezel;
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = Math.round(short * 0.09);
+    ctx.shadowOffsetY = Math.round(short * 0.035);
+    roundRectPath(ctx, bodyX, bodyY, bodyW, bodyH, screenR + bezel);
+    ctx.fillStyle = '#0b0b0a';
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    roundRectPath(ctx, sx, sy, screenW, screenH, screenR);
+    ctx.clip();
+    paintScreen(ctx, img, sx, sy, screenW, screenH); // cover-fit: the display's shape wins
+    ctx.restore();
+    return { bodyH, bodyY, screen: { x: sx, y: sy, w: screenW, h: screenH, r: screenR } };
+  };
+}
+
+/** iPhone Duo, outer display (phone-class). See the note above `DUO`. */
+export const drawDuoFrame = drawDuo('duo');
+/** iPhone Duo, inner display (open like a book). See the note above `DUO`. */
+export const drawDuoInnerFrame = drawDuo('duo-inner');
+
+/**
+ * The SCREEN's height/width for a frame drawing `img`. The capture's own aspect for every frame that
+ * follows it; the display's for the Duo, which does not. A caller sizing a device to fit a budget
+ * must ask this rather than measure the capture, or a Duo laid out from a capture of another shape
+ * overflows the space it was given.
+ */
+export function screenAspectFor(frame, img) {
+  if (DUO[frame]) return duoAspect(frame, img.width > img.height);
+  return img.height / img.width;
 }
 
 /** Apple Watch: round dark unibody, thin ring, a crown nub; the square capture is clipped to the circle. */
@@ -335,6 +421,7 @@ export function frameFor(id) {
     phone: drawPhoneFrame, iphone: drawPhoneFrame,
     android: drawAndroidPhoneFrame,
     ipad: drawIpadFrame, tablet: drawIpadFrame,
+    duo: drawDuoFrame, 'duo-inner': drawDuoInnerFrame,
     watch: drawWatchFrame,
     laptop: drawLaptopFrame, chromebook: drawLaptopFrame, desktop: drawLaptopFrame,
     macbook: drawMacBookFrame,
@@ -349,6 +436,11 @@ export function inferFrame(target) {
   // this would frame Android tablet captures in an iPad body — the same misrepresentation we refuse to
   // make on phones.
   if (/^play/.test(target) || /android/.test(target)) return 'android';
+  // Before the iPhone test: `appstore-iphone-duo-outer` contains "iphone", and a Duo screenshot in an
+  // iPhone body would carry a Dynamic Island the Duo is not documented to have. Inner before outer,
+  // since both contain "duo".
+  if (/duo-inner/.test(target)) return 'duo-inner';
+  if (/duo/.test(target)) return 'duo';
   if (/ipad|tablet/.test(target)) return 'ipad';
   if (/iphone|phone/.test(target)) return 'phone';
   return null;

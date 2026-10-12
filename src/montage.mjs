@@ -31,6 +31,7 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { createCanvas } from '@napi-rs/canvas';
 import { font, hexA, roundRectPath, fillVerticalGradient, radialGlow, wrapLines } from './canvas.mjs';
+import { h264Level } from './encode.mjs';
 
 // The reel matte defaults to LIGHT — consistent with the light store screenshots (a dark matte behind
 // light-theme screens reads as inconsistent). Apple's app marketing favours clean, minimal, untextured
@@ -429,11 +430,17 @@ export async function buildMontage({ segments, brand, theme, spec, music, sceneD
       audioArgs.push('-c:a', 'aac', '-b:a', '192k', '-shortest');
     }
 
+    // The level follows the frame actually being encoded, never below what the entry asked for. This
+    // passed `spec.level` straight through, which was right for every phone-sized reel and wrong the
+    // moment a reel went wide: a 3840×1646 header stamped "4.1" carries three times the macroblocks
+    // level 4.1 allows. libx264 writes the requested level_idc regardless, so the lie only surfaces in
+    // a strict validator or a hardware decoder. Same rule as the raw-frame encoder (encode.mjs).
+    const level = h264Level(W, H, fps, spec.level || '4.0');
     ff([
       ...inputs,
       '-filter_complex', filter.replace(/;$/, ''),
       ...map,
-      '-c:v', 'libx264', '-profile:v', spec.profile || 'high', '-level:v', spec.level || '4.0',
+      '-c:v', 'libx264', '-profile:v', spec.profile || 'high', '-level:v', level,
       '-pix_fmt', 'yuv420p', '-crf', '17', '-preset', 'slow', '-r', String(fps), '-movflags', '+faststart',
       ...audioArgs,
       outFile,

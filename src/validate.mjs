@@ -12,11 +12,17 @@ import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { loadImage, createCanvas } from '@napi-rs/canvas';
 
-/** Read width/height/duration back out of an encoded video. */
+/** "30000/1001" → 29.97; null when ffprobe gave nothing usable. */
+function rate(s) {
+  const [n, d] = String(s || '').split('/').map(Number);
+  return n > 0 && d > 0 ? n / d : null;
+}
+
+/** Read width/height/duration/frame rate back out of an encoded video. */
 export function probeVideo(file) {
   const r = spawnSync(process.env.FFPROBE || 'ffprobe', [
     '-v', 'error', '-select_streams', 'v:0',
-    '-show_entries', 'stream=width,height,codec_name,profile,level',
+    '-show_entries', 'stream=width,height,codec_name,profile,level,r_frame_rate,avg_frame_rate',
     '-show_entries', 'format=duration,size',
     '-of', 'json', file,
   ], { encoding: 'utf8' });
@@ -26,12 +32,27 @@ export function probeVideo(file) {
     const s = j.streams?.[0] || {};
     return {
       w: s.width, h: s.height, codec: s.codec_name, profile: s.profile, level: s.level,
+      fps: rate(s.avg_frame_rate) ?? rate(s.r_frame_rate),
       duration: Number(j.format?.duration), bytes: Number(j.format?.size),
     };
   } catch {
     return null;
   }
 }
+
+/**
+ * Does w×h fall inside a destination's `range` — every size from `min` to `max` at an EXACT ratio?
+ *
+ * The App Store search slot is the first destination here that takes a range rather than a list
+ * ("3:2, min 1920×1280, max 3840×2560"). Exact means exact: 2000×1333 is not 3:2, and a store that
+ * names a ratio is entitled to refuse the rounding.
+ */
+export function inRange(range, w, h) {
+  const [rw, rh] = range.ratio;
+  return w * rh === h * rw && w >= range.min[0] && h >= range.min[1] && w <= range.max[0] && h <= range.max[1];
+}
+
+const rangeText = (r) => `${r.ratio.join(':')} from ${r.min.join('×')} to ${r.max.join('×')}`;
 
 /** PNG colour type from the IHDR (byte 25): 2 = RGB, 6 = RGBA. Cheap — reads 26 bytes. */
 export function pngInfo(file) {
@@ -64,13 +85,39 @@ function fail(violations, file, force, subject = 'violates its destination') {
   throw new Error(msg + '\n  Fix it, or pass --force to proceed regardless.');
 }
 
-/** Validate an encoded video against its destination. Throws unless `force`. */
-export function validateVideo({ file, destination, size, force }) {
-  const info = probeVideo(file);
-  if (!info) return;
+/**
+ * Every way w×h breaks a destination's size rule. `expected` is the size this run meant to write.
+ *
+ * Two questions, asked separately. "Is this the size we meant?" catches a renderer bug. "Would the
+ * store take it?" catches a `size:` override the store never offered — which used to pass, because a
+ * shot's own override WAS the expected size, so `{ target: 'appstore-iphone-6.9', size: [1000, 1000] }`
+ * was compared with itself and written with a tick. A destination with `accepts` or `range` now holds
+ * the written size to that list or range as well. (One with a single fixed size and no list still
+ * honours an explicit override, as before: that is how a Mac reel is made at 2880×1800.)
+ */
+export function sizeViolations(dest, w, h, expected) {
   const v = [];
-  const [w, h] = size || [destination.w, destination.h];
-  if (info.w !== w || info.h !== h) v.push(`size ${info.w}×${info.h}, expected ${w}×${h}`);
+  if (expected && (w !== expected[0] || h !== expected[1])) v.push(`size ${w}×${h}, expected ${expected[0]}×${expected[1]}`);
+  if (dest.range) {
+    if (!inRange(dest.range, w, h)) v.push(`size ${w}×${h} is outside what ${dest.store} accepts here: ${rangeText(dest.range)}`);
+  } else if (dest.accepts?.length) {
+    if (!sizeAccepted(dest, w, h)) v.push(`size ${w}×${h} is not one of the accepted sizes (${dest.accepts.map((a) => a.join('×')).join(', ')})`);
+  } else if (!expected && dest.w && dest.h && (w !== dest.w || h !== dest.h)) {
+    v.push(`size ${w}×${h}, expected ${dest.w}×${dest.h}`);
+  }
+  return v;
+}
+
+/**
+ * Every rule a probed video breaks, as sentences. Pure, so the rules are testable without an encode.
+ *
+ * `size` is the size this run meant to write — an explicit override — or absent, in which case the
+ * destination's own size is the expectation (or, for a `range` destination, the range alone is).
+ */
+export function videoViolations(destination, info, size) {
+  const v = [];
+  const expected = size || (destination.range ? null : [destination.w, destination.h]);
+  v.push(...sizeViolations(destination, info.w, info.h, expected));
   // Duration bounds are the rule people actually trip: App Store Connect refuses <15s or >30s outright.
   if (destination.minSec && info.duration < destination.minSec - 0.05) {
     v.push(`duration ${info.duration.toFixed(1)}s is under ${destination.store}'s ${destination.minSec}s minimum`);
@@ -81,6 +128,19 @@ export function validateVideo({ file, destination, size, force }) {
   if (destination.maxBytes && info.bytes > destination.maxBytes) {
     v.push(`${(info.bytes / 1048576).toFixed(0)}MB exceeds the ${(destination.maxBytes / 1048576).toFixed(0)}MB cap`);
   }
+  // "30 fps or 60 fps". A tenth either side lets 29.97 and 59.94 through, which is what those rates are
+  // called everywhere else; 24 or 25 fps is a different rate, and is refused.
+  if (destination.fpsAllowed && info.fps && !destination.fpsAllowed.some((f) => Math.abs(info.fps - f) < 0.1)) {
+    v.push(`${info.fps.toFixed(2)} fps; ${destination.store} takes ${destination.fpsAllowed.join(' or ')} fps here`);
+  }
+  return v;
+}
+
+/** Validate an encoded video against its destination. Throws unless `force`. */
+export function validateVideo({ file, destination, size, force }) {
+  const info = probeVideo(file);
+  if (!info) return;
+  const v = videoViolations(destination, info, size);
   if (v.length) fail(v, file, force);
 }
 
@@ -88,13 +148,8 @@ export function validateVideo({ file, destination, size, force }) {
 export function validateImage({ file, destination, size, force }) {
   const info = pngInfo(file);
   if (!info) return;
-  const v = [];
-  const [w, h] = size || [destination.w, destination.h];
-  if (size || destination.w) {
-    if (info.w !== w || info.h !== h) v.push(`size ${info.w}×${info.h}, expected ${w}×${h}`);
-  } else if (!sizeAccepted(destination, info.w, info.h)) {
-    v.push(`size ${info.w}×${info.h} is not one of the accepted sizes`);
-  }
+  const expected = size || (destination.w && destination.h && !destination.range ? [destination.w, destination.h] : null);
+  const v = sizeViolations(destination, info.w, info.h, expected);
   // Alpha is the classic rejection: "Images can't contain alpha channels or transparencies."
   const hasAlpha = info.colourType === 6 || info.colourType === 4;
   if (hasAlpha && !destination.alpha) v.push('has an alpha channel; this destination forbids transparency');

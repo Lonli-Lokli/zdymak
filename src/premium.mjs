@@ -21,7 +21,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { loadCapture } from './statusbar.mjs';
 import { font, hexA, hexRgb, springSeries, roundRectPath, fillVerticalGradient, radialGlow, wrapLines } from './canvas.mjs';
 import { spawnEncoder } from './encode.mjs';
-import { frameFor } from './frames.mjs';
+import { frameFor, screenAspectFor } from './frames.mjs';
 
 const smooth = (t) => t * t * (3 - 2 * t);
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -299,7 +299,8 @@ export function premiumStill({ W, H, img, caption, brand, theme, frame }) {
       drawFrame(ctx, img, W / 2, baseCy, Math.min(W, H) * 0.6 * scale);
     } else {
       const budgetH = H * (topCaption ? 0.66 : 0.64); // vertical room for the device body
-      const screenW = Math.min(budgetH / (img.height / img.width), W * 0.8) * scale;
+      // The frame's screen aspect, not the capture's: the Duo keeps its display's shape whatever it is fed.
+      const screenW = Math.min(budgetH / screenAspectFor(frame, img), W * 0.8) * scale;
       drawFrame(ctx, img, W / 2, baseCy, screenW);
     }
   } else {

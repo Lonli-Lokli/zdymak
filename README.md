@@ -322,7 +322,7 @@ swapping in one frame late is the classic cause of a mystery screenshot diff.
 | `brand.fontPaths` | Optional custom TTFs (else: system font — San Francisco on macOS). |
 | `brand.name` / `.tagline` / `.endline` / `.endsub` / `.logo` | **Reel target only** — wordmark, cold-open tagline, end-card lines, and the icon PNG for the device-framed `social-reel` bookends. |
 | `brand.reel` | **Reel target only** — optional palette overrides (`bgTop`, `bgBottom`, `glowLight`, `matteTop`, `matteBottom`, `glowDark`, `titleColor`, `subColor`, `bookendTitle`, `bookendSub`). |
-| `brand.fan` + `.fanSpread` / `.fanX` / `.fanY` / `.fanHeight` | **Feature graphic only** — images fanned out like a hand of cards: each rotated a little further from the middle, overlapped and drop-shadowed. For a game whose graphic sells a deck rather than a screen. Missing files are skipped, not fatal. Defaults: 0.17 rad between neighbours, centred 55% across and 92% down, 300px tall. |
+| `brand.fan` + `.fanSpread` / `.fanX` / `.fanY` / `.fanHeight` | **Feature graphic and the App Store creative graphics** — images fanned out like a hand of cards: each rotated a little further from the middle, overlapped and drop-shadowed. For a game whose graphic sells a deck rather than a screen. Missing files are skipped, not fatal. Defaults: 0.17 rad between neighbours, centred 55% across and 92% down, 300px tall. `fanX`/`fanY`/`fanHeight` are feature-graphic pixels; the header and search graphics place the fan themselves (only `fan` and `fanSpread` apply). |
 | `brand.textOffsetY` | **Feature graphic only** — shifts the whole left-hand block (lockup, tagline, endline) down together, keeping its internal spacing. The default hangs it from the top, which strands a short tagline in the upper corner with the bottom third empty. |
 | `brand.lockupGap` | Icon-to-wordmark gap as a fraction of the icon size, applied to the feature graphic **and** the reel's cold-open and end-card, so one value keeps the lockup consistent across both. Default 0.32 on the reel. |
 | `screenshotsDir` + `suffix` | Resolve `scene.id` → `${screenshotsDir}/${id}${suffix}.png`. |
@@ -374,8 +374,10 @@ release** — store forms change, and a bounced submission is usually a dimensio
 
 Sources: Apple [Screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/screenshot-specifications/)
 · Apple [App preview specifications](https://developer.apple.com/help/app-store-connect/reference/app-preview-specifications/)
+· Apple [Creative assets specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/creative-assets-specifications/)
+· Apple [App Store asset best practices](https://developer.apple.com/app-store/asset-best-practices/) (and the Sketch template it links)
 · Google [Add preview assets](https://support.google.com/googleplay/android-developer/answer/9866151)
-*(checked July 2026)*
+*(checked July 2026; the iPhone Duo and the creative assets checked 12 October 2026)*
 
 ### App Store — screenshots
 
@@ -383,12 +385,50 @@ Sources: Apple [Screenshot specifications](https://developer.apple.com/help/app-
 |---|---|---|---|
 | iPhone 6.9" | 1320×2868 | one iPhone size required if it runs on iPhone | `appstore-iphone-6.9` |
 | iPhone 6.5" | 1284×2778 *(or 1242×2688)* | only if you skip 6.9" | `appstore-iphone-6.5` |
+| iPhone Duo | outer 1398×2034 *(or 2034×1398)* · inner 2007×2853 *(or 2853×2007)* | optional now; **required from April 2027** for apps built with the iOS 27.1 SDK | `appstore-iphone-duo-outer` / `-inner` (+ `-landscape` of each, same slot) |
 | iPad 13" | 2064×2752 | **required** if it runs on iPad | `appstore-ipad-13` (+ `-landscape`, same slot) |
 | Mac | 2880×1800 *(16:10; also 1280×800 · 1440×900 · 2560×1600)* | **required** for Mac apps | `appstore-mac` |
 | Apple Watch | 422×514 *(or 410×502 · 416×496 · 396×484 · 368×448 · 312×390)* | **required** for Watch apps | `appstore-watch` |
 
 **1–10 per device type · JPEG/PNG · no alpha.** Apple down-scales the largest class to smaller ones, so
 6.9" + 13" covers the phone and tablet families. Pick ONE Watch size and use it in every localization.
+
+> **The iPhone Duo** is a book-style foldable: closed, a phone with an outer display (≈466×678 pt @3x);
+> opened, an inner display about twice as wide (≈669×951 pt @3x), whose natural open orientation is
+> landscape with the fold down the middle. Apple lists all four sizes under ONE "iPhone Duo" display
+> type (the API name is reported as `APP_IPHONE_DUO`; Apple has not documented it), so the four targets
+> share one slot of ten — and like the iPad's two orientations they all write `01-….png`, so rename one
+> set on the way to the upload folder. Capture on the iPhone Duo simulator (Xcode 27.1 or later).
+
+### App Store — creative assets (iOS 27 / iPadOS 27)
+
+Optional, separate from screenshots and previews, and shown only on iOS/iPadOS 27 or later: a **product
+page header** above the app's icon, and a **search results** asset in place of the screenshots search
+would otherwise show. Apple calls them "rich images or videos … distinct from the in-use functionality
+requirement in app previews and screenshots", so they are branded pictures, not screenshots.
+
+| Asset | Size | Formats | Target |
+|---|---|---|---|
+| Header image | 3840×1646 (21:9) | JPEG / PNG | `appstore-header` |
+| Search image | 3:2, any size from 1920×1280 to 3840×2560 | JPEG / PNG | `appstore-search` (3840×2560 by default) |
+| Universal image — one file for both | 5244×2950 (16:9) | **PNG only** | `appstore-universal` |
+| Header video | 3840×1646, **30 or 60 fps**, **5–30 s** | .mov / .m4v / .mp4 | `appstore-header-video` (a `reel` destination) |
+| Search video | 3:2 from 1920×1280 to 3840×2560, 30 or 60 fps, 5–30 s | .mov / .m4v / .mp4 | `appstore-search-video` (a `reel` destination; 2880×1920 by default) |
+
+**No alpha** in any image. Videos **loop**; search results play them **always muted**, the product page
+plays them muted until the visitor unmutes — so a creative video must work silently, and a music bed is
+allowed on the header and never heard in search. Apple states no codec and no file-size cap. Its
+guidance rules out pricing, discounts, URLs, copyright symbols, awards you have not received, Apple's
+own recognitions, and "logos or references to other platforms or marketplaces".
+
+> **Safe areas.** Apple's help pages publish none — only "be sure your focal point artwork is within the
+> center of your composition", because one file is cropped differently on iPhone and iPad and in each
+> orientation. Apple's **Sketch template** for these assets does carry them, as an "Art Safe Area"
+> rectangle on each canvas, and those rectangles are what zdymak lays the graphics out around:
+> header 1646×661 at (1097, 493), centred · search 2168×1030 at (836, 765) on 3840×2560, centred ·
+> universal 1402×962 at (1921, 660), centred across but **334 px above centre**. They are small
+> (about 40% of the height in every case) and that is the template's statement, not a rounding. Check
+> the result in App Store Connect's Preview, which shows each device and orientation.
 
 ### App Store — App Previews (video)
 
@@ -490,9 +530,11 @@ Every asset is re-measured **after** it's written — `ffprobe` for video, the P
   Fix the config, or pass --force to write it regardless.
 ```
 
-Checked: exact pixel size (or one of the accepted sizes), duration window, alpha where forbidden, the
-file cap (500 MB for App Previews, 1 MB for the Play icon) — and whether **there is a screen in the
-screenshot**. It reads the artefact rather than trusting our intent, so a renderer or encoder bug is
+Checked: exact pixel size (or one of the accepted sizes, or the slot's range — the App Store search
+slot takes any exact 3:2 from 1920×1280 to 3840×2560), duration window, frame rate where the store
+names one, alpha where forbidden, the file cap (500 MB for App Previews, 1 MB for the Play icon) — and
+whether **there is a screen in the screenshot**. A `size:` override is held to the slot's list or
+range as well: it used to be compared only with itself, so a size the store never offered passed. It reads the artefact rather than trusting our intent, so a renderer or encoder bug is
 caught too. `--force` downgrades it to a warning.
 
 The blank check is on the **capture**, not the composed still, and runs before anything is framed.
@@ -531,6 +573,8 @@ specifications* and Google's *Add preview assets* pages.
 | `play-promo` | 1080×1920 | full-bleed | **YouTube**, then the link in Play Console | Play takes a URL, not a file. Any length. Keep it silent unless the track is cleared — a ContentID claim can force ads on, which Play forbids on listing videos. |
 | `social-reel` | 1080×1920 | device-framed | web · social · ads | Brand cold-open + end card (`brand.name/tagline/endline/endsub/logo`). Frame follows `theme.frame` (default iPhone — set `'android'` for Android captures). **Never** submit this as an App Preview. |
 | `premium-reel` | 1080×1920 | premium matte | web · social · a landscape Mac reel | The Apple editing-vocabulary preset: floating screen on a brand matte, spring-then-freeze dolly, palette-aware cuts. Override `size` for landscape (e.g. `[2880, 1800]`). |
+| `appstore-header-video` | 3840×1646 | a `reel` | **App Store Connect → product page header** (iOS 27+) | **`zdymak reel` only** — name it as a reel's `destination`. 30 or 60 fps, 5–30 s, loops, muted by default. `video`/`build` refuse it (see *App Store creative assets* below). |
+| `appstore-search-video` | 2880×1920 *(any 3:2, 1920×1280–3840×2560)* | a `reel` | **App Store Connect → search results** (iOS 27+) | **`zdymak reel` only.** Always muted. Defaults below the 3840×2560 ceiling because the ceiling needs H.264 level 6. |
 
 ### Image targets (a device's `screenshots`) → no-alpha `.png`
 
@@ -540,6 +584,13 @@ specifications* and Google's *Add preview assets* pages.
 | `appstore-iphone-6.5` | 1284×2778 *(or 1242×2688)* | iPhone 6.5" — 14 Plus, 13/12/11 Pro Max, XS Max, XR | Only needed if you don't ship 6.9" |
 | `appstore-ipad-13` | 2064×2752 | iPad 13" — iPad Pro M5/M4, Air M4/M3/M2 | **Required** if the app runs on iPad |
 | `appstore-ipad-13-landscape` | 2752×2064 | the same iPad slot, turned | Optional — only if the layout actually changes on rotation (see `--orientation`) |
+| `appstore-iphone-duo-outer` | 1398×2034 | iPhone Duo — the outer display | Optional now; **required from April 2027** for apps built with the iOS 27.1 SDK. Framed by `duo` |
+| `appstore-iphone-duo-outer-landscape` | 2034×1398 | the same iPhone Duo slot, outer display turned | Optional |
+| `appstore-iphone-duo-inner` | 2007×2853 | the same iPhone Duo slot, inner display upright | Optional. Framed by `duo-inner` |
+| `appstore-iphone-duo-inner-landscape` | 2853×2007 | the same iPhone Duo slot, inner display open like a book | Optional — the inner display's natural open orientation |
+| `appstore-header` | 3840×1646 | **Product page header** image (iOS 27+) | Optional. A branded graphic around one `hero` capture — see *App Store creative assets* |
+| `appstore-search` | 3840×2560 *(any 3:2 from 1920×1280)* | **Search results** image (iOS 27+) | Optional. Without it, search shows your In-App Events, previews and screenshots |
+| `appstore-universal` | 5244×2950 | One image for **both** placements (PNG only) | Optional — instead of the two above |
 | `appstore-mac` | 2880×1800 | Mac (16:10) | **Required** for Mac apps |
 | `appstore-watch` | 422×514 *(or 410×502 · 416×496 · 396×484 · 368×448 · 312×390)* | Apple Watch — Ultra 3 / Ultra 2 / Series 11 / 10 / 9…3 | **Required** for Watch apps. Pick ONE size and use it in every localization |
 | `appstore-iap-review` | 640×920 *(or 1242×2208 · 1284×2778 · 1242×2688 · 750×1334 · 640×1136 · 640×960 · 1024×768 · 2048×1536)* | The **App Review Screenshot** on an in-app purchase | **Required** to submit an IAP. Not a listing slot — see the warning below |
@@ -575,12 +626,23 @@ everywhere except the Play icon — zdymak always writes colour-type-2 PNG, so t
 ### Frames (`theme.frame` — normally inferred from the target)
 
 `iphone`/`phone` (Dynamic Island) · `android` (punch-hole) · `ipad`/`tablet` · `watch` (round body, crown)
-· `laptop`/`chromebook`/`desktop` (clamshell, dark deck) · `macbook` (space-grey lid + aluminium deck,
-with real macOS window chrome inside) · `mac-window` (that window on its own) · `mac` (no bezel at all —
-the capture keeps its own chrome). Inference order: *watch|wear* → `watch`, then **any `play-*` target or *android*** →
-`android` (so `play-tablet` gets an Android body, not an iPad one), then *ipad|tablet* → `ipad`, then
-*iphone|phone* → `phone`, else none. The clamshell frames are never inferred — ask for one by name, which
-in practice means from a `layout` member.
+· `duo` / `duo-inner` (the iPhone Duo's outer and inner displays) · `laptop`/`chromebook`/`desktop`
+(clamshell, dark deck) · `macbook` (space-grey lid + aluminium deck, with real macOS window chrome inside)
+· `mac-window` (that window on its own) · `mac` / `none` (no bezel at all — the capture keeps its own
+chrome). Inference order: *watch|wear* → `watch`, then **any `play-*` target or *android*** →
+`android` (so `play-tablet` gets an Android body, not an iPad one), then *duo-inner* → `duo-inner`, *duo* →
+`duo`, then *ipad|tablet* → `ipad`, then *iphone|phone* → `phone`, else none. The clamshell frames are never
+inferred — ask for one by name, which in practice means from a `layout` member.
+
+> **The Duo frames are deliberately plain**: a dark body, an even bezel, rounded corners, and the screen
+> at the display's TRUE aspect — no Dynamic Island, no camera, no crease. Apple publishes the two
+> resolutions and nothing else about the hardware (the outer camera is *reported* top-left, never by
+> Apple), so anything more would be a claim made up for a store listing; the radii are proportions
+> chosen between the iPhone and iPad frames, in one table in `frames.mjs`, to correct when Apple
+> publishes the real ones. Unlike the other frames, the Duo keeps its shape whatever capture it is
+> given: a capture of another shape is cropped to fit, and the build says so
+> (`⚠︎ … not the shape of the Duo's outer display — cropped to fit`), because a Duo body that followed
+> a 6.9" capture would be a tall phone labelled Duo.
 
 > `macbook`/`mac-window` crop the capture's OWN title bar (`screencapture -l` includes it) and draw a
 > consistent one, so every Mac shot carries the same chrome at the same weight. Prefer `macbook` in a
@@ -722,6 +784,90 @@ app's window only. An edge-to-edge app still reserves the status-bar inset, so t
 where the clock and battery belong — the system UI is a separate window and never lands in the PNG. iOS
 XCUITest captures the whole screen, so its shots already have one. zdymak detects that blank band and
 paints a clean bar into it, at the capture's own density, never over app pixels.
+
+<br>
+
+## App Store creative assets — the header and search images (iOS 27)
+
+`appstore-header`, `appstore-search` and `appstore-universal` are **branded graphics**, like the Play
+feature graphic: one image each, built from the brand — `brand.logo` + `brand.name` as the lockup,
+`brand.tagline`, the `brand.fan` cards — and **one hero capture**. What is different is that the store
+crops them, differently on iPhone and iPad and in each orientation, so the layout is built around the
+**art safe area** from Apple's own template (see *Store requirements* above):
+
+- the lockup and tagline sit **wholly inside** the safe area, in its left part, sized to fit it (a tagline
+  keeps one line per sentence, and wraps only when that buys a third more size — localized taglines
+  from `$brand` fit the same way);
+- the hero sits in its right part, centred on it vertically, and runs **out to the right** past it —
+  so the half nearest the words is the half every crop keeps;
+- the fan stands **outside** it, in whichever margin holds bigger cards (left of it on the header and
+  universal, under the words on the search card), running off the bottom edge.
+
+**Give it a landscape hero.** A phone frame squeezed into a 21:9 strip is a small upright rectangle in a
+sea of matte; a real landscape screen fills the strip, and it is the "firsthand experience" Apple asks
+the search image to show. Name it with `hero` — a scene id of the device, or a path:
+
+```js
+devices: {
+  appstoreCreative: {
+    capturesDir: './captures/tablet',            // landscape captures (a Play tablet set does nicely)
+    scenes: [{ id: 'table' }],
+    screenshots: [
+      { target: 'appstore-header', hero: 'table' },
+      { target: 'appstore-search', hero: 'table' },           // 3840×2560; `size: [1920, 1280]` for the minimum
+      // { target: 'appstore-universal', hero: 'table' },     // or ONE 5244×2950 PNG for both placements
+    ],
+  },
+},
+```
+
+- **The hero is the bare screen** when it is landscape — rounded, shadowed, no bezel — so a capture taken
+  on any device advertises no particular hardware (Apple rules out "references to other platforms").
+  `frame: 'ipad'` (or any frame id) asks for a body; `frame: 'none'` forces none. A portrait hero gets
+  the iPhone frame by default.
+- **Without `hero`**, the first *landscape* capture of the device is used, else the first capture. A
+  `hero` that is named and missing is an **error**, never a fallback.
+- **`fan: false`** on the shot leaves the cards out.
+- **Not drawn: `brand.endsub`.** It is the end card's honest-offer line, and Apple's guidance for these
+  assets rules out pricing and asks for "a short phrase that enhances your visual" — the tagline is
+  that phrase. The feature graphic's pixel knobs (`fanX`/`fanY`/`fanHeight`, `textOffsetY`) do not
+  apply either; the layout is placed from the safe area.
+- The store draws the app's **icon and name below the header** anyway; the lockup is there for the
+  crops and for the search card and the universal asset, where it may be the only name on the picture.
+- **`dir`** puts a graphic in its own folder, so two of the same target (say, a full-size and a minimum
+  search image) do not overwrite each other. Without it the file is `<out>/<target>.png`, as always.
+
+### The header and search videos
+
+Both are built by **`zdymak reel`** from real footage, never by `video`/`build` (which refuse them —
+those commands pan over screenshots, and a portrait shot cropped to 21:9 is a sliver of a screen). Point
+a reel entry at the slot with `destination`, and it is **measured after the encode** — size (the header's
+one size, or the search slot's 3:2 range), the 5–30 s window, and 30 or 60 fps:
+
+```js
+reel: [
+  { name: 'vinto-header', destination: 'appstore-header-video', sceneDur: 4, transition: 'dissolve',
+    theme: { bleed: true },                               // landscape footage, full frame
+    segments: [{ clip: './clips/tablet-round.mov' }, { clip: './clips/tablet-king.mov' }] },
+  { name: 'vinto-search', destination: 'appstore-search-video',   // 2880×1920 unless `size` says otherwise
+    theme: { bleed: true }, segments: [{ clip: './clips/tablet-round.mov', dur: 8 }] },
+]
+```
+
+- The destination fills in what the entry leaves out — `size`, `fps` (30; set `fps: 60` if you want it),
+  `level` — and sets `theme.frame: false`, because the reel's default iPhone bezel round a landscape clip
+  is a phone lying on its side. An explicit `theme.frame` still wins.
+- A reel **named** after a video target (`name: 'appstore-preview'`) answers to it the same way, so the
+  App Preview cut is now measured against the 15–30 s window too.
+- **Sound**: none is needed. Search plays the video muted, always — zdymak warns that a bed there is
+  never heard. The header is muted until the visitor unmutes, so a bed is allowed and optional.
+- **It loops**: end on a frame that cuts cleanly back to the first.
+- **The H.264 level follows the frame size**: a 3840×1646 reel is level 5.1 (5.2 at 60 fps), never
+  stamped with the 4.x a phone reel uses. The search video defaults to 2880×1920 because its 3840×2560
+  ceiling exceeds what H.264 allows below level 6, which many decoders refuse and Apple does not mention.
+- **It is a big encode.** 3840×1646 is about three and a half times the pixels of an 886×1920 App
+  Preview, and the reel encodes with `-preset slow`. Build it on its own (`--only <name>`), not alongside
+  other heavy jobs on a small machine.
 
 <br>
 
@@ -920,6 +1066,12 @@ error, not a silent no-op). `--name` still renames a lone reel, but is refused a
 several are selected — it would make them overwrite each other. A single object still works and still
 writes `reel.mp4`; unnamed entries in an array become `reel-1`, `reel-2`, …
 
+**A reel is measured against the slot it is for.** An entry whose `name` is a video target id (as
+`appstore-preview` and `play-promo` above), or which says `destination: '<id>'`, is checked after the
+encode exactly like a `video` target — size, the duration window, frame rate where the store names one —
+and refused on a violation (`--force` writes it anyway). An entry with neither is not measured, as
+before. The destination also fills in the `size`, `fps` and `level` the entry leaves out.
+
 ## Where each file goes
 
 - **App Store** — `appstore-preview.mp4` → App Store Connect → your app → *(localization)* → **App
@@ -931,6 +1083,12 @@ writes `reel.mp4`; unnamed entries in an array become `reel-1`, `reel-2`, …
   `premium-reel.mp4` (**premium**: matte + vignette + label pills). For your website, X / Instagram /
   TikTok, or YouTube. **Never** put either in the App Store App Preview slot — the bezel/label make them
   marketing assets, not App Previews; that's what the full-bleed `appstore-preview` is for.
+- **App Store creative assets** (iOS 27+) — `appstore-header.png` / a reel with `destination:
+  'appstore-header-video'` → App Store Connect → your app → **product page header**; `appstore-search.png` /
+  `appstore-search-video` → **search results**; or `appstore-universal.png` for both (tick *Use header asset
+  in search results*). Optional; they can also go through Asset Library as a standalone submission.
+- **iPhone Duo** — `appstore-iphone-duo-*/` → the **iPhone Duo** screenshot slot (all four targets share it,
+  ten at most between them).
 
 > **Three styles, one config.** Every target reads the same `scenes`; the style is fixed per target:
 > - **full-bleed** (`appstore-preview`, `play-promo`) — the screen fills the frame; required for App Previews.
@@ -1066,6 +1224,9 @@ declared in the `.d.ts`. Both run on `prepublishOnly`.
 - [x] **Capture: Playwright (web)** driver — URL states, device descriptors, deterministic shots
       (adb / iOS-sim snapshot already shipped).
 - [x] **Per-locale caption sets** — one screenshot set per store locale, reported fallbacks.
+- [x] **iOS 27 App Store assets** — the iPhone Duo slot (four sizes, a plain Duo frame), the product page
+      header / search results / universal graphics around Apple's art safe areas, and the header and
+      search videos as measured `reel` destinations.
 
 See **SKILL.md** if you drive this with Claude Code.
 

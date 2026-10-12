@@ -24,7 +24,18 @@ export type VideoTargetId =
   | 'appstore-preview-mac'
   | 'play-promo'
   | 'social-reel'
-  | 'premium-reel';
+  | 'premium-reel'
+  /**
+   * The App Store product page HEADER video (iOS/iPadOS 27+): 3840×1646, 30 or 60 fps, 5–30 s, loops,
+   * muted by default. Built by `zdymak reel` (a `reel` entry with this `destination`), never by
+   * `video`/`build` — those Ken-Burns screenshots, and refuse it.
+   */
+  | 'appstore-header-video'
+  /**
+   * The App Store SEARCH RESULTS video (iOS/iPadOS 27+): any 3:2 from 1920×1280 to 3840×2560 (default
+   * 2880×1920 — the ceiling needs H.264 level 6), 30 or 60 fps, 5–30 s, always muted. `zdymak reel` only.
+   */
+  | 'appstore-search-video';
 
 /** Screenshot / graphic targets — produce still PNGs (`zdymak screenshots` / `build`). */
 export type ImageTargetId =
@@ -33,6 +44,17 @@ export type ImageTargetId =
   | 'appstore-ipad-13'
   /** The SAME App Store slot as `appstore-ipad-13`, turned — capture with `--orientation`. */
   | 'appstore-ipad-13-landscape'
+  /**
+   * iPhone Duo, OUTER display, 1398×2034. One "iPhone Duo" slot takes all four Duo sizes; optional now,
+   * required from April 2027 for apps built with the iOS 27.1 SDK. Framed by `duo`: no Dynamic Island.
+   */
+  | 'appstore-iphone-duo-outer'
+  /** iPhone Duo, outer display turned: 2034×1398. Same slot. */
+  | 'appstore-iphone-duo-outer-landscape'
+  /** iPhone Duo, INNER display held upright: 2007×2853. Same slot. Framed by `duo-inner`. */
+  | 'appstore-iphone-duo-inner'
+  /** iPhone Duo, inner display open like a book: 2853×2007. Same slot. */
+  | 'appstore-iphone-duo-inner-landscape'
   | 'appstore-watch'
   | 'appstore-mac'
   /**
@@ -52,7 +74,16 @@ export type ImageTargetId =
   | 'play-feature-graphic'
   | 'play-icon'
   /** Not a store asset — the 1200×630 og:image / twitter:image a shared LINK previews with. */
-  | 'social-card';
+  | 'social-card'
+  /**
+   * App Store product page HEADER image (iOS/iPadOS 27+), 3840×1646 (21:9). A branded graphic built
+   * around one hero capture — name it with `hero`, ideally a landscape one — inside Apple's art safe area.
+   */
+  | 'appstore-header'
+  /** App Store SEARCH RESULTS image, any 3:2 from 1920×1280 to 3840×2560 (default the ceiling). */
+  | 'appstore-search'
+  /** The UNIVERSAL creative asset, 5244×2950 (16:9) PNG: one file for the header AND search results. */
+  | 'appstore-universal';
 
 export interface VideoTargetSpec {
   store: string;
@@ -65,6 +96,25 @@ export interface VideoTargetSpec {
   maxSec: number | null;
   style: RenderStyle;
   slot: string;
+  /** Sizes the store takes; an explicit `size:` override is held to this list too. */
+  accepts?: Array<[number, number]>;
+  /** A store that takes a RANGE of sizes at one exact ratio (the App Store search slot). */
+  range?: SizeRange;
+  /** Frame rates the store takes, when it names them (`[30, 60]`). 29.97 counts as 30. */
+  fpsAllowed?: number[];
+  /** Built by `zdymak reel` only; `video`/`build` refuse it. */
+  reelOnly?: boolean;
+  /** An App Store creative asset (iOS/iPadOS 27+ header or search), not an App Preview. */
+  creative?: boolean;
+  /** How the store plays its sound: `'always'` muted (search), or muted by `'default'` (header). */
+  muted?: 'always' | 'default';
+}
+
+/** Every size from `min` to `max`, at exactly `ratio` (e.g. 3:2 from 1920×1280 to 3840×2560). */
+export interface SizeRange {
+  min: [number, number];
+  max: [number, number];
+  ratio: [number, number];
 }
 
 export interface ImageTargetSpec {
@@ -75,10 +125,19 @@ export interface ImageTargetSpec {
   h?: number;
   /** Alternative accepted sizes, when the store takes any of several (e.g. Apple Watch). */
   accepts?: Array<[number, number]>;
+  /** Any size in a range at one ratio (the App Store search image); `w`/`h` is then the default. */
+  range?: SizeRange;
   alpha: boolean;
   format: 'png';
   /** A single branded banner (the Play feature graphic), not a per-scene shot. */
   graphic?: boolean;
+  /** An App Store creative asset (header, search, universal): a graphic laid out around `safe`. */
+  creative?: boolean;
+  /**
+   * The ART SAFE AREA `[x, y, w, h]` in this canvas's pixels, from Apple's own template — where the
+   * words and the hero's leading edge go, because the store crops the rest per device and orientation.
+   */
+  safe?: [number, number, number, number];
   /** A branded SQUARE built from `brand.logo` — the Play icon and Apple's in-app purchase image. */
   icon?: boolean;
   /** Size cap the store enforces, in bytes. */
@@ -131,12 +190,15 @@ export type RenderStyle = 'framed' | 'premium' | 'bleed' | 'reel';
 /**
  * Device bezel drawn around a capture. Inferred from the target; override with `frame`.
  * `laptop`/`chromebook`/`desktop` draw a clamshell and are mainly for layout members; `mac` (and any
- * unknown id) adds no body, since Mac captures already carry their own window chrome.
+ * unknown id) adds no body, since Mac captures already carry their own window chrome. `duo` and
+ * `duo-inner` are the iPhone Duo's displays — a plain body at the display's true aspect, with no
+ * Dynamic Island, camera or crease, because Apple publishes none. `none` asks for no body by name.
  */
 export type FrameId =
   | 'phone' | 'iphone' | 'android' | 'ipad' | 'tablet' | 'watch'
+  | 'duo' | 'duo-inner'
   | 'laptop' | 'chromebook' | 'desktop'
-  | 'macbook' | 'mac-window' | 'mac';
+  | 'macbook' | 'mac-window' | 'mac' | 'none';
 
 export interface Brand {
   /** Near-black base colour. */
@@ -333,10 +395,22 @@ export interface ScreenshotSpec {
   size?: [number, number];
   /** Override the inferred style (e.g. `'bleed'` for a raw full-frame Watch shot). */
   style?: RenderStyle;
-  /** Override the inferred device bezel. */
+  /**
+   * Override the inferred device bezel. On the App Store creative graphics it frames the HERO: unset,
+   * a landscape hero is the bare screen and a portrait one gets the iPhone frame.
+   */
   frame?: FrameId;
   /** Per-shot matte override. */
   theme?: Theme;
+  /**
+   * Branded graphics only (`play-feature-graphic`, `social-card`, `appstore-header`, `appstore-search`,
+   * `appstore-universal`): the capture to build it around — a scene id of this device, or a path
+   * relative to the config file. Named and missing is an error, never a fallback. Unset: the first
+   * capture, or for the App Store creative graphics the first LANDSCAPE one.
+   */
+  hero?: string;
+  /** App Store creative graphics only: `false` leaves the `brand.fan` cards out. */
+  fan?: false;
 }
 
 /** How an asset is rendered — independent of where it's going. */
@@ -417,9 +491,17 @@ export interface ReelConfig {
    * `reel` for a lone entry, `reel-1`/`reel-2`/… when several are declared without names.
    */
   name?: string;
+  /**
+   * The store slot this reel is for, and is measured against after the encode — size (or range),
+   * duration window, frame rate. Also inferred when `name` is itself a video target id. The
+   * destination fills in `size`/`fps`/`profile`/`level` left unset; the App Store creative ones also
+   * default `theme.frame` to `false`. `--force` writes a reel that fails anyway.
+   */
+  destination?: VideoTargetId | (string & {});
   size?: [number, number];
   fps?: number;
   profile?: string;
+  /** H.264 level — a floor: the encoder raises it to what the frame size and rate need. */
   level?: string;
   /** Seconds per beat. Overrides the `bpm`/`beatsPerCut` calculation. */
   sceneDur?: number;
@@ -693,6 +775,53 @@ export declare function buildFeatureGraphic(opts: {
   outFile: string;
   frame?: FrameId;
 }): Promise<void>;
+
+/** A rectangle in canvas pixels. */
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Where an App Store creative graphic puts things: the words, the hero (its outer box) and the fan. */
+export interface CreativeLayout {
+  safe: Rect;
+  text: Rect;
+  hero: Rect;
+  /** The point the fan's cards stand on (below the bottom edge), and their height. */
+  fan: { cx: number; cy: number; h: number };
+}
+
+/**
+ * The layout of an App Store creative graphic, as pure geometry: the words inside the safe area, the
+ * hero starting inside it and running out to the right, the fan in a margin outside it.
+ */
+export declare function creativeLayout(opts: {
+  W: number;
+  H: number;
+  /** The art safe area `[x, y, w, h]` in this canvas's pixels. */
+  safe: [number, number, number, number];
+  /** The hero SCREEN's height / width. */
+  heroAspect: number;
+  /** Leave room for a device body around the hero. */
+  framed?: boolean;
+}): CreativeLayout;
+
+/** An App Store creative graphic (header, search, universal) → a no-alpha PNG at `outFile`. */
+export declare function buildCreativeGraphic(opts: {
+  W: number;
+  H: number;
+  safe: [number, number, number, number];
+  brand: Brand;
+  theme?: Theme;
+  heroPath?: string;
+  outFile: string;
+  /** The hero's frame; `'none'` for the bare screen. Unset: by the hero's shape. */
+  frame?: FrameId;
+  /** `false` leaves the cards out. */
+  fan?: boolean;
+}): Promise<{ outFile: string; W: number; H: number; layout: CreativeLayout }>;
 
 /** Render one still at an exact size. Returns a canvas (see `rgbPngBuffer` to encode it). */
 export declare function renderStill(

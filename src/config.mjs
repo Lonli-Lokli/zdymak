@@ -175,7 +175,13 @@ export async function loadConfig(configPath) {
     return {
       name,
       scenes: resolveScenes(rawScenes, baseDir, dirFor(null), suf),
-      screenshots: asList(d.screenshots),
+      // A shot's `hero` is a scene id OR a path. Only a path is resolved here (against the config file,
+      // like every other path); an id is looked up per render, so a localized run gets its own capture.
+      screenshots: asList(d.screenshots).map((s) => (
+        typeof s.hero === 'string' && /[\\/]|\.(png|jpe?g)$/i.test(s.hero)
+          ? { ...s, hero: path.resolve(baseDir, s.hero) }
+          : s
+      )),
       videos: asList(d.videos),
       theme: d.theme,
       /** This device's scenes re-resolved against `locale`'s captures dir. */

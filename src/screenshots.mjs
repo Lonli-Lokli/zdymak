@@ -10,9 +10,72 @@ import { renderStill } from './still.mjs';
 import { loadLayoutMembers } from './layout.mjs';
 import { rgbPngBuffer } from './png.mjs';
 import { IMAGE_TARGETS } from './specs.mjs';
-import { inferFrame } from './frames.mjs';
-import { buildFeatureGraphic, buildAppIcon } from './graphic.mjs';
-import { validateImage, validateCapture } from './validate.mjs';
+import { inferFrame, duoAspect } from './frames.mjs';
+import { buildFeatureGraphic, buildCreativeGraphic, buildAppIcon } from './graphic.mjs';
+import { validateImage, validateCapture, pngInfo } from './validate.mjs';
+
+/**
+ * The capture a branded graphic is built around.
+ *
+ * `shot.hero` names it: a scene id of this device (so a localized run takes that locale's capture), or
+ * a path (resolved against the config file at load). A hero that is named and missing is an ERROR, not
+ * a fallback — falling back to the first capture is how a portrait phone ends up in a 21:9 header with
+ * a green tick, which is exactly the picture the name was given to prevent.
+ *
+ * With no `hero`, the first scene that has a capture, as it always was — except that a LANDSCAPE canvas
+ * built around a hero (`preferLandscape`) takes the first landscape capture when there is one.
+ */
+export function pickHero(scenes, shot, { preferLandscape = false } = {}) {
+  if (shot.hero) {
+    const scene = scenes.find((s) => s.id === shot.hero);
+    const file = scene ? scene.image : shot.hero;
+    if (!file || !fs.existsSync(file)) {
+      throw new Error(
+        `${shot.target}: hero "${shot.hero}" — ` +
+        (scene ? `scene "${shot.hero}" has no capture at ${scene.image}` : 'no scene has that id, and no file has that path'),
+      );
+    }
+    return file;
+  }
+  // `s.image` is null on a LAYOUT scene (its captures live on its members), and a cluster is the wrong
+  // thing to build a banner around, so those are passed over.
+  const captured = scenes.filter((s) => s.image && fs.existsSync(s.image)).map((s) => s.image);
+  if (preferLandscape) {
+    const wide = captured.find((f) => {
+      const info = pngInfo(f);
+      return info && info.w > info.h;
+    });
+    if (wide) return wide;
+  }
+  return captured[0] ?? null;
+}
+
+/**
+ * The Duo frame keeps its display's shape and cover-fits the capture into it (frames.mjs), so a capture
+ * of another shape is CROPPED — quietly, and plausibly, since the result is still a good-looking device.
+ * Say so, once per capture, naming the shape the slot wanted. A warning and not a refusal: until a Duo
+ * simulator is to hand, a close-enough capture cropped a little is a legitimate draft.
+ */
+function warnDuoShape(shot, frame, scene) {
+  const info = pngInfo(scene.image);
+  if (!info) return;
+  const want = duoAspect(frame, info.w > info.h);
+  const have = info.h / info.w;
+  if (Math.abs(have - want) / want <= 0.02) return;
+  const display = frame === 'duo' ? 'outer' : 'inner';
+  console.warn(
+    `    ⚠︎ ${shot.target}: ${path.basename(scene.image)} is ${info.w}×${info.h}, not the shape of the Duo's ${display} ` +
+    `display — cropped to fit. Capture on an iPhone Duo simulator (Xcode 27.1+) for a picture of the real screen.`,
+  );
+}
+
+/** A target's art safe area, scaled to the canvas actually being drawn (a `size:` override on search). */
+function safeFor(spec, W, H) {
+  const [x, y, w, h] = spec.safe;
+  const kx = W / spec.w;
+  const ky = H / spec.h;
+  return [Math.round(x * kx), Math.round(y * ky), Math.round(w * kx), Math.round(h * ky)];
+}
 
 /**
  * Apply a locale's caption table to a scene list. A scene the locale doesn't translate keeps its base
@@ -104,15 +167,22 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir, for
       continue;
     }
 
-    // Feature graphic (Play banner) is a single branded image, not a per-scene shot.
+    // A branded graphic — the Play feature graphic, the social card, the App Store header and search
+    // images — is a single image built around one hero capture, not a per-scene shot.
     if (spec.graphic) {
-      // `s.image` is null on a LAYOUT scene (its captures live on its members), and passing null to
-      // existsSync is a deprecation warning today and a throw in a future Node. A cluster is also the
-      // wrong thing to crop a feature graphic from, so skip those scenes outright.
-      const hero = device.scenes.find((s) => s.image && fs.existsSync(s.image));
-      if (!hero) continue;
-      const outFile = path.join(outDir, `${shot.target}.png`);
-      await buildFeatureGraphic({ W, H, brand, theme: shotTheme(theme, shot), heroPath: hero.image, outFile, frame: frame || 'android' });
+      const heroPath = pickHero(device.scenes, shot, { preferLandscape: !!spec.creative });
+      if (!heroPath) continue;
+      // `<out>/<target>.png`, as it always was — or inside `dir` when the shot names one, so two of the
+      // same target (a 3840×2560 search image and a 1920×1280 one) do not overwrite each other.
+      const outFile = path.join(outDir, shot.dir || '', `${shot.target}.png`);
+      if (spec.creative) {
+        await buildCreativeGraphic({
+          W, H, safe: safeFor(spec, W, H), brand, theme: shotTheme(theme, shot), heroPath, outFile,
+          frame: shot.frame, fan: shot.fan,
+        });
+      } else {
+        await buildFeatureGraphic({ W, H, brand, theme: shotTheme(theme, shot), heroPath, outFile, frame: frame || 'android' });
+      }
       validateImage({ file: outFile, destination: spec, size: [W, H], force });
       written.push({ file: outFile, W, H, style: 'graphic' });
       continue;
@@ -145,6 +215,7 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir, for
         // composed still cannot be measured reliably (see validateCapture). Failing before the
         // compose also means the error names the capture to redo rather than the output to discard.
         await validateCapture({ file: scene.image, force });
+        if (style === 'framed' && (frame === 'duo' || frame === 'duo-inner')) warnDuoShape(shot, frame, scene);
       }
       if (!n) fs.mkdirSync(dir, { recursive: true }); // only once we have something to put in it
       n++;

@@ -79,6 +79,34 @@ const config: Config = defineConfig({
 defineConfig({ reel: { segments: [{ image: './a.png' }] } });
 defineConfig({ devices: { phone: { screenshots: ['play-phone'] } } });
 
+// iOS 27: the iPhone Duo slot, the creative graphics around a landscape hero, and their videos.
+defineConfig({
+  devices: {
+    duoOuter: { capturesDir: './captures/duo-outer', screenshots: [{ target: 'appstore-iphone-duo-outer' }] },
+    duoInner: {
+      capturesDir: './captures/duo-inner',
+      screenshots: ['appstore-iphone-duo-inner-landscape', { target: 'appstore-iphone-duo-inner', frame: 'duo-inner' }],
+    },
+    creative: {
+      capturesDir: './captures/tablet',
+      scenes: [{ id: 'table' }],
+      screenshots: [
+        { target: 'appstore-header', hero: 'table' },
+        { target: 'appstore-search', hero: './captures/tablet/table.png', size: [2880, 1920], fan: false },
+        { target: 'appstore-universal', hero: 'table', frame: 'none' },
+        { target: 'play-feature-graphic', hero: 'table', frame: 'android' },
+      ],
+    },
+  },
+  reel: [
+    { name: 'header', destination: 'appstore-header-video', fps: 60, segments: [{ clip: './rec/table.mov' }] },
+    { name: 'appstore-search-video', size: [1920, 1280], segments: [{ clip: './rec/table.mov', dur: 8 }] },
+  ],
+});
+
+// @ts-expect-error — a shot's `fan` can only be switched off.
+defineConfig({ devices: { d: { screenshots: [{ target: 'appstore-header', fan: true }] } } });
+
 // @ts-expect-error — `move` is a closed union, not any string.
 defineConfig({ scenes: [{ id: 'a', move: 'zoomBananas' }] });
 
