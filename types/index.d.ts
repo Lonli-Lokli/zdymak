@@ -437,6 +437,44 @@ export interface ScreenshotSpec {
    * of the whole capture — the table alone, without the app's header and controls around it.
    */
   heroCrop?: [number, number, number, number];
+  /** App Store creative graphics only: stand it on a picture instead of the matte. */
+  ground?: CreativeGround;
+  /**
+   * App Store creative graphics only: draw the hero bare, its edges fading into the ground over this share of
+   * its size on each side (0.08 is a good start), and let it stand the canvas's full height.
+   */
+  heroFeather?: number;
+  /** App Store creative graphics only: the icon, faces and colours of the name and tagline. */
+  lockup?: CreativeLockup;
+}
+
+/** App Store creative graphics: a picture as the ground in place of the matte gradient. */
+export interface CreativeGround {
+  /** The picture, cover-filled (the app's own room or scene art, say). */
+  image: string;
+  /** Which band of it shows: 0 its top, 1 its bottom. Default 0.5. */
+  anchor?: number;
+  /** Blur, as a fraction of the canvas width, so it reads as depth behind the hero. Default 0.007. */
+  blur?: number;
+  /** A colour laid over the whole ground: pick it so the strip is a mid tone on a white and a black page. */
+  tint?: string;
+  /** A colour under the words, fading out before the hero, so the lockup reads over a busy ground. */
+  scrim?: string;
+}
+
+/** App Store creative graphics: how the name and tagline are set. */
+export interface CreativeLockup {
+  /** `false` leaves the icon out of the lockup (the store prints it under the header anyway). */
+  logo?: false;
+  /** A font file for the name: the app's own wordmark face. */
+  nameFont?: string;
+  /** The name's size against the default (1). Without the icon, the name can take its room: 1.5, say. */
+  nameScale?: number;
+  /** A font file for the tagline. */
+  taglineFont?: string;
+  /** The name's and the tagline's colour, and the tagline's second sentence's, in place of the brand's. */
+  title?: string;
+  sub?: string;
 }
 
 /** How an asset is rendered — independent of where it's going. */
@@ -841,6 +879,8 @@ export declare function creativeLayout(opts: {
   /** How many cards the hand holds, and one card's width / height: what a hand below is sized from. */
   cards?: number;
   cardAspect?: number;
+  /** A feathered hero, which may stand the canvas's full height. */
+  heroFill?: boolean;
 }): CreativeLayout;
 
 /** An App Store creative graphic (header, search, universal) → a no-alpha PNG at `outFile`. */
@@ -860,6 +900,12 @@ export declare function buildCreativeGraphic(opts: {
   hand?: 'margin' | 'below';
   /** `[x, y, w, h]` of the hero capture to use, in its pixels. */
   heroCrop?: [number, number, number, number];
+  /** A picture as the ground — see `ScreenshotSpec.ground`. */
+  ground?: CreativeGround;
+  /** Fade the hero's edges into the ground — see `ScreenshotSpec.heroFeather`. */
+  heroFeather?: number;
+  /** The lockup's icon, faces and colours — see `ScreenshotSpec.lockup`. */
+  lockup?: CreativeLockup;
 }): Promise<{ outFile: string; W: number; H: number; layout: CreativeLayout }>;
 
 /** Render one still at an exact size. Returns a canvas (see `rgbPngBuffer` to encode it). */

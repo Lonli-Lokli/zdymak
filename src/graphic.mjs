@@ -13,8 +13,8 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { createCanvas, loadImage } from '@napi-rs/canvas';
-import { font, hexA, roundRectPath, fillVerticalGradient, radialGlow, wrapLines } from './canvas.mjs';
+import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
+import { font, SCRIPT_FALLBACK, hexA, roundRectPath, fillVerticalGradient, radialGlow, wrapLines } from './canvas.mjs';
 import { frameFor, drawAndroidPhoneFrame, screenAspectFor } from './frames.mjs';
 import { rgbPngBuffer } from './png.mjs';
 
@@ -189,7 +189,7 @@ const TAGLINE_LH = 1.2;
  * `heroAspect` is the hero SCREEN's height/width; `framed` leaves room for a body around it.
  * Every rect is `{ x, y, w, h }` in canvas pixels; `fan` is the point its cards stand on, and a height.
  */
-export function creativeLayout({ W, H, safe, heroAspect, framed = false, hand = 'margin', cards = 3, cardAspect = 0.73 }) {
+export function creativeLayout({ W, H, safe, heroAspect, framed = false, hand = 'margin', cards = 3, cardAspect = 0.73, heroFill = false }) {
   if (hand === 'below') return handBelowLayout({ W, H, safe, heroAspect, framed, cards, cardAspect });
   const [sx, sy, sw, sh] = safe;
   const pad = Math.round(sw * 0.03);
@@ -197,10 +197,12 @@ export function creativeLayout({ W, H, safe, heroAspect, framed = false, hand = 
 
   // The hero's box starts after the text column and may reach the canvas's own margin on the right and
   // 15% of the safe height past the safe area above and below. A body is ~7% bigger than its screen.
+  // A feathered hero (`heroFill`) melts into its ground at the edges, so it may stand the canvas's full
+  // height: what a narrow band crops off is board fading into the room, never an edge cut through.
   const k = framed ? 1.07 : 1;
   const x0 = sx + Math.round(sw * TEXT_SHARE) + pad;
   const boxW = W - Math.round(W * 0.04) - x0;
-  const boxH = sh * 1.3;
+  const boxH = heroFill ? H * 0.96 : sh * 1.3;
   let w = boxW / k;
   let h = w * heroAspect;
   if (h > boxH / k) {
@@ -296,17 +298,20 @@ function handBelowLayout({ W, H, safe, heroAspect, framed, cards, cardAspect }) 
  * Know more." broken into "Know / more." to gain a few pixels reads as a mistake, while a German
  * sentence twice as long genuinely needs the second line.
  */
-function fitIdentity(ctx, brand, hasLogo, box) {
+function fitIdentity(ctx, brand, hasLogo, box, faces = FACES, nameScale = 1) {
   const name = brand.name || 'App';
   const gap = Number.isFinite(brand.lockupGap) ? brand.lockupGap : 0.28; // the feature graphic's 26px on 92
   const parts = splitTagline(brand.tagline).filter(Boolean);
-  const blockH = (n) => 1 + (n ? LOCKUP_GAP_BELOW + n * TAGLINE * TAGLINE_LH : 0);
-  ctx.font = font(100 * WORDMARK, 'bold');
+  // The lockup's row is the icon's height, or the name's where the name is set larger than an icon would stand.
+  const nameSize = WORDMARK * nameScale;
+  const row = Math.max(hasLogo ? 1 : 0, nameSize * 1.2);
+  const blockH = (n) => row + (n ? LOCKUP_GAP_BELOW + n * TAGLINE * TAGLINE_LH : 0);
+  ctx.font = faces.name(100 * nameSize);
   const lockupW100 = (hasLogo ? 100 + 100 * gap : 0) + ctx.measureText(name).width;
   const kMax = Math.min(box.h / blockH(parts.length), (box.w * 100) / lockupW100);
 
   // One line per sentence: shrink until the widest sentence fits.
-  ctx.font = font(100 * TAGLINE, 'bold');
+  ctx.font = faces.tagline(100 * TAGLINE);
   const widest100 = Math.max(1, ...parts.map((p) => ctx.measureText(p).width));
   const kWhole = Math.min(kMax, (box.w * 100) / widest100);
   const whole = parts.map((text, j) => ({ text, second: j > 0 }));
@@ -315,7 +320,7 @@ function fitIdentity(ctx, brand, hasLogo, box) {
   let k = kMax;
   let lines = whole;
   for (let i = 0; i < 6; i++) {
-    ctx.font = font(Math.round(k * TAGLINE), 'bold');
+    ctx.font = faces.tagline(Math.round(k * TAGLINE));
     lines = parts.flatMap((p, j) => wrapLines(ctx, p, box.w).map((text) => ({ text, second: j > 0 })));
     // A single word wider than the column cannot wrap: shrink to it.
     const w = Math.max(0, ...lines.map((l) => ctx.measureText(l.text).width));
@@ -326,7 +331,7 @@ function fitIdentity(ctx, brand, hasLogo, box) {
   const useWhole = kWhole >= k * 0.75;
   const kk = Math.floor(useWhole ? kWhole : k);
   const chosen = useWhole ? whole : lines;
-  return { k: kk, name, gap, lines: chosen, height: kk * blockH(chosen.length) };
+  return { k: kk, name, gap, lines: chosen, row, nameSize, height: kk * blockH(chosen.length) };
 }
 
 /** The hero: the screen itself on the matte, or inside a named frame. `rect` is the outer box. */
@@ -353,6 +358,90 @@ function drawHero(ctx, img, rect, frame) {
   ctx.restore();
 }
 
+/** The lockup's faces: the brand face in bold unless the shot's `lockup` names font files of its own. */
+const FACES = { name: (px) => font(px, 'bold'), tagline: (px) => font(px, 'bold') };
+
+/** A font file as a canvas family of its own, registered once: `lockup.nameFont` / `lockup.taglineFont`. */
+const registered = new Map();
+function faceFrom(file, fallback) {
+  if (!file) return fallback;
+  const p = path.resolve(file);
+  if (!fs.existsSync(p)) throw new Error(`lockup font ${file} does not exist`);
+  if (!registered.has(p)) {
+    const family = `ZdymakFace${registered.size + 1}`;
+    if (!GlobalFonts.registerFromPath(p, family)) throw new Error(`lockup font ${file} could not be read`);
+    registered.set(p, family);
+  }
+  const family = registered.get(p);
+  // The brand face and the script fallbacks behind it, so a glyph the file lacks (a Japanese tagline in a
+  // Latin face) is drawn from the system rather than as an empty box.
+  return (px) => `${px}px "${family}", Brand, ${SCRIPT_FALLBACK}`;
+}
+
+/**
+ * A picture as the ground (`ground` on the shot) in place of the matte gradient: the game's own room, say, so
+ * the header stands in the app's world rather than on a colour. Cover-filled, `anchor` choosing the band
+ * (0 top, 1 bottom), blurred by `blur` of the canvas width so it reads as depth behind the hero, then
+ * `tint` laid over all of it. Pick the tint so the strip is a MID tone: one image serves a white and a black
+ * App Store page.
+ */
+async function drawGround(ctx, W, H, { image, anchor = 0.5, blur = 0.007, tint }) {
+  const file = path.resolve(image);
+  if (!fs.existsSync(file)) throw new Error(`ground image ${image} does not exist`);
+  const img = await loadImage(file);
+  const px = Math.round(W * blur);
+  // Drawn past the canvas by the blur's reach on every side, so the edges do not darken into the blur.
+  const cw = W + px * 4, ch = H + px * 4;
+  const scale = Math.max(cw / img.width, ch / img.height);
+  const dw = img.width * scale, dh = img.height * scale;
+  const dy = Math.min(0, Math.max(ch - dh, ch / 2 - dh * anchor));
+  ctx.save();
+  if (px > 0) ctx.filter = `blur(${px}px)`;
+  ctx.drawImage(img, (W - dw) / 2, dy - px * 2, dw, dh);
+  ctx.restore();
+  if (tint) {
+    ctx.fillStyle = tint;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+/** A soft band of `color` under the words, fading out before the hero, so the lockup reads over a busy ground. */
+function drawScrim(ctx, lay, color) {
+  const { safe, text, hero } = lay;
+  const from = safe.x - safe.w * 0.25;
+  const to = Math.max(text.x + text.w + 1, hero.x + hero.w * 0.1);
+  const g = ctx.createLinearGradient(from, 0, to, 0);
+  const at = (x) => Math.min(1, Math.max(0, (x - from) / (to - from)));
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(at(text.x), color);
+  g.addColorStop(at(text.x + text.w), color);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+}
+
+/**
+ * The hero with no body, no corner and no shadow, its edges fading into the ground over `feather` of its
+ * size on each side (`heroFeather`): a board cut out of a scene that is set in the same world as the ground,
+ * where a framed card would read as a screenshot stuck on a wall.
+ */
+function drawFeathered(ctx, img, rect, feather) {
+  const off = createCanvas(Math.max(1, rect.w), Math.max(1, rect.h));
+  const o = off.getContext('2d');
+  o.drawImage(img, 0, 0, rect.w, rect.h);
+  o.globalCompositeOperation = 'destination-in';
+  for (const [x1, y1] of [[rect.w, 0], [0, rect.h]]) {
+    const m = o.createLinearGradient(0, 0, x1, y1);
+    m.addColorStop(0, 'rgba(0,0,0,0)');
+    m.addColorStop(feather, 'rgba(0,0,0,1)');
+    m.addColorStop(1 - feather, 'rgba(0,0,0,1)');
+    m.addColorStop(1, 'rgba(0,0,0,0)');
+    o.fillStyle = m;
+    o.fillRect(0, 0, rect.w, rect.h);
+  }
+  ctx.drawImage(off, rect.x, rect.y);
+}
+
 /** A rectangle of an image, as a canvas of its own: what `heroCrop` asks for. */
 function cropped(img, [x, y, w, h]) {
   const c = createCanvas(w, h);
@@ -368,12 +457,20 @@ function cropped(img, [x, y, w, h]) {
  * `hand: 'below'` centres the words and hero over a hand rising from the bottom edge ([handBelowLayout]).
  * `heroCrop: [x, y, w, h]` takes that rectangle of the capture, in its pixels, as the hero — the table
  * alone, say, without the app's header and controls around it.
+ * `ground: { image, anchor, blur, tint, scrim }` stands it on a picture instead of the matte ([drawGround]),
+ * `heroFeather` fades the hero's edges into that ground and lets it stand the full height ([drawFeathered]),
+ * and `lockup: { logo: false, nameFont, taglineFont, title, sub }` leaves the icon out (the store prints it
+ * under the header anyway), sets the name and tagline in the app's own faces and colours them.
  */
-export async function buildCreativeGraphic({ W, H, safe, brand, theme, heroPath, outFile, frame, fan = true, hand = 'margin', heroCrop }) {
+export async function buildCreativeGraphic({
+  W, H, safe, brand, theme, heroPath, outFile, frame, fan = true, hand = 'margin', heroCrop,
+  ground: groundImage, heroFeather, lockup = {},
+}) {
   const th = ground(theme);
   const whole = heroPath && fs.existsSync(heroPath) ? await loadImage(heroPath) : null;
   const hero = whole && heroCrop ? cropped(whole, heroCrop) : whole;
-  const heroFrame = frame ?? (hero && hero.height > hero.width ? 'phone' : 'none');
+  const feather = Number.isFinite(heroFeather) && heroFeather > 0 ? Math.min(heroFeather, 0.3) : 0;
+  const heroFrame = feather ? 'none' : (frame ?? (hero && hero.height > hero.width ? 'phone' : 'none'));
   const framed = heroFrame !== 'none' && !!frameFor(heroFrame);
   const aspect = hero ? screenAspectFor(heroFrame, hero) : 9 / 16;
   const cards = Array.isArray(fan) ? fan : brand.fan;
@@ -382,13 +479,19 @@ export async function buildCreativeGraphic({ W, H, safe, brand, theme, heroPath,
   const lay = creativeLayout({
     W, H, safe, heroAspect: aspect, framed, hand,
     cards: Math.max(1, dealt.length), cardAspect: first ? first.width / first.height : 0.73,
+    heroFill: feather > 0,
   });
 
   const c = createCanvas(W, H);
   const ctx = c.getContext('2d');
-  fillVerticalGradient(ctx, W, H, th.matteTop, th.matteBottom);
-  // The glow sits where the words meet the hero, so the light falls on the part every crop keeps.
-  radialGlow(ctx, lay.hero.x, lay.safe.y + lay.safe.h / 2, Math.max(W, H) * 0.5, th.glow || brand.sub, th.glowAlpha);
+  if (groundImage?.image) {
+    await drawGround(ctx, W, H, groundImage);
+  } else {
+    fillVerticalGradient(ctx, W, H, th.matteTop, th.matteBottom);
+    // The glow sits where the words meet the hero, so the light falls on the part every crop keeps.
+    radialGlow(ctx, lay.hero.x, lay.safe.y + lay.safe.h / 2, Math.max(W, H) * 0.5, th.glow || brand.sub, th.glowAlpha);
+  }
+  if (groundImage?.scrim) drawScrim(ctx, lay, groundImage.scrim);
 
   if (fan !== false) {
     await drawFan(ctx, cards, {
@@ -399,10 +502,17 @@ export async function buildCreativeGraphic({ W, H, safe, brand, theme, heroPath,
       offsetY: Math.round(lay.fan.h * 0.02),
     });
   }
-  if (hero) drawHero(ctx, hero, lay.hero, heroFrame);
+  if (hero) {
+    if (feather) drawFeathered(ctx, hero, lay.hero, feather);
+    else drawHero(ctx, hero, lay.hero, heroFrame);
+  }
 
-  const logo = brand.logo && fs.existsSync(brand.logo) ? await loadImage(brand.logo) : null;
-  const id = fitIdentity(ctx, brand, !!logo, lay.text);
+  const logo = lockup.logo !== false && brand.logo && fs.existsSync(brand.logo) ? await loadImage(brand.logo) : null;
+  const faces = { name: faceFrom(lockup.nameFont, FACES.name), tagline: faceFrom(lockup.taglineFont, FACES.tagline) };
+  const title = lockup.title || brand.title;
+  const sub = lockup.sub || brand.sub;
+  const nameScale = Number.isFinite(lockup.nameScale) && lockup.nameScale > 0 ? lockup.nameScale : 1;
+  const id = fitIdentity(ctx, brand, !!logo, lay.text, faces, nameScale);
   const { k } = id;
   let y = Math.round(lay.text.y + (lay.text.h - id.height) / 2);
   const x = lay.text.x;
@@ -415,17 +525,17 @@ export async function buildCreativeGraphic({ W, H, safe, brand, theme, heroPath,
   }
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.font = font(Math.round(k * WORDMARK), 'bold');
-  ctx.fillStyle = brand.title;
-  ctx.fillText(id.name, x + (logo ? k + k * id.gap : 0), y + k / 2 + k * 0.04);
-  y += k;
+  ctx.font = faces.name(Math.round(k * id.nameSize));
+  ctx.fillStyle = title;
+  ctx.fillText(id.name, x + (logo ? k + k * id.gap : 0), y + (k * id.row) / 2 + k * 0.04);
+  y += k * id.row;
   if (id.lines.length) {
     y += k * LOCKUP_GAP_BELOW;
     ctx.textBaseline = 'top';
-    ctx.font = font(Math.round(k * TAGLINE), 'bold');
+    ctx.font = faces.tagline(Math.round(k * TAGLINE));
     for (const line of id.lines) {
       // The tagline's second sentence in the accent colour, as on the feature graphic.
-      ctx.fillStyle = line.second ? brand.sub : brand.title;
+      ctx.fillStyle = line.second ? sub : title;
       ctx.fillText(line.text, x, y);
       y += k * TAGLINE * TAGLINE_LH;
     }

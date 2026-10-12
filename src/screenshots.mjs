@@ -179,6 +179,7 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir, for
         await buildCreativeGraphic({
           W, H, safe: safeFor(spec, W, H), brand, theme: shotTheme(theme, shot), heroPath, outFile,
           frame: shot.frame, fan: shot.fan, hand: shot.hand, heroCrop: shot.heroCrop,
+          ground: shot.ground, heroFeather: shot.heroFeather, lockup: shot.lockup,
         });
       } else {
         await buildFeatureGraphic({ W, H, brand, theme: shotTheme(theme, shot), heroPath, outFile, frame: frame || 'android' });

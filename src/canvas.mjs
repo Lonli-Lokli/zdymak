@@ -4,7 +4,7 @@
 // Bengali — so LOCALIZED captions render real glyphs instead of tofu (▯▯). Latin/Cyrillic still come
 // from Brand (listed first). Missing families are silently skipped, so this is safe on any OS.
 // (ja & zh share Han codepoints; the order favours ja kana+kanji, then simplified-zh from PingFang.)
-const SCRIPT_FALLBACK =
+export const SCRIPT_FALLBACK =
   '"Hiragino Sans", "PingFang SC", "Apple SD Gothic Neo", "Geeza Pro", "Arial Hebrew", "Kohinoor Devanagari", "Kohinoor Bangla"';
 
 export const font = (sizePx, weight = 'bold') => `${weight} ${sizePx}px Brand, ${SCRIPT_FALLBACK}`;

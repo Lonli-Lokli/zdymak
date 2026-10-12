@@ -868,6 +868,16 @@ devices: {
   canvas's side.
 - **`heroCrop: [x, y, w, h]`** uses that rectangle of the hero capture, in its pixels — the table alone,
   without the app's header and controls round it.
+- **`ground: { image, anchor, blur, tint, scrim }`** stands the graphic on a picture instead of the matte: the
+  app's own room or scene art, cover-filled, `anchor` choosing the band (0 top, 1 bottom), blurred by `blur` of
+  the canvas width (0.007 by default) so it reads as depth, `tint` laid over it to bring it to a mid tone, and
+  `scrim` a band under the words that fades out before the hero. Mock it on a light and a dark page too.
+- **`heroFeather: 0.08`** draws the hero bare, its edges fading into the ground over that share of its size,
+  and lets it stand the canvas's full height: a board cut from a scene set in the same world as the ground,
+  where a rounded, shadowed card would read as a screenshot stuck on a wall.
+- **`lockup: { logo: false, nameFont, nameScale, taglineFont, title, sub }`** leaves the icon out of the lockup (the store
+  prints the icon and name just under the header, and both together read as the name twice), sets the name
+  and tagline in the app's own font files, sizes the name (`nameScale`, 1 by default) and colours them.
 - **The background is the shot's `theme`**: `theme: { matteTop, matteBottom }` on the shot, so a header
   can stand on a different ground from the screenshots. Pick one that holds up on both a light and a
   dark App Store page — a mid tone, not near white or near black — and that the hero is not the same

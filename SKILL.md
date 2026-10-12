@@ -251,6 +251,12 @@ The first header made from defaults was rejected by its owner, for reasons that 
 - **One idea, centred.** Apple: "Focus on a single, clear idea", focal point in the centre. The iPhone
   crop keeps the full height and loses about 8% each side; check it in App Store Connect's Preview.
 - **Search image** (3:2): the same shot options give the same composition reflowed; show gameplay.
+- **A game with its own world can stand the header in it** (Hronka, 2026-10-12): a flat matte read as
+  any app's, and its owner chose the game's own night room. `ground: { image, anchor, tint, scrim }` puts the app's
+  scene art behind everything, blurred, tinted to a mid tone, with a scrim under the words; `heroFeather: 0.08`
+  fades a board cut from a scene into that ground at full height instead of boxing it; `lockup: { logo: false,
+  nameFont, nameScale, taglineFont, title, sub }` drops the icon (the store prints icon and name just below, and
+  both together read as the name twice) and sets the words in the app's own faces.
 
 ### Screenshots that the island or a status column will cover (also from Vinto)
 - **Headless captures have no status bar.** Reserve the device's strips in the capture (iPhone 6.9":
