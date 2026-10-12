@@ -9,6 +9,9 @@
 # see RELEASING.md: the package's trusted publisher must name THIS repository and THIS file name (publish.yml), and must
 # allow `npm publish`. Every field is case-sensitive.
 #
+# Node comes from `.node-version` at the repository root, the one place it is written; checkout and setup-node
+# are v5, which run on Node 24 themselves (v4 targeted Node 20, which GitHub now forces onto 24 with a warning).
+#
 # IDENTICAL in vydanne and zdymak: the package name is read from package.json.
 name: publish
 
@@ -31,13 +34,13 @@ jobs:
       version: ${{ steps.tag.outputs.version }}
       dist-tag: ${{ steps.tag.outputs.dist-tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # the next step needs the default branch's history
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version-file: .node-version
           registry-url: https://registry.npmjs.org
 
       - run: npm install -g npm@latest # trusted publishing needs npm >= 11.5.1
@@ -88,12 +91,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.repository.default_branch }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version-file: .node-version
       - name: Write the released version back
         env:
           VERSION: ${{ needs.publish.outputs.version }}
