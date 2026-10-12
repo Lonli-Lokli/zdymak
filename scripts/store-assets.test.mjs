@@ -186,6 +186,38 @@ test('the layout keeps the words inside the safe area, starts the hero inside it
   }
 });
 
+/**
+ * The hand below: words and hero as one centred group over a hand of cards rising from the bottom edge.
+ *
+ * Asked for from a real listing (Vinto, 2026-10-12): the hand in the left margin left a card cut off at
+ * the canvas's left edge — "7 in bottom left is truncated to the left" — and stood wholly outside the
+ * safe area most devices show. Centred and below, every card is inside the iPhone's crop (Apple's Preview
+ * tool keeps full height and loses about 8% each side) and only the bottom edge cuts them.
+ */
+test('a hand below is centred under one centred group, and no card is cut at either side', () => {
+  for (const id of ['appstore-header', 'appstore-search', 'appstore-universal']) {
+    const s = IMAGE_TARGETS[id];
+    for (const cards of [3, 5]) {
+      const lay = creativeLayout({ W: s.w, H: s.h, safe: s.safe, heroAspect: 0.705, hand: 'below', cards, cardAspect: 825 / 1125 });
+      const { text, hero, fan } = lay;
+      const tag = `${id} with ${cards} cards`;
+      // One group, centred: the margin left of the words is the margin right of the hero.
+      const left = text.x;
+      const right = s.w - (hero.x + hero.w);
+      assert.ok(Math.abs(left - right) <= 2, `${tag}: the group is centred (${left} | ${right})`);
+      assert.ok(hero.x >= text.x + text.w, `${tag}: the hero stands right of the words`);
+      assert.ok(Math.abs(fan.cx - s.w / 2) <= 1, `${tag}: the hand is centred`);
+      // The hand's widest reach, rotation included, inside the iPhone's crop on both sides.
+      const reach = fan.span / 2;
+      assert.ok(fan.cx - reach >= s.w * 0.08 && fan.cx + reach <= s.w * 0.92, `${tag}: a card would be cropped at a side`);
+      // The cards rise from below the bottom edge, and their tops stay clear of the hero above them.
+      assert.ok(fan.cy > s.h, `${tag}: the hand stands below the bottom edge`);
+      assert.ok(fan.cy - fan.h >= hero.y + hero.h, `${tag}: the cards reach up into the hero`);
+      assert.ok(fan.cy - fan.h < s.h * 0.85, `${tag}: too little of the hand shows`);
+    }
+  }
+});
+
 test('the creative graphics render at their sizes, no alpha, around the named hero', async () => {
   const dir = path.join(tmp, 'creative');
   capture(path.join(dir, 'phone.png'), 390, 845);

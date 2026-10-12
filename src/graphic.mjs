@@ -54,14 +54,16 @@ function splitTagline(t) {
  * overlapped and drop-shadowed, standing on (cx, cy): `cy` is where the cards' bottom edges meet.
  * Missing files are skipped. Shared by the feature graphic and the App Store creative assets.
  */
-async function drawFan(ctx, paths, { cx, cy, h, spread, blur, offsetY }) {
+async function drawFan(ctx, paths, { cx, cy, h, spread, blur, offsetY, step = 0.52, arc = 0 }) {
   const fan = (paths || []).filter((f) => fs.existsSync(f));
   const mid = (fan.length - 1) / 2;
   for (let i = 0; i < fan.length; i++) {
     const img = await loadImage(fan[i]);
     const w = (img.width / img.height) * h;
     ctx.save();
-    ctx.translate(cx + (i - mid) * (w * 0.52), cy);
+    // `step` is how far apart neighbouring cards stand, in card widths; `arc` drops each card a share of
+    // its height per place from the middle, so a wide hand curves the way a held one does.
+    ctx.translate(cx + (i - mid) * (w * step), cy + Math.abs(i - mid) * h * arc);
     ctx.rotate((i - mid) * spread);
     ctx.shadowColor = 'rgba(0,0,0,0.35)';
     ctx.shadowBlur = blur;
@@ -187,7 +189,8 @@ const TAGLINE_LH = 1.2;
  * `heroAspect` is the hero SCREEN's height/width; `framed` leaves room for a body around it.
  * Every rect is `{ x, y, w, h }` in canvas pixels; `fan` is the point its cards stand on, and a height.
  */
-export function creativeLayout({ W, H, safe, heroAspect, framed = false }) {
+export function creativeLayout({ W, H, safe, heroAspect, framed = false, hand = 'margin', cards = 3, cardAspect = 0.73 }) {
+  if (hand === 'below') return handBelowLayout({ W, H, safe, heroAspect, framed, cards, cardAspect });
   const [sx, sy, sw, sh] = safe;
   const pad = Math.round(sw * 0.03);
   const text = { x: sx + pad, y: sy + pad, w: Math.round(sw * TEXT_SHARE - pad * 1.5), h: sh - pad * 2 };
@@ -224,6 +227,63 @@ export function creativeLayout({ W, H, safe, heroAspect, framed = false }) {
   const fan = leftH >= belowH
     ? { cx: Math.round(sx * 0.46), cy: Math.round(H + leftH * sink), h: Math.round(leftH) }
     : { cx: Math.round(text.x + text.w / 2), cy: Math.round(H + belowH * sink), h: Math.round(belowH) };
+  return { safe: { x: sx, y: sy, w: sw, h: sh }, text, hero, fan };
+}
+
+/**
+ * The hand below (`hand: 'below'` on the shot): the words and the hero as ONE group centred across the
+ * upper part of the canvas, and a hand of cards centred along the bottom, rising from below the edge.
+ *
+ * Asked for from a real listing (Vinto, 2026-10-12). The margin hand stood wholly outside the safe area
+ * most devices show and had a card cut off at the canvas's side — "7 in bottom left is truncated to the
+ * left". Centred, the hand is the part every crop keeps rather than the part it loses: it is sized so
+ * its widest card stays inside the iPhone's crop (Apple's Preview tool keeps the full height and loses
+ * about 8% each side), and only the bottom edge cuts it, which reads as a hand held below the table.
+ *
+ * `fan` returns where the cards stand (`cy`, below the bottom edge), their height and the hand's whole
+ * width (`span`, rotation included) so the promise can be tested without drawing.
+ */
+const HAND = { height: 0.46, showing: 0.6, step: 0.66, spread: 0.08, arc: 0.05 };
+/** The share of the width the hand may span: the iPhone's crop, 8% each side. */
+const HAND_REACH = 0.84;
+const GROUP = { top: 0.036, gap: 0.035, words: 0.2, between: 0.036, widest: 0.92 };
+
+function handBelowLayout({ W, H, safe, heroAspect, framed, cards, cardAspect }) {
+  const [sx, sy, sw, sh] = safe;
+  const mid = (cards - 1) / 2;
+  const tilt = mid * HAND.spread;
+  // How wide the hand is per unit of card height: the outer card's centre, then its rotated top corner.
+  const reachPerH = mid * cardAspect * HAND.step + (cardAspect / 2) * Math.cos(tilt) + Math.sin(tilt);
+  const fanH = Math.floor(Math.min(H * HAND.height, (W * HAND_REACH) / (2 * reachPerH)));
+  const fan = {
+    cx: Math.round(W / 2),
+    cy: Math.round(H + fanH * (1 - HAND.showing)),
+    h: fanH,
+    span: Math.round(2 * reachPerH * fanH),
+    step: HAND.step,
+    spread: HAND.spread,
+    arc: HAND.arc,
+  };
+
+  // The group stands in what the hand leaves above it.
+  const top = Math.round(H * GROUP.top);
+  const bottom = Math.round(H - fanH * HAND.showing - H * GROUP.gap);
+  const k = framed ? 1.07 : 1;
+  const wordsW = Math.round(W * GROUP.words);
+  const between = Math.round(W * GROUP.between);
+  let heroH = (bottom - top) / k;
+  let heroW = heroH / heroAspect;
+  const room = W * GROUP.widest - wordsW - between;
+  if (heroW * k > room) {
+    heroW = room / k;
+    heroH = heroW * heroAspect;
+  }
+  const outerW = Math.round(heroW * k);
+  const outerH = Math.round(heroH * k);
+  const gx = Math.round((W - (wordsW + between + outerW)) / 2);
+  const y = Math.round(top + (bottom - top - outerH) / 2);
+  const text = { x: gx, y, w: wordsW, h: outerH };
+  const hero = { x: gx + wordsW + between, y, w: outerW, h: outerH };
   return { safe: { x: sx, y: sy, w: sw, h: sh }, text, hero, fan };
 }
 
@@ -293,19 +353,36 @@ function drawHero(ctx, img, rect, frame) {
   ctx.restore();
 }
 
+/** A rectangle of an image, as a canvas of its own: what `heroCrop` asks for. */
+function cropped(img, [x, y, w, h]) {
+  const c = createCanvas(w, h);
+  c.getContext('2d').drawImage(img, x, y, w, h, 0, 0, w, h);
+  return c;
+}
+
 /**
  * Build one App Store creative asset → a no-alpha PNG. `safe` is the art safe area in THIS canvas's
  * pixels (the caller scales the target's when a `size:` override changes the canvas). `frame`: a frame
  * id for the hero, `'none'` for the bare screen; unset picks by the hero's shape (see above).
- * `fan: false` leaves the cards out.
+ * `fan: false` leaves the cards out; a list of paths deals those cards instead of `brand.fan`.
+ * `hand: 'below'` centres the words and hero over a hand rising from the bottom edge ([handBelowLayout]).
+ * `heroCrop: [x, y, w, h]` takes that rectangle of the capture, in its pixels, as the hero — the table
+ * alone, say, without the app's header and controls around it.
  */
-export async function buildCreativeGraphic({ W, H, safe, brand, theme, heroPath, outFile, frame, fan = true }) {
+export async function buildCreativeGraphic({ W, H, safe, brand, theme, heroPath, outFile, frame, fan = true, hand = 'margin', heroCrop }) {
   const th = ground(theme);
-  const hero = heroPath && fs.existsSync(heroPath) ? await loadImage(heroPath) : null;
+  const whole = heroPath && fs.existsSync(heroPath) ? await loadImage(heroPath) : null;
+  const hero = whole && heroCrop ? cropped(whole, heroCrop) : whole;
   const heroFrame = frame ?? (hero && hero.height > hero.width ? 'phone' : 'none');
   const framed = heroFrame !== 'none' && !!frameFor(heroFrame);
   const aspect = hero ? screenAspectFor(heroFrame, hero) : 9 / 16;
-  const lay = creativeLayout({ W, H, safe, heroAspect: aspect, framed });
+  const cards = Array.isArray(fan) ? fan : brand.fan;
+  const dealt = (cards || []).filter((f) => fs.existsSync(f));
+  const first = dealt.length ? await loadImage(dealt[0]) : null;
+  const lay = creativeLayout({
+    W, H, safe, heroAspect: aspect, framed, hand,
+    cards: Math.max(1, dealt.length), cardAspect: first ? first.width / first.height : 0.73,
+  });
 
   const c = createCanvas(W, H);
   const ctx = c.getContext('2d');
@@ -314,9 +391,10 @@ export async function buildCreativeGraphic({ W, H, safe, brand, theme, heroPath,
   radialGlow(ctx, lay.hero.x, lay.safe.y + lay.safe.h / 2, Math.max(W, H) * 0.5, th.glow || brand.sub, th.glowAlpha);
 
   if (fan !== false) {
-    await drawFan(ctx, brand.fan, {
+    await drawFan(ctx, cards, {
       cx: lay.fan.cx, cy: lay.fan.cy, h: lay.fan.h,
-      spread: brand.fanSpread ?? 0.17,
+      step: lay.fan.step, arc: lay.fan.arc,
+      spread: lay.fan.spread ?? brand.fanSpread ?? 0.17,
       blur: Math.round(lay.fan.h * 0.06), // the feature graphic's 18px on its 300px cards
       offsetY: Math.round(lay.fan.h * 0.02),
     });

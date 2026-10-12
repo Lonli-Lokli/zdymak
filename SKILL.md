@@ -235,6 +235,36 @@ Treat them like the feature graphic, not like screenshots: one image per target,
   true }`. They are measured after the encode (size, 5–30 s, 30/60 fps) and refused on a violation.
   Search plays muted always — don't spend a music bed there.
 
+### What the first real listing taught (Vinto, 2026-10-12) — apply it to every game
+The first header made from defaults was rejected by its owner, for reasons that hold for any game:
+- **Use `hand: 'below'`** with the game's own art as `fan: [paths]` (five cards, pieces, tiles): words
+  and hero as one centred group, the hand centred along the bottom, cut by the bottom edge only. The
+  default margin hand sits outside the safe area and lost a card to the canvas's side.
+- **Crop the hero to the play area** with `heroCrop: [x, y, w, h]` (the board without the app's header
+  and controls). On an iPhone the whole 21:9 strip is about 393 points wide, so anything small in the
+  hero is unreadable; the board and the hand are what carry.
+- **Give the header its own ground** with `theme: { matteTop, matteBottom }` on the shot. It shows above
+  BOTH a white and a black App Store page and Apple takes one image for both, so: a mid tone, never near
+  white or near black, and never the hero's own colour (a green board on a green ground disappears).
+  Mock it on a light and a dark page before building; Vinto chose a walnut ground for a green felt.
+- **One idea, centred.** Apple: "Focus on a single, clear idea", focal point in the centre. The iPhone
+  crop keeps the full height and loses about 8% each side; check it in App Store Connect's Preview.
+- **Search image** (3:2): the same shot options give the same composition reflowed; show gameplay.
+
+### Screenshots that the island or a status column will cover (also from Vinto)
+- **Headless captures have no status bar.** Reserve the device's strips in the capture (iPhone 6.9":
+  59 points top, 34 bottom) as a flat band of the app's own edge colour, and set `theme: { statusBar:
+  'auto' }` on those shots: the frame's Dynamic Island then sits in the band and zdymak draws a clean
+  9:41 there. Without it the island lands on the app's top-right controls.
+- **The closed iPhone Duo has no top status bar.** iOS 27.1 stands the status bar and camera in a column
+  down the RIGHT edge: 84 of 466 points (measured on the Duo simulator), the app gets 382. Reserve that
+  column, nothing at the top, and set `statusBar: false` on that shot ('auto' would read the app's flat
+  top rows as a band). The open screen's bars cannot be measured by script; check them by hand.
+- **One Duo set holds ten**: closed and open together. Six closed plus four open (a device-level
+  `scenes` list on the open one) fits; name both folders in vydanne's `bridge.apple.iphoneduo.dirs`.
+- **Pin what the capture shows**: the theme (an app that follows the system renders dark on a Mac in
+  dark mode) and the version string on any screen that prints one, to the release the shots go out with.
+
 ## Store cut vs social-ad cut (per-scene `cut` / `effect`)
 `social-reel` supports **34 transitions** and **25 effects**, chosen per scene:
 `{ id: 'study', cut: 'flip', effect: 'warm-film', push: true }`.

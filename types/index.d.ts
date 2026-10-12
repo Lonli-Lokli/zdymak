@@ -409,8 +409,22 @@ export interface ScreenshotSpec {
    * capture, or for the App Store creative graphics the first LANDSCAPE one.
    */
   hero?: string;
-  /** App Store creative graphics only: `false` leaves the `brand.fan` cards out. */
-  fan?: false;
+  /**
+   * App Store creative graphics only: `false` leaves the `brand.fan` cards out; a list of image paths
+   * deals those cards instead (a header that shows a whole hand while the feature graphic keeps three).
+   */
+  fan?: false | string[];
+  /**
+   * App Store creative graphics only: where the cards go. `'margin'` (default) stands them outside the
+   * safe area, beside the words; `'below'` centres the words and hero as one group over a hand rising
+   * from the bottom edge, every card inside the iPhone's crop and cut by the bottom edge only.
+   */
+  hand?: 'margin' | 'below';
+  /**
+   * App Store creative graphics only: `[x, y, w, h]` of the hero capture, in its pixels, to use instead
+   * of the whole capture — the table alone, without the app's header and controls around it.
+   */
+  heroCrop?: [number, number, number, number];
 }
 
 /** How an asset is rendered — independent of where it's going. */
@@ -789,8 +803,12 @@ export interface CreativeLayout {
   safe: Rect;
   text: Rect;
   hero: Rect;
-  /** The point the fan's cards stand on (below the bottom edge), and their height. */
-  fan: { cx: number; cy: number; h: number };
+  /**
+   * The point the fan's cards stand on (below the bottom edge) and their height; for a hand below,
+   * also its whole width with rotation (`span`), how far apart the cards stand in card widths (`step`),
+   * how far each turns (`spread`, radians) and how much each drops per place from the middle (`arc`).
+   */
+  fan: { cx: number; cy: number; h: number; span?: number; step?: number; spread?: number; arc?: number };
 }
 
 /**
@@ -806,6 +824,11 @@ export declare function creativeLayout(opts: {
   heroAspect: number;
   /** Leave room for a device body around the hero. */
   framed?: boolean;
+  /** Where the cards go: beside the words (default) or centred along the bottom. */
+  hand?: 'margin' | 'below';
+  /** How many cards the hand holds, and one card's width / height: what a hand below is sized from. */
+  cards?: number;
+  cardAspect?: number;
 }): CreativeLayout;
 
 /** An App Store creative graphic (header, search, universal) → a no-alpha PNG at `outFile`. */
@@ -819,8 +842,12 @@ export declare function buildCreativeGraphic(opts: {
   outFile: string;
   /** The hero's frame; `'none'` for the bare screen. Unset: by the hero's shape. */
   frame?: FrameId;
-  /** `false` leaves the cards out. */
-  fan?: boolean;
+  /** `false` leaves the cards out; a list of paths deals those instead of `brand.fan`. */
+  fan?: boolean | string[];
+  /** Where the cards go — see `ScreenshotSpec.hand`. */
+  hand?: 'margin' | 'below';
+  /** `[x, y, w, h]` of the hero capture to use, in its pixels. */
+  heroCrop?: [number, number, number, number];
 }): Promise<{ outFile: string; W: number; H: number; layout: CreativeLayout }>;
 
 /** Render one still at an exact size. Returns a canvas (see `rgbPngBuffer` to encode it). */

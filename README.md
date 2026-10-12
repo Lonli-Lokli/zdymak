@@ -827,7 +827,19 @@ devices: {
   the iPhone frame by default.
 - **Without `hero`**, the first *landscape* capture of the device is used, else the first capture. A
   `hero` that is named and missing is an **error**, never a fallback.
-- **`fan: false`** on the shot leaves the cards out.
+- **`fan: false`** on the shot leaves the cards out; **`fan: [paths]`** deals those cards instead of
+  `brand.fan`, so a header can show a whole hand while the feature graphic keeps its three.
+- **`hand: 'below'`** puts the cards centred along the bottom instead of in a margin: the words and the
+  hero become one group centred across the upper part, and the hand rises from below the bottom edge,
+  sized so every card stays inside the iPhone's crop (about 8% lost each side) and only the bottom edge
+  cuts it. A hand in the margin is outside the safe area most devices show, and can lose a card to the
+  canvas's side.
+- **`heroCrop: [x, y, w, h]`** uses that rectangle of the hero capture, in its pixels — the table alone,
+  without the app's header and controls round it.
+- **The background is the shot's `theme`**: `theme: { matteTop, matteBottom }` on the shot, so a header
+  can stand on a different ground from the screenshots. Pick one that holds up on both a light and a
+  dark App Store page — a mid tone, not near white or near black — and that the hero is not the same
+  colour as.
 - **Not drawn: `brand.endsub`.** It is the end card's honest-offer line, and Apple's guidance for these
   assets rules out pricing and asks for "a short phrase that enhances your visual" — the tagline is
   that phrase. The feature graphic's pixel knobs (`fanX`/`fanY`/`fanHeight`, `textOffsetY`) do not
