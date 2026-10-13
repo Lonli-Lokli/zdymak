@@ -22,6 +22,7 @@ import { loadCapture } from './statusbar.mjs';
 import { font, hexA, hexRgb, springSeries, roundRectPath, fillVerticalGradient, radialGlow, wrapLines } from './canvas.mjs';
 import { spawnEncoder } from './encode.mjs';
 import { frameFor, screenAspectFor } from './frames.mjs';
+import { drawFoldedDuo } from './fold3d.mjs';
 
 const smooth = (t) => t * t * (3 - 2 * t);
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -251,8 +252,12 @@ function screenLayer(W, H, img, th) {
 }
 
 /** Render ONE premium still → canvas. Static, no motion. With `frame` (phone|ipad|watch) the screen is
- *  drawn inside a device bezel floating on the matte; otherwise it's the plain rounded inset. */
-export function premiumStill({ W, H, img, caption, brand, theme, frame }) {
+ *  drawn inside a device bezel floating on the matte; otherwise it's the plain rounded inset. With `fold`
+ *  (a scene's, on the `duo-inner` frame) the Duo is drawn half open in perspective instead (fold3d.mjs). */
+export function premiumStill({ W, H, img, caption, brand, theme, frame, fold }) {
+  if (fold && frame !== 'duo-inner') {
+    throw new Error(`premiumStill: a half-open scene (fold) is drawn only in the Duo's inner display frame, 'duo-inner', not ${JSON.stringify(frame)}.`);
+  }
   const th = resolvePremiumTheme(brand, theme);
   // Store-shot smart defaults (each overridable via `theme`): headline sits ON TOP; a frameless window
   // (e.g. Mac) shows the WHOLE capture instead of cropping its title bar.
@@ -301,7 +306,10 @@ export function premiumStill({ W, H, img, caption, brand, theme, frame }) {
       const budgetH = H * (topCaption ? 0.66 : 0.64); // vertical room for the device body
       // The frame's screen aspect, not the capture's: the Duo keeps its display's shape whatever it is fed.
       const screenW = Math.min(budgetH / screenAspectFor(frame, img), W * 0.8) * scale;
-      drawFrame(ctx, img, W / 2, baseCy, screenW);
+      // Half open, the Duo is drawn in perspective, in the band its flat body would have taken: the same
+      // height below the caption, and as wide as the bent body needs.
+      if (fold) drawFoldedDuo(ctx, img, W / 2, baseCy, screenW, { fold, maxW: W * scale });
+      else drawFrame(ctx, img, W / 2, baseCy, screenW);
     }
   } else {
     ctx.drawImage(screenLayer(W, H, img, th), 0, 0);

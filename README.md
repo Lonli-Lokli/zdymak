@@ -279,7 +279,9 @@ iOS 27.1:
 - **iOS draws its own status** — the 9:41 column or corner is in the capture — so frame these shots with
   `theme: { statusBar: false }`.
 - **A half-open phone photographs flat.** The capture is the screen as its pixels are; the fold shows
-  only in how the app splits its layout around it.
+  only in how the app splits its layout around it. To show the phone half open in the store shot, give
+  the scene [`fold`](#fold-the-half-open-iphone-duo-in-3d): the frame then stands the Duo half open
+  around that same capture.
 
 **What iOS reserves in each posture** (window points, iOS 27.1 simulator), which is what an app has to
 lay itself out around. iOS 27.1 reports them as `GeometryProxy.reservedRegions(kind: .occlusion)` and
@@ -709,6 +711,56 @@ inferred — ask for one by name, which in practice means from a `layout` member
 > `macbook`/`mac-window` crop the capture's OWN title bar (`screencapture -l` includes it) and draw a
 > consistent one, so every Mac shot carries the same chrome at the same weight. Prefer `macbook` in a
 > device cluster: bare `mac` has no body, so it floats as an anonymous screen that reads as any laptop.
+
+### `fold`: the half-open iPhone Duo in 3D
+
+A capture taken with `--posture half-laptop` or `half-book` is flat, and the flat `duo-inner` frame shows
+it as a phone opened flat. A scene's `fold` key draws the Duo standing half open instead, in
+perspective, so the shot shows the posture the layout was made for: the board lying flat where the
+finger taps and the lid standing up, or two pages in a V.
+
+```js
+duoLaptop: {
+  capturesDir: './captures/ios-duo-laptop',
+  scenes: [{ id: 'midgame', title: 'Play it like a laptop', fold: 'laptop' }],
+  screenshots: [{ target: 'appstore-iphone-duo-inner', theme: { statusBar: false } }],
+},
+duoBook: {
+  capturesDir: './captures/ios-duo-book',
+  scenes: [{ id: 'hard', title: 'Or like a book', fold: { posture: 'book', hinge: 136 } }],
+  screenshots: [{ target: 'appstore-iphone-duo-inner-landscape', theme: { statusBar: false } }],
+},
+```
+
+`fold` is `'laptop'` or `'book'` (the `--posture` names `'half-laptop'` and `'half-book'` work too), or
+an object with a `posture` and any of these, each with a default per posture:
+
+| Option | Laptop | Book | Range | What it moves |
+|---|---|---|---|---|
+| `hinge` | `110` | `136` | 60 to 180 | The angle between the two halves, in degrees. It need not be the angle the capture was taken at. |
+| `elev` | `24` | `12` | 0 to 80 | How far above the device the camera stands, in degrees. Higher shows more of the laptop's base. |
+| `yaw` | `0` | `0` | -60 to 60 | The camera's turn around the device, in degrees; positive looks from the right. |
+| `dist` | `3.4` | `3.4` | 1.5 to 20 | The camera's distance, in multiples of the capture's short side. Further is flatter. |
+| `crease` | `0.16` | `0.16` | 0 to 1 | How dark the soft shade along the fold is. `0` leaves every screen pixel exactly the capture's. |
+
+**The screen is the real capture.** Each half of the display is the capture's own pixels, carried onto
+that half's plane by a homography and sampled smoothly; zdymak draws the body around them (the metal
+sides, lit from above, the bezel and the rim) and nothing on the screen apart from the light where it
+bends (`crease`). The body is as plain as the flat Duo frame: no island and no camera.
+
+What holds, and what is refused:
+- **The framed style on the inner display only**: `appstore-iphone-duo-inner` (the laptop, a tall
+  capture) and `appstore-iphone-duo-inner-landscape` (the book, a wide capture). A scene with `fold` on
+  any other frame fails and names the shot; so does a laptop scene given a wide capture or a book scene
+  given a tall one. A `bleed` (plain) shot of the scene shows the capture alone, as always.
+- **The shot is the target's exact size**, on the theme's ground with its glow and vignette, the caption
+  in its usual band at the top: the device takes the band the flat Duo body would take, as tall as that
+  body and nearly the frame's width, so a half-open shot sits beside the flat ones in one set.
+- **Screenshots only.** A `layout` member, a reel and a video draw the Duo flat; `layout` and `fold` on
+  one scene is a config error. A misspelt posture or an option out of range fails at config load.
+- `npm run check:fold3d` holds it: the projection against an independent camera, the halves at the
+  hinge angle, the screen's colour against the capture's, the size and placement, even metal edges, and
+  the flat frame unchanged for every scene without `fold`.
 
 ### `layout` — several captures in ONE shot ("works on every device")
 
@@ -1342,6 +1394,7 @@ declared in the `.d.ts`. Both run on `prepublishOnly`.
       header / search results / universal graphics around Apple's art safe areas, and the header and
       search videos as measured `reel` destinations.
 - [x] **The closed iPhone Duo's status column** — `statusBar: 'column'`, measured on the iOS 27.1 simulator.
+- [x] **The half-open iPhone Duo in 3D**: a scene's `fold: 'laptop' | 'book'`, around the real capture.
 
 See **SKILL.md** if you drive this with Claude Code.
 

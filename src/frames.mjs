@@ -156,8 +156,11 @@ export function drawIpadFrame(ctx, img, cx, cy, screenW, opts = {}) {
  * capture's. A body that followed a 6.9" capture would be a tall phone labelled Duo, and the only
  * thing that makes a Duo picture a Duo picture is its proportions. A capture of another shape is
  * cover-fitted (cropped) instead, and `buildDeviceScreenshots` warns when that happens.
+ *
+ * A scene with `fold` draws the inner display half open in 3D instead (`fold3d.mjs`), from these same
+ * proportions, so the bent body and the flat one are one device.
  */
-const DUO = {
+export const DUO = {
   duo: { display: [1398, 2034], bezel: 0.034, radius: 0.11 },
   'duo-inner': { display: [2007, 2853], bezel: 0.026, radius: 0.065 },
 };

@@ -17,6 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { normalizeMiddleware } from './middleware.mjs';
+import { resolveFold } from './fold3d.mjs';
 
 const DEFAULT_BRAND = {
   ink: '#0b0b0a', title: '#F5F5F4', sub: '#BBF7D0', fontPaths: [],
@@ -75,8 +76,12 @@ function resolveScenes(rawScenes, baseDir, dir, suffix) {
     // carry the paths. Each member resolves like a scene would — an explicit `image` against the config
     // file, a bare `id` against this device's captures dir — so a cluster can mix a capture from THIS
     // platform with one shot elsewhere (`../android/captures/today-light.png`), which is the point.
+    // A half-open scene (`fold`) is checked here, so a misspelt posture fails at load rather than mid-render.
+    // It is kept as written; the renderer resolves it again with the shot's name for its own errors.
+    resolveFold(s.fold, `Config error: scene[${i}]`);
     if (s.layout) {
       if (!Array.isArray(s.layout) || !s.layout.length) throw new Error(`Config error: scene[${i}].layout must be a non-empty array.`);
+      if (s.fold) throw new Error(`Config error: scene[${i}] has both layout and fold; fold is for a scene of one Duo capture.`);
       const layout = s.layout.map((m, j) => {
         if (!m.image && !m.id) throw new Error(`Config error: scene[${i}].layout[${j}] needs an "id" or an "image".`);
         return { ...m, image: m.image ? path.resolve(baseDir, m.image) : path.join(dir, `${m.id}${suffix}.png`) };

@@ -13,6 +13,7 @@ import { IMAGE_TARGETS } from './specs.mjs';
 import { inferFrame, duoAspect } from './frames.mjs';
 import { buildFeatureGraphic, buildCreativeGraphic, buildAppIcon } from './graphic.mjs';
 import { validateImage, validateCapture, pngInfo } from './validate.mjs';
+import { resolveFold } from './fold3d.mjs';
 
 /**
  * The capture a branded graphic is built around.
@@ -67,6 +68,31 @@ function warnDuoShape(shot, frame, scene) {
     `    ⚠︎ ${shot.target}: ${path.basename(scene.image)} is ${info.w}×${info.h}, not the shape of the Duo's ${display} ` +
     `display — cropped to fit. Capture on an iPhone Duo simulator (Xcode 27.1+) for a picture of the real screen.`,
   );
+}
+
+/**
+ * A scene's `fold` for this shot, checked against what will draw it, or null. Only the Duo's inner display
+ * folds, and a capture shot half open has the posture's shape: tall like a laptop, wide like a book. A
+ * mismatch is an ERROR naming the scene, because the picture it would make is of a posture the phone was
+ * not in.
+ */
+function foldFor(shot, frame, scene) {
+  const fold = resolveFold(scene.fold, `${shot.target}: scene "${scene.id}"`);
+  if (!fold) return null;
+  if (frame !== 'duo-inner') {
+    throw new Error(
+      `${shot.target}: scene "${scene.id}" is half open (fold: '${fold.posture}'), which only the Duo's inner display ` +
+      `frame draws (appstore-iphone-duo-inner and -landscape), not ${JSON.stringify(frame)}.`,
+    );
+  }
+  const info = pngInfo(scene.image);
+  if (info && (info.w > info.h) !== (fold.posture === 'book')) {
+    throw new Error(
+      `${shot.target}: scene "${scene.id}" says fold: '${fold.posture}', but ${path.basename(scene.image)} is ${info.w}×${info.h}. ` +
+      `Half open like a laptop the inner display is tall (2007×2853, --posture half-laptop); like a book it is wide (2853×2007, --posture half-book).`,
+    );
+  }
+  return fold;
 }
 
 /** A target's art safe area, scaled to the canvas actually being drawn (a `size:` override on search). */
@@ -218,6 +244,8 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir, for
         await validateCapture({ file: scene.image, force });
         if (style === 'framed' && (frame === 'duo' || frame === 'duo-inner')) warnDuoShape(shot, frame, scene);
       }
+      // Half open (`fold`), the framed Duo is drawn in perspective; every other scene keeps the flat frame.
+      const fold = style === 'framed' && !members ? foldFor(shot, frame, scene) : null;
       if (!n) fs.mkdirSync(dir, { recursive: true }); // only once we have something to put in it
       n++;
       const still = await renderStill(style, {
@@ -230,6 +258,7 @@ export async function buildDeviceScreenshots({ device, brand, theme, outDir, for
         theme: shotTheme(theme, shot),
         frame,
         members,
+        fold,
       });
       const file = path.join(dir, `${String(n).padStart(2, '0')}-${scene.id || n}.png`);
       fs.writeFileSync(file, rgbPngBuffer(still));

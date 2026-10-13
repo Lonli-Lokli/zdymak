@@ -26,7 +26,7 @@
     "docs:diagram": "node scripts/build-diagram.mjs",
     "check:docs": "node scripts/check-docs.mjs",
     "check:types": "tsc --noEmit -p tsconfig.json && node scripts/check-types.mjs",
-    "verify": "npm run check:docs && npm run check:types && npm run check:middleware && npm run check:cli && npm run check:fold && npm run check:assets && npm run check:release",
+    "verify": "npm run check:docs && npm run check:types && npm run check:middleware && npm run check:cli && npm run check:fold && npm run check:fold3d && npm run check:assets && npm run check:release",
     "prepublishOnly": "npm run verify",
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
@@ -35,7 +35,8 @@
     "check:cli": "node --test scripts/cli.test.mjs",
     "check:assets": "node --test scripts/store-assets.test.mjs",
     "check:release": "node --test scripts/release-from-tag.test.mjs",
-    "check:fold": "node --test scripts/fold.test.mjs"
+    "check:fold": "node --test scripts/fold.test.mjs",
+    "check:fold3d": "node --test scripts/fold3d.test.mjs"
   },
   "engines": {
     "node": ">=18"

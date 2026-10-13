@@ -40,7 +40,7 @@ get rejected or quietly under-perform.
 | **App Store** screenshots | `appstore-iphone-6.9` (+`-6.5`), `appstore-ipad-13` (+`-landscape`), `appstore-mac`, `appstore-watch` | framed (inferred) | Marketing styling is **expected** here: frames, headlines, backgrounds. iPad/Mac/Watch shots are *required* if the app ships there. Pick ONE Watch size and keep it across localizations. |
 | **Google Play** screenshots | `play-phone`, `play-tablet` (+`-portrait`), `play-wear`, `play-feature-graphic` | `bleed` + `caption: false` for the upload | Google forbids device frames, added text and backgrounds on store screenshots (hard requirement for Wear OS). Render a plain set for upload and a styled set for the website — `dir` keeps both. The feature graphic is **required** even without a video. |
 | An **in-app purchase** review screenshot | `appstore-iap-review` | interface only (automatic) | Its own slot with its own OLDER size table — the listing sizes are refused. Defaults to 640×920; never pass a listing target's `size:` here. `appstore-iap-promo` is the optional 1024×1024 companion. |
-| **iPhone Duo** screenshots | `appstore-iphone-duo-outer` / `-inner` (+`-landscape` of each) | framed by `duo` / `duo-inner` (inferred) | ONE "iPhone Duo" slot of ten takes all four sizes (1398×2034, 2007×2853, and both turned). Optional now, **required from April 2027** for apps built with the iOS 27.1 SDK. Shoot every posture on the Duo simulator (Xcode 27.1+) with `capture --posture`, and read **Folding phones** below before advising on the layout. The frame keeps the display's true shape and draws NO island, camera or crease; a simulator capture carries iOS's own camera cutout and status, which is the device's and stays. |
+| **iPhone Duo** screenshots | `appstore-iphone-duo-outer` / `-inner` (+`-landscape` of each) | framed by `duo` / `duo-inner` (inferred) | ONE "iPhone Duo" slot of ten takes all four sizes (1398×2034, 2007×2853, and both turned). Optional now, **required from April 2027** for apps built with the iOS 27.1 SDK. Shoot every posture on the Duo simulator (Xcode 27.1+) with `capture --posture`, and read **Folding phones** below before advising on the layout. The frame keeps the display's true shape and draws NO island or camera; a simulator capture carries iOS's own camera cutout and status, which is the device's and stays. A half-open capture can stand half open in 3D with the scene's `fold: 'laptop'` or `'book'` (see **Folding phones**). |
 | The App Store **product page header / search image** (iOS 27+) | `appstore-header` (3840×1646), `appstore-search` (3:2, 1920×1280–3840×2560), or `appstore-universal` (5244×2950, both) | branded graphic | Like the feature graphic: lockup, tagline, fan, ONE hero — laid out around Apple's art safe area (from its own template). Give it a **landscape** hero with `hero: '<scene id>'`; a phone in a 21:9 strip is the wrong picture. Optional assets. |
 | The App Store **header / search video** (iOS 27+) | a `reel` entry with `destination: 'appstore-header-video'` / `'appstore-search-video'` | live footage | `zdymak reel` only — `video`/`build` refuse these. 5–30 s, 30 or 60 fps, loops, muted (search: always). Landscape footage with `theme: { bleed: true }`. A 3840-wide encode is heavy: build it alone. |
 | Web-app screenshots | any target, captured with `--platform web` | as above | Playwright driver; states are URL paths. |
@@ -333,7 +333,14 @@ tells the story Vinto's did: closed (the main screen, the tutorial, home), close
 - **A still freezes motion.** Text that scrolls as a marquee in a narrow column reads as cut off, and a
   strip that fades at its edge reads as broken; leave such a screen out or change the layout.
 - **A half-open phone photographs flat**: the crease is not in the picture, only the app's split around
-  it.
+  it. So the half-open shots are where the frame does the work: give those scenes `fold: 'laptop'`
+  (the `half-laptop` capture, on `…-duo-inner`) or `fold: 'book'` (the `half-book` capture, on
+  `…-duo-inner-landscape`), and the framed shot stands the Duo half open in 3D around the capture.
+  The screen stays the capture's own pixels; zdymak draws only the body and the light where the screen
+  bends (`crease`, `0` for none). Defaults: laptop hinge 110 and camera 24 degrees up, book hinge 136
+  and 12 degrees up; `{ posture, hinge, elev, yaw, dist, crease }` moves any of them (README, `fold`).
+  Raise `elev` when the laptop's base, the half the player touches, should show more. Look at each shot:
+  the open-flat and upright shots stay flat, so the set reads as one phone in different hands.
 
 ## Store cut vs social-ad cut (per-scene `cut` / `effect`)
 `social-reel` supports **34 transitions** and **25 effects**, chosen per scene:
@@ -415,7 +422,11 @@ render yet can still carry a check. The same key exists in vydanne. Full example
 - Don't fabricate UI or overstate features in captions — App Review checks the preview matches the app.
 - Don't draw iPhone Duo hardware (an island, a camera dot, a crease) — Apple has published none of it,
   and a picture of a device that does not look like that is a claim the listing cannot back. The camera
-  cutout and status iOS itself draws into a simulator capture are the device's own; leave them.
+  cutout and status iOS itself draws into a simulator capture are the device's own; leave them. The
+  `fold` frame bends the same plain body at the hinge, which is the posture the capture was taken in,
+  not hardware; its fold shade is light on the screen, and `crease: 0` removes it.
+- Never draw onto the screen to make a half-open shot read better. `fold` is the frame around a real
+  capture: if the picture needs a different screen, capture it again.
 - An App Store creative asset must not show another platform: a landscape hero from an Android capture
   is fine only if it shows the app alone (no Android status or navigation bar) and is drawn frameless
   or in an Apple frame — never in the `android` body.

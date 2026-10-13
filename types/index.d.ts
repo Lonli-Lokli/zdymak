@@ -343,6 +343,27 @@ export interface LayoutMember {
   statusBar?: StatusBarMode;
 }
 
+/** How the iPhone Duo stands half open: the inner display bent like a laptop (tall) or a book (wide). */
+export type FoldPosture = 'laptop' | 'book' | 'half-laptop' | 'half-book';
+
+/**
+ * A half-open Duo drawn in 3D around a real capture. Every option has a default per posture, so
+ * `{ posture: 'laptop' }` and the bare string `'laptop'` are the same.
+ */
+export interface Fold {
+  posture: FoldPosture;
+  /** The angle between the two halves, in degrees, 60 to 180. Default laptop `110`, book `136`. */
+  hinge?: number;
+  /** How far above the device the camera stands, in degrees, 0 to 80. Default laptop `24`, book `12`. */
+  elev?: number;
+  /** The camera's turn around the device, in degrees, -60 to 60 (positive looks from the right). Default `0`. */
+  yaw?: number;
+  /** The camera's distance in multiples of the capture's short side, 1.5 to 20. Default `3.4`. */
+  dist?: number;
+  /** How dark the soft shade along the fold is, 0 to 1; `0` leaves the screen exactly the capture. Default `0.16`. */
+  crease?: number;
+}
+
 export interface Scene {
   /** Capture id — resolves to `<capturesDir>/<id><suffix>.png`. Required unless `image` is given. */
   id?: string;
@@ -356,6 +377,14 @@ export interface Scene {
    * Replaces `id`/`image` on the scene that carries it. Screenshots only.
    */
   layout?: LayoutMember[];
+  /**
+   * Draw this scene's Duo half open, in 3D, instead of the flat inner-display frame: `'laptop'` for a
+   * tall capture shot with `--posture half-laptop`, `'book'` for a wide one shot with `--posture
+   * half-book`, or a `Fold` to move the hinge or the camera. Only the framed style on the inner-display
+   * targets (`appstore-iphone-duo-inner`, `-landscape`) draws it; a plain or bleed shot of the scene shows
+   * the capture as always, and a reel or video stays flat. The screen is the capture's own pixels.
+   */
+  fold?: 'laptop' | 'book' | 'half-laptop' | 'half-book' | Fold;
   /** Headline. */
   title?: string;
   /** Subhead. */
@@ -725,6 +754,8 @@ export interface ResolvedScene {
   title: string;
   sub: string;
   move?: SceneMove;
+  /** As written in the config; checked at load. */
+  fold?: Scene['fold'];
 }
 
 export interface ResolvedDevice {
@@ -919,6 +950,8 @@ export declare function renderStill(
     brand: Brand;
     theme?: Theme;
     frame?: FrameId | null;
+    /** The framed style with `frame: 'duo-inner'` only: draw the Duo half open, as `Scene.fold`. */
+    fold?: Scene['fold'] | null;
   },
 ): Promise<unknown>;
 

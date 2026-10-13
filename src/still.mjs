@@ -5,7 +5,8 @@
  *   premium — the app screen floats on a brand matte (glow + vignette) with a bottom title pill.
  *   bleed   — the app screen fills the frame, with an optional lower-third caption. Best for Watch (raw).
  *
- *   framed  — the capture inside a device body (iPhone/iPad/Android/Watch), caption on top.
+ *   framed  — the capture inside a device body (iPhone/iPad/Android/Watch), caption on top. A scene with
+ *             `fold` on the Duo's inner display is drawn half open, in perspective (fold3d.mjs).
  */
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { premiumStill } from './premium.mjs';
@@ -65,13 +66,15 @@ function bleedStill({ W, H, img, caption, brand, theme }) {
  * density and gets scaled down with everything else — drawing it afterwards would size it to the output
  * frame and look pasted on.
  */
-export async function renderStill(style, { W, H, imgPath, caption, brand, theme, frame, members }) {
+export async function renderStill(style, { W, H, imgPath, caption, brand, theme, frame, members, fold }) {
   // A LAYOUT scene brings its own already-loaded members (several captures, each framed) instead of one
   // capture path — so it never reaches loadCapture below, and its style is decided by the scene, not the
   // target. See layout.mjs for why the placements are fractional.
   if (members) return layoutStill({ W, H, members, caption, brand, theme });
   const img = await loadCapture(imgPath, theme, frame);
-  if (style === 'framed') return premiumStill({ W, H, img, caption, brand, theme, frame: frame || 'phone' });
+  // `fold` is a frame's business, so only the framed style reads it: a plain or premium shot of a half-open
+  // scene shows the capture as it is, which is what a plain upload is for.
+  if (style === 'framed') return premiumStill({ W, H, img, caption, brand, theme, frame: frame || 'phone', fold });
   if (style === 'premium') return premiumStill({ W, H, img, caption, brand, theme });
   return bleedStill({ W, H, img, caption, brand, theme });
 }
