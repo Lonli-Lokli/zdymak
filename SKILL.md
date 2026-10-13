@@ -1,6 +1,6 @@
 ---
 name: zdymak
-description: Capture app screenshots AND generate spec-compliant App Store / Google Play preview videos and store screenshots. Use when a user wants an "app preview", "store preview video", "App Store trailer", "Play promo video", store screenshots, a Play feature graphic, localized store assets — or needs the screenshots THEMSELVES taken: zdymak drives iOS simulators (launch-arg handle, can build+install), Android devices over adb (intent extra, SystemUI demo mode for a clean status bar) and any web app via Playwright, then frames/captions/encodes to each store's exact spec.
+description: Capture app screenshots AND generate spec-compliant App Store / Google Play preview videos and store screenshots. Use when a user wants an "app preview", "store preview video", "App Store trailer", "Play promo video", store screenshots, a Play feature graphic, localized store assets — or needs the screenshots THEMSELVES taken: zdymak drives iOS simulators (launch-arg handle, can build+install), Android devices over adb (intent extra, SystemUI demo mode for a clean status bar) and any web app via Playwright, then frames/captions/encodes to each store's exact spec. Also for folding phones: it folds and turns the iPhone Duo simulator into all six postures (closed, turned, open, upright, half open like a book or a laptop) and knows what iOS reserves in each and where an app's controls belong, so use it to advise on a Duo layout as well as to shoot its store set.
 ---
 
 # zdymak
@@ -40,7 +40,7 @@ get rejected or quietly under-perform.
 | **App Store** screenshots | `appstore-iphone-6.9` (+`-6.5`), `appstore-ipad-13` (+`-landscape`), `appstore-mac`, `appstore-watch` | framed (inferred) | Marketing styling is **expected** here: frames, headlines, backgrounds. iPad/Mac/Watch shots are *required* if the app ships there. Pick ONE Watch size and keep it across localizations. |
 | **Google Play** screenshots | `play-phone`, `play-tablet` (+`-portrait`), `play-wear`, `play-feature-graphic` | `bleed` + `caption: false` for the upload | Google forbids device frames, added text and backgrounds on store screenshots (hard requirement for Wear OS). Render a plain set for upload and a styled set for the website — `dir` keeps both. The feature graphic is **required** even without a video. |
 | An **in-app purchase** review screenshot | `appstore-iap-review` | interface only (automatic) | Its own slot with its own OLDER size table — the listing sizes are refused. Defaults to 640×920; never pass a listing target's `size:` here. `appstore-iap-promo` is the optional 1024×1024 companion. |
-| **iPhone Duo** screenshots | `appstore-iphone-duo-outer` / `-inner` (+`-landscape` of each) | framed by `duo` / `duo-inner` (inferred) | ONE "iPhone Duo" slot takes all four sizes (1398×2034, 2007×2853, and both turned). Optional now, **required from April 2027** for apps built with the iOS 27.1 SDK. Capture on the Duo simulator (Xcode 27.1+): the frame keeps the display's true shape and crops any other capture, with a warning. The frame has NO Dynamic Island, camera or crease — Apple publishes none; never add them. |
+| **iPhone Duo** screenshots | `appstore-iphone-duo-outer` / `-inner` (+`-landscape` of each) | framed by `duo` / `duo-inner` (inferred) | ONE "iPhone Duo" slot of ten takes all four sizes (1398×2034, 2007×2853, and both turned). Optional now, **required from April 2027** for apps built with the iOS 27.1 SDK. Shoot every posture on the Duo simulator (Xcode 27.1+) with `capture --posture`, and read **Folding phones** below before advising on the layout. The frame keeps the display's true shape and draws NO island, camera or crease; a simulator capture carries iOS's own camera cutout and status, which is the device's and stays. |
 | The App Store **product page header / search image** (iOS 27+) | `appstore-header` (3840×1646), `appstore-search` (3:2, 1920×1280–3840×2560), or `appstore-universal` (5244×2950, both) | branded graphic | Like the feature graphic: lockup, tagline, fan, ONE hero — laid out around Apple's art safe area (from its own template). Give it a **landscape** hero with `hero: '<scene id>'`; a phone in a 21:9 strip is the wrong picture. Optional assets. |
 | The App Store **header / search video** (iOS 27+) | a `reel` entry with `destination: 'appstore-header-video'` / `'appstore-search-video'` | live footage | `zdymak reel` only — `video`/`build` refuse these. 5–30 s, 30 or 60 fps, loops, muted (search: always). Landscape footage with `theme: { bleed: true }`. A 3840-wide encode is heavy: build it alone. |
 | Web-app screenshots | any target, captured with `--platform web` | as above | Playwright driver; states are URL paths. |
@@ -51,13 +51,15 @@ against Apple's *Screenshot / App preview specifications* and Google's *Add prev
 **Status bars.** An Android Compose capture reserves the status-bar inset but can't contain the system UI,
 so the shot has an empty band. `statusBar: 'auto'` (default) detects that band and paints a clean bar
 (9:41 · full signal/wifi/battery) — exactly the state Google asks for. Square (watch) captures are skipped.
-iOS XCUITest captures already include a real status bar, so nothing is drawn there. The closed iPhone Duo
-has a status COLUMN down the right edge instead of a bar: `statusBar: 'column'` draws it (opt-in per shot).
+iOS XCUITest and simulator captures already include a real status bar, so nothing is drawn there (`statusBar: false`).
+The closed iPhone Duo has a status COLUMN down the right edge instead of a bar: on a HEADLESS capture
+`statusBar: 'column'` draws it (opt-in per shot).
 
 ## It can take the screenshots too (don't assume the user must supply them)
 `zdymak capture --platform ios|android|web` DRIVES the app through each screen and writes a store-ready
 PNG per screen — it is not only a compositor. iOS: boots/creates a sim, optionally `--build` +installs,
-relaunches per state via a launch-arg handle, pins the status bar to 9:41. Android: `am start --es <arg>
+relaunches per state via a launch-arg handle, pins the status bar to 9:41, and with `--posture` folds and turns
+an iPhone Duo simulator first (see **Folding phones**). Android: `am start --es <arg>
 <state>` over adb with SystemUI demo mode on for a clean bar. Web: Playwright navigates URL paths itself,
 no handle needed. Single-shot `--name <screen>` and `--record` also exist. If the user has no screenshots
 yet, offer this before asking them to produce some. macOS capture is deliberately out of scope (TCC).
@@ -264,16 +266,74 @@ The first header made from defaults was rejected by its owner, for reasons that 
   'auto' }` on those shots: the frame's Dynamic Island then sits in the band and zdymak draws a clean
   9:41 there. Without it the island lands on the app's top-right controls.
 - **The closed iPhone Duo has no top status bar.** iOS 27.1 stands the status bar and camera in a column
-  down the RIGHT edge: 84 of 466 points (measured on the Duo simulator), the app gets 382. Reserve that
-  column as a flat band of the app's edge colour, nothing at the top, and set `theme: { statusBar:
-  'column' }` on that shot: zdymak draws the clock and the round Wi-Fi/battery/signal glyph at the top of
-  the column, only if the band is flat and wide enough there, and never the camera. Not 'auto' ('auto'
-  would read the app's flat top rows as a band). Portrait only; a landscape capture is left alone. The
-  open screen's bars cannot be measured by script; check them by hand.
-- **One Duo set holds ten**: closed and open together. Six closed plus four open (a device-level
-  `scenes` list on the open one) fits; name both folders in vydanne's `bridge.apple.iphoneduo.dirs`.
+  down the RIGHT edge: 84 of 466 points, the app gets 382. Shoot it on the simulator (`--posture closed`)
+  and the column is iOS's own (`statusBar: false`). Only a HEADLESS capture needs `theme: { statusBar:
+  'column' }`: reserve the column as a flat band of the app's edge colour and zdymak draws the clock and
+  status glyph at its top, never the camera. Not 'auto' (it would read the app's flat top rows as a band).
+- **One Duo set holds ten** across all six postures and four targets: see **Folding phones** below.
 - **Pin what the capture shows**: the theme (an app that follows the system renders dark on a Mac in
   dark mode) and the version string on any screen that prints one, to the release the shots go out with.
+
+## Folding phones: the iPhone Duo's postures, what goes where, and how to shoot them
+
+Learned shipping Vinto's Duo layout and its store set (2026-10-13, iOS 27.1 simulator). Use it to advise
+on a folding layout as much as to capture one: the store slot shows every posture, so each one has to
+look designed.
+
+**Six postures, each its own layout.** Window sizes in points; what iOS reserves is what the app must
+lay itself out around (the README's `--posture` section has the exact rectangles):
+
+| Posture (`--posture`) | Window | iOS reserves | Store target |
+|---|---|---|---|
+| `closed` | 466×678 | a **status column** down the right edge, 84 pt: the clock and status block at its top (84×170), the camera inside it | `…-duo-outer` |
+| `closed-turned` / `-right` | 678×466 | the column follows the camera: turned left it runs down the LEFT with the block at the top; turned right, down the right with the block at the FOOT | `…-duo-outer-landscape` |
+| `open` (held like a book) | 951×669 | only a corner at the top right (84×120) | `…-duo-inner-landscape` |
+| `open-upright` | 669×951 | a strip across the top, its clock corner at the right (134×82) | `…-duo-inner` |
+| `half-book` | 951×669 | the fold: a 40 pt **division** down the middle | `…-duo-inner-landscape` |
+| `half-laptop` | 669×951 | the fold: a 40 pt division across the middle | `…-duo-inner` |
+
+**What goes where.** These are the rules Vinto's owner set after Apple's own Duo presentation; offer
+them as the starting point for any app, and ask before departing from them:
+- **Closed, the status column is the app's controls column**, not dead space beside the clock. Top
+  buttons go to the top of it, under the clock, in the order they had: Leave (exit) top-most, then
+  help, settings, a status counter, a mode switch. Its **foot is for what is used most** — easiest for
+  the thumb on a folded phone: the turn's choices as pill buttons (a drawn icon and one word; the word
+  must be inside the button's spoken name, WCAG 2.5.3), the most frequent lowest. Pickers and any set
+  that does not fit stay whole in the main panel; nothing goes under the camera.
+- **Closed and turned**: the same column on the camera's side. iPhones normally stay upright; a
+  foldable model should turn (the app allows landscape by model or once a hinge is reported).
+- **Open flat**: the content takes the full height and the secondary panel becomes one narrow stack
+  beside it — card, then its description, then history — with no empty band.
+- **Open upright**: the header can sit in iOS's top strip, left of the clock corner.
+- **Half open like a book**: the content on one page, the controls on the other; **nothing on the
+  crease**.
+- **Half open like a laptop**: what you look at stands on the upper half; what you touch (your own
+  hand, the piles, the choices) lies flat on the lower half, like a keyboard.
+- **Folding and unfolding animate**, the way Apple's apps do: the layout reshapes and its pieces glide
+  from where they were (clip a board's background, not the moving pieces, or they vanish mid-glide).
+
+**The app's side, for an iOS 27.1 SDK build.** `GeometryProxy.reservedRegions(kind: .occlusion)` (the
+column, corner, camera) and `(kind: .division)` (the fold) in SwiftUI, `UIView.reservedRegions(kind:)` in
+UIKit, and `onHingeChange` (`DeviceHingeContext`: status and angle) for the hinge. A Compose
+Multiplatform app passes them from Swift into shared code (Vinto: `ContentView.swift` →
+`ReservedBridge.kt`). Turning needs the landscape orientations in the iPhone Info.plist AND
+`supportedInterfaceOrientations` allowing them on a phone that folds.
+
+**Shooting the set** (`--posture`, README). Ten pictures in one slot across four targets; a set that
+tells the story Vinto's did: closed (the main screen, the tutorial, home), closed and turned, open flat
+(the main screen and two features), half open like a book, open upright, half open like a laptop.
+- Capture each posture into its own folder with `--posture`; give each a `devices` entry with scenes
+  that name their capture by `image`, ids WITHOUT numbers (zdymak numbers each target's files itself),
+  and `theme: { statusBar: false }` — iOS's own 9:41 status is in the capture.
+- Merge the four folders with vydanne's `bridge.apple.iphoneduo.dirs`, listed in the order the store
+  should show them.
+- **Look at every shot before building.** A scene the app stages by playing (a game's later moments)
+  can take minutes on a Debug simulator build: Vinto's plan scene was still on its splash at 60 s and
+  ready at 150 s. A splash is a valid PNG, a fraction of the real screen's size, and passes every check.
+- **A still freezes motion.** Text that scrolls as a marquee in a narrow column reads as cut off, and a
+  strip that fades at its edge reads as broken; leave such a screen out or change the layout.
+- **A half-open phone photographs flat**: the crease is not in the picture, only the app's split around
+  it.
 
 ## Store cut vs social-ad cut (per-scene `cut` / `effect`)
 `social-reel` supports **34 transitions** and **25 effects**, chosen per scene:
@@ -353,8 +413,9 @@ render yet can still carry a check. The same key exists in vydanne. Full example
   listing — an Apple device cluster inside a Play listing advertises a competitor.
 - Keep any music **commercially licensed**; the engine is silent by default (previews autoplay muted).
 - Don't fabricate UI or overstate features in captions — App Review checks the preview matches the app.
-- Don't invent iPhone Duo hardware (an island, a camera dot, a crease) — Apple has published none of it,
-  and a picture of a device that does not look like that is a claim the listing cannot back.
+- Don't draw iPhone Duo hardware (an island, a camera dot, a crease) — Apple has published none of it,
+  and a picture of a device that does not look like that is a claim the listing cannot back. The camera
+  cutout and status iOS itself draws into a simulator capture are the device's own; leave them.
 - An App Store creative asset must not show another platform: a landscape hero from an Android capture
   is fine only if it shows the app alone (no Android status or navigation bar) and is drawn frameless
   or in an Apple frame — never in the `android` body.

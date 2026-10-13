@@ -241,6 +241,65 @@ On **Android** there is no flag, because `--size` already does it better: relayo
 gives the app a real upright tablet (800×1280dp at density 320), while rotating a 16:9 landscape
 figure would hand it 405×720dp — a large phone, which is the layout the set exists to disprove.
 
+### `--posture` — every way an iPhone Duo is held (iOS)
+
+A folding phone is six layouts, not one screen held two ways, and its store slot takes all of them.
+`--posture` folds and turns the iPhone Duo simulator (Xcode 27.1 or later) and photographs the screen
+that is on:
+
+```sh
+zdymak capture --platform ios --device 'iPhone Duo' --bundle com.x.app --arg -screen --states home,table \
+  --posture half-book --out ./shots/duo-half-book
+```
+
+| `--posture` | Hinge | Held | Screen on | Capture | Target |
+|---|---|---|---|---|---|
+| `closed` | 0° | upright | outer | 1398×2034 | `appstore-iphone-duo-outer` |
+| `closed-turned` · `closed-turned-right` | 0° | on its side | outer | 2034×1398 | `appstore-iphone-duo-outer-landscape` |
+| `open` | 180° | upright, open like a book | inner | 2853×2007 | `appstore-iphone-duo-inner-landscape` |
+| `open-upright` | 180° | on its side | inner | 2007×2853 | `appstore-iphone-duo-inner` |
+| `half-book` | 110° | like a book, fold upright | inner | 2853×2007 | `appstore-iphone-duo-inner-landscape` |
+| `half-laptop` | 110° | like a laptop, fold across | inner | 2007×2853 | `appstore-iphone-duo-inner` |
+
+`--hinge <deg>` changes a half-open angle (35–130). simctl has no hinge command and `devicectl device
+orientation set` reports success and changes nothing, so this posts the events Xcode's Device Hub sends,
+from inside the simulator, with the helper vendored from [duoctl](https://github.com/skarol/duoctl) (MIT;
+compiled on first use and cached under `~/Library/Caches/zdymak`). What it does, and why, measured on
+iOS 27.1:
+
+- **A half-open posture is reached by opening flat and folding back**, as a hand does. Opening, the inner
+  screen comes on between 120° and 135°; closing, it stays on down to about 30°. Straight from closed to
+  110° would leave the outer screen on.
+- **It photographs the screen that is on** (`simctl io screenshot --display`, the active display read
+  from devicectl). Without `--display` simctl takes the outer screen even while it is off — a black
+  image — and with the display of a screen that is off it waits forever, so the shot has a timeout.
+- **The shot must have the posture's shape.** An iPhone app turns only when its Info.plist lists the
+  landscape orientations *and* it allows them on a phone that folds; one that does not stays upright,
+  and that is an error rather than a portrait set filed as landscape.
+- **iOS draws its own status** — the 9:41 column or corner is in the capture — so frame these shots with
+  `theme: { statusBar: false }`.
+- **A half-open phone photographs flat.** The capture is the screen as its pixels are; the fold shows
+  only in how the app splits its layout around it.
+
+**What iOS reserves in each posture** (window points, iOS 27.1 simulator), which is what an app has to
+lay itself out around. iOS 27.1 reports them as `GeometryProxy.reservedRegions(kind: .occlusion)` and
+`(kind: .division)` in SwiftUI and `UIView.reservedRegions(kind:)` in UIKit; the hinge comes through
+`onHingeChange` (`DeviceHingeContext`).
+
+| Posture | Window | Reserved |
+|---|---|---|
+| closed | 466×678 | a status column down the right edge: the block (382, 0, 84×170), camera at (399.7, 29.3, 37×37) |
+| closed, turned left | 678×466 | the column on the left: block (0, 0, 84×82); insets left 84, top 17.33, bottom 34 |
+| closed, turned right | 678×466 | the column on the right, its status block at the foot (594, 384, 84×82) |
+| open | 951×669 | a corner block at the top right (867, 0, 84×120) |
+| open upright | 669×951 | a strip across the top, its corner (535, 0, 134×82) |
+| half open like a laptop | 669×951 | the fold as a division (0, 455.5, 669×40) |
+| half open like a book | 951×669 | the fold as a division (455.5, 0, 40×669) |
+
+**The set.** All four Duo targets share ONE store slot of ten. zdymak numbers each target's files on
+its own (`01-….png`), so give the scenes ids without numbers and let vydanne's bridge
+(`bridge.apple.iphoneduo.dirs`) merge the four folders in the order it lists them.
+
 ### `--record --states` — live footage, one clip per screen
 
 Add `--record` to the driven form and each state is recorded as a **clip** instead of snapped as a still.
@@ -397,10 +456,11 @@ Sources: Apple [Screenshot specifications](https://developer.apple.com/help/app-
 > opened, an inner display about twice as wide (≈669×951 pt @3x), whose natural open orientation is
 > landscape with the fold down the middle. Apple lists all four sizes under ONE "iPhone Duo" display
 > type (the API name is reported as `APP_IPHONE_DUO`; Apple has not documented it), so the four targets
-> share one slot of ten — and like the iPad's two orientations they all write `01-….png`, so rename one
-> set on the way to the upload folder. Capture on the iPhone Duo simulator (Xcode 27.1 or later).
-> Closed, iOS 27.1 has no status bar across the top: it stands one in a column down the right edge, which
-> `theme: { statusBar: 'column' }` draws ([The closed iPhone Duo: a status column, not a bar](#the-closed-iphone-duo-a-status-column-not-a-bar)).
+> share one slot of ten, merged by vydanne's bridge. Capture every posture on the iPhone Duo simulator
+> (Xcode 27.1 or later) with [`--posture`](#--posture--every-way-an-iphone-duo-is-held-ios).
+> Closed, iOS 27.1 has no status bar across the top: it stands one in a column down the right edge. A
+> simulator capture carries it (`statusBar: false`); on a headless capture `theme: { statusBar: 'column' }`
+> draws it ([The closed iPhone Duo: a status column, not a bar](#the-closed-iphone-duo-a-status-column-not-a-bar)).
 
 ### App Store — creative assets (iOS 27 / iPadOS 27)
 

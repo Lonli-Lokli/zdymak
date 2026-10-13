@@ -387,6 +387,7 @@ Usage:
   zdymak capture  --platform ios --bundle <id> --arg <handle> --states <a,b,c> [--suffix -light]
                   [--build --project <.xcodeproj> --scheme <name> [--derived-data <dir>]] [--device <sim>] [--out <dir>] [--clean] [--keep]
                   [--orientation portrait|landscape-left|landscape-right]
+                  [--posture closed|closed-turned|closed-turned-right|open|open-upright|half-book|half-laptop [--hinge <deg>]]
                   [--language <tag> [--applelocale <id>]]
                   # full workflow: start the app, drive each screen by a launch handle, snap store-ready PNGs
                   # --language captures the app IN that language (ios: -AppleLanguages launch args, so no
@@ -398,6 +399,10 @@ Usage:
                   # command) and stands the framebuffer back up, since simctl's ignores rotation. It
                   # fails loudly if the device does not actually turn; the usual cause is the app's
                   # Info.plist, and on iPad the key read is UISupportedInterfaceOrientations~ipad.
+                  # --posture folds and turns an iPhone Duo simulator (Xcode 27.1+) with the events Device Hub sends
+                  # (vendored duoctl helper, compiled on first use) and photographs the screen that is on. A
+                  # half-open posture is reached by opening flat and folding back (--hinge, default 110). The shot
+                  # must have the posture's shape, so an app that did not turn is an error, not a portrait set.
   zdymak capture  --platform android --record --component <pkg/act> --arg <extra> --states <a,b,c>
                   [--size 1080x1920] [--density 400] [--duration 60] [--trim <s>] [--hold 1.5]
                   [--fps 30] [--bitrate 20000000] [--keep-raw] [--out <dir>]

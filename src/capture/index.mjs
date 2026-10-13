@@ -22,6 +22,7 @@ import path from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { rgbPngBuffer } from '../png.mjs';
 import { captureWeb } from './web.mjs';
+import { activeDisplay, enterPosture, leavePosture, postureOf, shootPosture } from './fold.mjs';
 
 /** Flatten over black and rewrite as a NO-ALPHA RGB PNG (App Store & Play reject alpha on screenshots). */
 async function stripAlpha(file) {
@@ -372,6 +373,10 @@ async function captureIos(flags) {
     if (!ORIENTATION_MENU[orientation]) {
       throw new Error(`--orientation must be one of: ${Object.keys(ORIENTATION_MENU).join(', ')} (got "${flags.orientation}").`);
     }
+    // A folding phone's posture (`fold.mjs`) is set with the hinge and orientation events Device Hub sends, and it
+    // carries its own orientation: the Simulator menu turns the window, not the phone, so the two never mix.
+    const posture = flags.posture !== undefined ? postureOf(flags.posture, flags.hinge) : null;
+    if (posture && flags.orientation) throw new Error('--posture sets the orientation itself; drop --orientation.');
     try {
     if (flags.build !== undefined) {
       if (!flags.project || !flags.scheme) throw new Error('--build needs --project <.xcodeproj> and --scheme <name>.');
@@ -399,6 +404,10 @@ async function captureIos(flags) {
       spawnSync('xcrun', ['simctl', 'status_bar', udid, 'override', '--time', '9:41',
         '--batteryState', 'discharging', '--batteryLevel', '100', '--cellularBars', '4', '--wifiBars', '3'], { stdio: 'ignore' });
     pinStatusBar();
+    if (posture) {
+      const on = enterPosture(udid, posture);
+      console.log(`▸ posture ${posture.name}: hinge ${posture.hinge}°, ${posture.orientation}, the ${posture.screen} screen (display ${on})`);
+    }
 
     // --record turns each screen into a short CLIP (real motion) instead of a still. The app must move
     // during the window: pass the reel handle (default `-marketingReel`) so the harness auto-animates
@@ -422,7 +431,7 @@ async function captureIos(flags) {
       // a portrait app launches into it. The expensive PROVEN turn runs once; later states only
       // re-assert, because a relaunch inherits the device's orientation and re-proving it every time
       // would flip the screen back and forth for no information.
-      if (orientation !== 'portrait') {
+      if (orientation !== 'portrait' && !posture) {
         if (i === 0) await rotateSim(udid, orientation, outDir);
         else { await setSimOrientation(orientation); await settleFrame(udid, outDir); }
       }
@@ -431,7 +440,9 @@ async function captureIos(flags) {
       pinStatusBar();
       if (recording) {
         const out = path.join(outDir, `${st}${suffix}.mov`);
-        const rec = spawn('xcrun', ['simctl', 'io', udid, 'recordVideo', '--codec=h264', '--force', out], { stdio: 'ignore' });
+        // A folding phone records the screen that is on; simctl records one display at a time.
+        const display = posture ? [`--display=${activeDisplay(udid)}`] : [];
+        const rec = spawn('xcrun', ['simctl', 'io', udid, 'recordVideo', '--codec=h264', ...display, '--force', out], { stdio: 'ignore' });
         await sleep(dur * 1000);
         rec.kill('SIGINT'); // simctl finalizes the mp4/mov on SIGINT
         await new Promise((res) => rec.on('close', res));
@@ -439,8 +450,11 @@ async function captureIos(flags) {
       } else {
         await sleep(500); // let the pinned bar paint before the screenshot
         const out = path.join(outDir, `${st}${suffix}.png`);
-        sh('xcrun', ['simctl', 'io', udid, 'screenshot', out]);
-        await uprightCapture(out, orientation);
+        if (posture) shootPosture(udid, posture, out);
+        else {
+          sh('xcrun', ['simctl', 'io', udid, 'screenshot', out]);
+          await uprightCapture(out, orientation);
+        }
         await stripAlpha(out);
         console.log(`   ✓ ${st}${suffix}.png`);
       }
@@ -451,6 +465,7 @@ async function captureIos(flags) {
       // nor one lying on its side. A simulator the user already had running is handed back the way
       // they left it, and orientation is part of "the way they left it".
       if (orientation !== 'portrait') { try { await setSimOrientation('portrait'); } catch { /* teardown */ } }
+      if (posture) leavePosture(udid);
       teardownIosSim(sim, flags);
     }
     return; // the workflow is DONE — falling through would try to snap a sim that was just torn down
