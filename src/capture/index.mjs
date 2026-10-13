@@ -22,7 +22,7 @@ import path from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { rgbPngBuffer } from '../png.mjs';
 import { captureWeb } from './web.mjs';
-import { activeDisplay, enterPosture, leavePosture, postureOf, shootPosture } from './fold.mjs';
+import { displays, enterPosture, leavePosture, postureDisplay, postureOf, shootPosture } from './fold.mjs';
 
 /** Flatten over black and rewrite as a NO-ALPHA RGB PNG (App Store & Play reject alpha on screenshots). */
 async function stripAlpha(file) {
@@ -96,10 +96,14 @@ function androidLanguage(flags) {
 
 /* ── Rotating an iOS simulator ─────────────────────────────────────────────────────────────────
  *
- * There is no `simctl` command for this. Orientation belongs to the Simulator APP, not to the device
- * service, so the only lever Apple exposes is the Device ▸ Orientation menu — which is why this
- * drives a GUI menu, an approach that would be indefensible in a capture pipeline if any other
- * existed.
+ * There is no `simctl` command for this. Up to Xcode 26 orientation belonged to the Simulator APP, so
+ * the only lever was its Device ▸ Orientation menu, driven here through System Events. Xcode 27
+ * replaced that app with Device Hub, which has no such menu, and there `devicectl device orientation set`
+ * turns the device (an iPad: measured 2026-10-13, and its screenshot then comes out landscape and
+ * upright). Which one is decided by whether the Xcode in use still ships Simulator.app; before that,
+ * `open -a Simulator` opened nothing on Xcode 27 and every turned iPad failed as "the Simulator never
+ * opened a device window". (Device Hub's own orientation event, which turns the iPhone Duo in
+ * fold.mjs, leaves an iPad as it was.)
  *
  * Rotating is only half of it. `simctl io screenshot` returns the RAW FRAMEBUFFER, which ignores
  * rotation entirely: a turned iPad screenshots as a portrait-shaped PNG with the whole interface
@@ -114,6 +118,22 @@ const ORIENTATION_MENU = {
   'landscape-left': 'Landscape Left',
   'landscape-right': 'Landscape Right',
 };
+
+/** The same orientations as `devicectl device orientation set` names them. */
+const ORIENTATION_DEVICECTL = {
+  portrait: 'portrait',
+  'portrait-upside-down': 'portraitUpsideDown',
+  landscape: 'landscapeLeft',
+  'landscape-left': 'landscapeLeft',
+  'landscape-right': 'landscapeRight',
+};
+
+/** Whether the Xcode in use still has the Simulator app (Xcode 26 and before) rather than Device Hub. */
+function hasSimulatorApp() {
+  const dev = process.env.DEVELOPER_DIR
+    || spawnSync('xcode-select', ['-p'], { encoding: 'utf8' }).stdout?.trim() || '';
+  return fs.existsSync(path.join(dev, 'Applications', 'Simulator.app'));
+}
 
 /**
  * Wait for the Simulator to have a DEVICE WINDOW, not merely to be running.
@@ -162,10 +182,16 @@ async function settleFrame(udid, outDir, maxMs = 9000) {
   }
 }
 
-async function setSimOrientation(orientation) {
+async function setSimOrientation(udid, orientation) {
   const item = ORIENTATION_MENU[orientation];
   if (!item) {
     throw new Error(`--orientation must be one of: ${Object.keys(ORIENTATION_MENU).join(', ')} (got "${orientation}").`);
+  }
+  if (!hasSimulatorApp()) {
+    const r = spawnSync('xcrun', ['devicectl', 'device', 'orientation', 'set', '--device', udid, ORIENTATION_DEVICECTL[orientation]],
+      { encoding: 'utf8' });
+    if (r.status !== 0) throw new Error(`devicectl could not turn the simulator to ${orientation}: ${(r.stderr || r.stdout || '').trim()}`);
+    return;
   }
   await awaitSimulatorWindow();
   const r = spawnSync('osascript', [
@@ -194,14 +220,14 @@ async function setSimOrientation(orientation) {
  * of a real screen never match byte for byte.
  */
 async function rotateSim(udid, orientation, outDir) {
-  if (orientation === 'portrait') { await setSimOrientation('portrait'); await settleFrame(udid, outDir); return; }
+  if (orientation === 'portrait') { await setSimOrientation(udid, 'portrait'); await settleFrame(udid, outDir); return; }
   const probe = path.join(outDir, '.orientation-probe.png');
   try {
-    await setSimOrientation('portrait');
+    await setSimOrientation(udid, 'portrait');
     await settleFrame(udid, outDir);
     sh('xcrun', ['simctl', 'io', udid, 'screenshot', probe]);
     const before = fs.readFileSync(probe);
-    await setSimOrientation(orientation);
+    await setSimOrientation(udid, orientation);
     await settleFrame(udid, outDir);
     sh('xcrun', ['simctl', 'io', udid, 'screenshot', probe]);
     if (before.equals(fs.readFileSync(probe))) {
@@ -433,7 +459,7 @@ async function captureIos(flags) {
       // would flip the screen back and forth for no information.
       if (orientation !== 'portrait' && !posture) {
         if (i === 0) await rotateSim(udid, orientation, outDir);
-        else { await setSimOrientation(orientation); await settleFrame(udid, outDir); }
+        else { await setSimOrientation(udid, orientation); await settleFrame(udid, outDir); }
       }
       // Re-assert RIGHT BEFORE capture: a launch + the settle lets the sim re-sync the battery to the host
       // (a charging bolt creeps back on later screens). Re-pinning per screen keeps every shot clean.
@@ -441,7 +467,7 @@ async function captureIos(flags) {
       if (recording) {
         const out = path.join(outDir, `${st}${suffix}.mov`);
         // A folding phone records the screen that is on; simctl records one display at a time.
-        const display = posture ? [`--display=${activeDisplay(udid)}`] : [];
+        const display = posture ? [`--display=${postureDisplay(displays(udid), posture)}`] : [];
         const rec = spawn('xcrun', ['simctl', 'io', udid, 'recordVideo', '--codec=h264', ...display, '--force', out], { stdio: 'ignore' });
         await sleep(dur * 1000);
         rec.kill('SIGINT'); // simctl finalizes the mp4/mov on SIGINT
@@ -464,7 +490,7 @@ async function captureIos(flags) {
       // Always: a thrown build/launch error must not strand a booted sim with a faked status bar —
       // nor one lying on its side. A simulator the user already had running is handed back the way
       // they left it, and orientation is part of "the way they left it".
-      if (orientation !== 'portrait') { try { await setSimOrientation('portrait'); } catch { /* teardown */ } }
+      if (orientation !== 'portrait') { try { await setSimOrientation(udid, 'portrait'); } catch { /* teardown */ } }
       if (posture) leavePosture(udid);
       teardownIosSim(sim, flags);
     }

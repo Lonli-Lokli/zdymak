@@ -81,31 +81,57 @@ export function helperPath() {
   return bin;
 }
 
-/** The simulator's displays, from devicectl: `[{ id, active }]`. A phone that folds has two or more. */
+/**
+ * The simulator's displays, from devicectl: `[{ id, active, primary }]`. A phone that folds has two or more. The
+ * outer screen is the one devicectl calls primary (the Duo's 1398×2034 `LCD`, the screen it boots on); the inner is
+ * the other (`LCD-1`, 2007×2853). Measured on the iOS 27.1 simulator, 2026-10-13.
+ */
 export function displays(udid) {
   const out = run('xcrun', ['devicectl', 'device', 'info', 'displays', '--device', udid]).stdout ?? '';
-  return out.split('\n').map((line) => line.match(/▿ (\d+):/) && { id: line.match(/▿ (\d+):/)[1], active: line.includes('(active)') })
+  return parseDisplays(out);
+}
+
+/** The display headers of `devicectl device info displays`, such as `▿ 1: LCD (primary) (active):`. */
+export function parseDisplays(out) {
+  return out.split('\n').map((line) => line.match(/▿ (\d+):/)
+    && { id: line.match(/▿ (\d+):/)[1], active: line.includes('(active)'), primary: line.includes('(primary)') })
     .filter(Boolean);
+}
+
+/**
+ * The display a posture shows: the primary one for the outer screen, the other for the inner. Read from the list,
+ * never learned from which one is lit: right after a fold the old screen still reads as lit for seconds, and on a
+ * phone at rest the flag flickers (closed and still, one read in six named the inner screen). Learning the outer
+ * screen as "the one lit after closing" named the inner screen twice in one night (2026-10-13).
+ */
+export function postureDisplay(list, posture) {
+  const outer = list.find((d) => d.primary)?.id;
+  const inner = list.find((d) => !d.primary)?.id;
+  if (!outer || !inner) throw new Error(`devicectl names no primary and second screen (${list.map((d) => d.id).join(', ') || 'no displays'}).`);
+  return posture.screen === 'outer' ? outer : inner;
 }
 
 /** The id of the screen that is on, or null. */
 export const activeDisplay = (udid) => displays(udid).find((d) => d.active)?.id ?? null;
 
 /**
- * The display that is on once the screens stop changing: two reads a second apart that agree. A fold
- * hands the picture from one screen to the other over a second or more, and on a simulator just booted
- * longer, so a single read straight after the hinge moves can name the screen that is going off.
+ * Wait until display `id` is the one that is on, three reads in a row a second apart (a fold hands the picture from
+ * one screen to the other over a second or more, longer on a simulator just booted, and a lone read can flicker).
+ * Returns every read it made when it never got there, for the error; null when it did. Just after a boot devicectl
+ * can go 20 s without three agreeing reads (the Duo's half-laptop, 2026-10-13), so the first wait is longer.
  */
-function settledDisplay(udid, maxMs = 12000) {
+function awaitDisplay(udid, id, maxMs = 20000) {
   const t0 = Date.now();
-  let last = activeDisplay(udid);
+  const reads = [];
+  let streak = 0;
   while (Date.now() - t0 < maxMs) {
-    pause(1000);
     const now = activeDisplay(udid);
-    if (now && now === last) return now;
-    last = now;
+    reads.push(now ?? 'none');
+    streak = now === id ? streak + 1 : 0;
+    if (streak >= 3) return null;
+    pause(1000);
   }
-  return last;
+  return reads;
 }
 
 /** Send the helper one command inside the simulator. */
@@ -117,13 +143,19 @@ function helper(udid, bin, ...args) {
 /**
  * Put the phone in a posture: closed for the outer screen, or flat first and then folded back for a
  * half-open one (see the file comment). Returns the display that is on, and refuses if the screen
- * that should be on is not — the outer display's id is learned by closing the phone once.
+ * that should be on is not.
  */
 export function enterPosture(udid, posture) {
   const bin = helperPath();
-  if (displays(udid).length < 2) throw new Error('--posture needs a phone that folds (the iPhone Duo simulator, Xcode 27.1+); this simulator has one screen.');
+  const list = displays(udid);
+  if (list.length < 2) throw new Error('--posture needs a phone that folds (the iPhone Duo simulator, Xcode 27.1+); this simulator has one screen.');
+  const outer = postureDisplay(list, { screen: 'outer' });
+  const want = postureDisplay(list, posture);
+  const refuse = (screen, id, reads) => new Error(`${posture.name} wants the ${screen} screen (display ${id}) on, and `
+    + `devicectl never read it three times in a row (it read ${reads.join(', ')}).`);
   helper(udid, bin, 'hinge', '0');
-  const outer = settledDisplay(udid);
+  let reads = awaitDisplay(udid, outer, 60000);
+  if (reads) throw refuse('outer', outer, reads);
   if (posture.screen === 'outer') {
     helper(udid, bin, 'orientation', posture.orientation);
     pause(2000);
@@ -137,12 +169,9 @@ export function enterPosture(udid, posture) {
       pause(3000);
     }
   }
-  const on = settledDisplay(udid);
-  if (!on) throw new Error(`no screen is on after setting ${posture.name} — devicectl reports no active display.`);
-  if ((posture.screen === 'inner') === (on === outer)) {
-    throw new Error(`${posture.name} wants the ${posture.screen} screen on, but display ${on} is the one that is.`);
-  }
-  return on;
+  reads = awaitDisplay(udid, want);
+  if (reads) throw refuse(posture.screen, want, reads);
+  return want;
 }
 
 /** Hand the simulator back closed and upright, the way it boots. Never throws: this is teardown. */
@@ -166,8 +195,9 @@ function pngSize(file) {
  * it answers `supportedInterfaceOrientations` with them on a phone that folds.
  */
 export function shootPosture(udid, posture, file) {
-  const display = activeDisplay(udid);
-  if (!display) throw new Error('no screen is on to photograph.');
+  const display = postureDisplay(displays(udid), posture);
+  const reads = awaitDisplay(udid, display, 10000);
+  if (reads) throw new Error(`the ${posture.screen} screen (display ${display}) is not on to photograph (devicectl read ${reads.join(', ')}).`);
   const r = run('xcrun', ['simctl', 'io', udid, 'screenshot', `--display=${display}`, file], { timeout: 15000 });
   if (r.status !== 0 || !fs.existsSync(file)) {
     throw new Error(`simctl could not photograph display ${display}${r.signal ? ' (it timed out: that screen is off)' : ''}: ${(r.stderr || '').trim()}`);
