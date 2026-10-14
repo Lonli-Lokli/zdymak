@@ -270,11 +270,14 @@ function compositeSource({ src, dur, from = 0, speed = 1, W, H, fps, th, tmp, id
   const frames = Math.ceil(dur * fps) + 4;
   // `speed` re-times the footage itself (2 = twice as fast), so a clip plays faster rather than the app
   // being hurried into skipping its own animations. Stills have no timeline to re-time.
-  // A recording starts at zero only when it is played from its start. Seeked (`from`), its first frame
-  // keeps the timestamp it had in the take, and until it arrives the overlay has nothing to draw over
-  // the matte — which is LIGHT by default, so the cut into the clip flashed near-white. Rebased first,
-  // then re-timed, so `speed` scales time measured from the frame the segment actually opens on.
-  const retime = vid ? `setpts=PTS-STARTPTS${speed !== 1 ? `,setpts=PTS/${speed}` : ''},` : '';
+  // `from` is cut on a CONSTANT frame rate, never by seeking. A simulator writes a frame only when the screen
+  // changes, so a take has no frame in a still stretch: seeked to 3.0 s where the screen stood still from 2.9 s,
+  // the clip opened on the next frame it found (3.45 s) and every frame after came that much early, which Niva's
+  // provenance check caught (2026-10-14). `fps` first repeats each frame across its gap, so there is a frame at
+  // exactly `from`, the screen as it was then; rebased from there it starts at zero with no wait (an empty
+  // overlay showed the light matte, a flash), and `speed` scales time measured from that frame.
+  const cut = from > 0 ? `fps=${fps * 2},trim=start=${from.toFixed(3)},` : '';
+  const retime = vid ? `${cut}setpts=PTS-STARTPTS${speed !== 1 ? `,setpts=PTS/${speed}` : ''},` : '';
   const screenFilter = bleed
     ? `[1:v]${retime}scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,format=rgba[s]` // cover
     : vid
@@ -283,8 +286,8 @@ function compositeSource({ src, dur, from = 0, speed = 1, W, H, fps, th, tmp, id
         + `d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${fw}x${fh}:fps=${fps},setsar=1,format=rgba[s]`;
 
   // Inputs: 0 matte · 1 src · 2 mask · 3 back(shadow+body) · 4 front(island) · 5 caption · 6 vignette
-  // `from` seeks INTO the clip, so one long take can supply several beats without cutting files by hand.
-  const srcIn = vid ? [...(from > 0 ? ['-ss', from.toFixed(3)] : []), '-i', src] : ['-loop', '1', '-i', src];
+  // `from` cuts INTO the clip (above), so one long take can supply several beats without cutting files by hand.
+  const srcIn = vid ? ['-i', src] : ['-loop', '1', '-i', src];
   const args = [
     '-loop', '1', '-i', mattePath,
     ...srcIn,
