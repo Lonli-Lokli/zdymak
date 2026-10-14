@@ -147,6 +147,13 @@ zdymak capture --platform web --url http://localhost:3000 --states /,/today,/stu
 There's also a single-shot mode (`--name welcome`) that snaps whatever is currently on screen, and
 `--record` for a screen recording you can feed to the live-footage `reel`.
 
+**iOS never photographs a launch screen.** After `--settle` (seconds, default `4`) an iOS still is compared
+with the screen as it was 0.4 s after the launch; while less than 4% of it has changed, the app has not
+drawn the state yet, and zdymak waits up to `--ready-wait` more seconds (default `30`), lets the screen come
+to rest and shoots then, or fails naming the state. The first launch after an install compiles the app's
+shaders, and on a loaded machine that outlasted an 18 s settle: the shot went to the store as a picture of
+the launch screen, which is not blank, so nothing else caught it.
+
 ### Composing the shot: `tilt`, `deviceScale`, `deviceY`
 
 Both stores constrain screenshot **pixels**, not **layout**. Apple's specification covers size, file
@@ -301,6 +308,17 @@ lay itself out around. iOS 27.1 reports them as `GeometryProxy.reservedRegions(k
 **The set.** All four Duo targets share ONE store slot of ten. zdymak numbers each target's files on
 its own (`01-….png`), so give the scenes ids without numbers and let vydanne's bridge
 (`bridge.apple.iphoneduo.dirs`) merge the four folders in the order it lists them.
+
+**Captions.** A posture's scene usually has an id of its own (`closed-fresh`, from
+`screenshots-duo-closed/fresh.png`), and a caption is looked up by id, so such a scene renders with an
+empty headline in every language. Give it `captionOf: 'fresh'` and it takes the top-level `fresh` scene's
+`title` and `sub` and every locale's translation of them:
+
+```js
+const duo = (posture, states) => states.map((state) => ({
+  id: `${posture}-${state}`, image: `./screenshots-duo-${posture}/${state}.png`, captionOf: state,
+}));
+```
 
 ### `--record --states` — live footage, one clip per screen
 

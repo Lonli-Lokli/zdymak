@@ -70,8 +70,12 @@ function loadCaptions(rawCaptions, baseDir) {
  * (`cut`, `effect`, `push`, `scroll`) — the config looked right, no error was raised, and the renderer
  * just never saw them. Anything a scene carries now reaches the engine untouched.
  */
-function resolveScenes(rawScenes, baseDir, dir, suffix) {
-  return (rawScenes || []).map((s, i) => {
+function resolveScenes(rawScenes, baseDir, dir, suffix, shared = rawScenes) {
+  return (rawScenes || []).map((raw, i) => {
+    // `captionOf` borrows a shared scene's caption, so a device scene with its own id (a Duo posture's
+    // `closed-fresh`) is captioned like the moment it shows. Without it such a scene rendered with an empty
+    // headline in every language, and nothing said so (Niva's Duo set, 2026-10-14).
+    const s = borrowCaption(raw, shared, i);
     // A LAYOUT scene draws several captures at once and so has no single `image` of its own; its members
     // carry the paths. Each member resolves like a scene would — an explicit `image` against the config
     // file, a bare `id` against this device's captures dir — so a cluster can mix a capture from THIS
@@ -92,6 +96,17 @@ function resolveScenes(rawScenes, baseDir, dir, suffix) {
     const image = s.image ? path.resolve(baseDir, s.image) : path.join(dir, `${s.id}${suffix}.png`);
     return { ...s, id: s.id || String(i + 1), image, title: s.title || '', sub: s.sub || '' };
   });
+}
+
+function borrowCaption(s, shared, i) {
+  if (s.captionOf === undefined) return s;
+  const from = (shared || []).find((x) => x.id === s.captionOf);
+  if (!from) {
+    const ids = (shared || []).map((x) => x.id).filter(Boolean);
+    throw new Error(`Config error: scene[${i}].captionOf "${s.captionOf}" names no top-level scene` +
+      (ids.length ? ` (have: ${ids.join(', ')}).` : ' (the config has no top-level `scenes`).'));
+  }
+  return { ...s, title: s.title ?? from.title, sub: s.sub ?? from.sub };
 }
 
 const asList = (arr) => (arr || []).map((x) => (typeof x === 'string' ? { target: x } : x));
@@ -179,7 +194,7 @@ export async function loadConfig(configPath) {
       : screenshotsDir);
     return {
       name,
-      scenes: resolveScenes(rawScenes, baseDir, dirFor(null), suf),
+      scenes: resolveScenes(rawScenes, baseDir, dirFor(null), suf, raw.scenes),
       // A shot's `hero` is a scene id OR a path. Only a path is resolved here (against the config file,
       // like every other path); an id is looked up per render, so a localized run gets its own capture.
       screenshots: asList(d.screenshots).map((s) => (
@@ -190,7 +205,7 @@ export async function loadConfig(configPath) {
       videos: asList(d.videos),
       theme: d.theme,
       /** This device's scenes re-resolved against `locale`'s captures dir. */
-      scenesFor: (locale) => resolveScenes(rawScenes, baseDir, dirFor(locale), suf),
+      scenesFor: (locale) => resolveScenes(rawScenes, baseDir, dirFor(locale), suf, raw.scenes),
       /** Whether this device actually keeps per-locale captures (drives the "no captures" warning). */
       perLocaleCaptures: !!template && template.includes('{locale}'),
     };

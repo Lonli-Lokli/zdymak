@@ -389,6 +389,13 @@ export interface Scene {
   title?: string;
   /** Subhead. */
   sub?: string;
+  /**
+   * Take the caption of the top-level scene with this id: its `title` and `sub`, and every locale's
+   * translation of them. For a device's own scene that shows the same moment under another id (a Duo
+   * posture's `closed-fresh` showing `fresh`), so the caption is written once. A `title` or `sub` on
+   * this scene still wins over the borrowed one.
+   */
+  captionOf?: string;
   /** Ken-Burns motion for video targets. */
   move?: SceneMove;
   /** Reel only — how the video cuts INTO this scene. Defaults to a hard `cut`. */

@@ -111,7 +111,7 @@ function safeFor(spec, W, H) {
 export function localizeScenes(scenes, table) {
   if (!table) return scenes;
   return scenes.map((s) => {
-    const t = table[s.id];
+    const t = table[s.captionOf ?? s.id];
     return t ? { ...s, title: t.title ?? s.title, sub: t.sub ?? s.sub } : s;
   });
 }
@@ -119,7 +119,7 @@ export function localizeScenes(scenes, table) {
 /** Scene ids in `scenes` that this locale's table doesn't translate (used for the fallback report). */
 export function untranslatedScenes(scenes, table) {
   if (!table) return [];
-  return scenes.filter((s) => !table[s.id]).map((s) => s.id);
+  return scenes.filter((s) => !table[s.captionOf ?? s.id]).map((s) => s.captionOf ?? s.id);
 }
 
 /**

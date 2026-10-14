@@ -182,6 +182,61 @@ async function settleFrame(udid, outDir, maxMs = 9000) {
   }
 }
 
+/**
+ * The share of the screen that differs between two captures: every 4th pixel, counted as different when
+ * a channel moved by more than 32. Two shots of one launch screen come out near 0 (a swaying mark is a
+ * percent or two); a launch screen against the app's first screen comes out at a large share of it.
+ */
+export async function screenDifference(fileA, fileB) {
+  const [a, b] = await Promise.all([loadImage(fileA), loadImage(fileB)]);
+  if (a.width !== b.width || a.height !== b.height) return 1;
+  const pixels = (img) => {
+    const c = createCanvas(img.width, img.height);
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    return ctx.getImageData(0, 0, img.width, img.height).data;
+  };
+  const pa = pixels(a);
+  const pb = pixels(b);
+  let total = 0;
+  let moved = 0;
+  for (let y = 0; y < a.height; y += 4) {
+    for (let x = 0; x < a.width; x += 4) {
+      const i = (y * a.width + x) * 4;
+      total++;
+      if (Math.abs(pa[i] - pb[i]) > 32 || Math.abs(pa[i + 1] - pb[i + 1]) > 32 || Math.abs(pa[i + 2] - pb[i + 2]) > 32) moved++;
+    }
+  }
+  return total ? moved / total : 0;
+}
+
+/** Under this share of changed pixels, a capture still shows what the screen showed at launch. */
+export const LAUNCH_LOOK = 0.04;
+
+/**
+ * Wait until the screen no longer looks as it did just after the launch, so a state is never photographed
+ * on its launch screen. A fixed `--settle` cannot promise that: the first launch after an install compiles
+ * the app's shaders, and on a loaded machine that took longer than Niva's 18 s settle, so its store shot
+ * "A daily field of logic." went to App Store Connect as a picture of the launch screen (2026-10-13), and
+ * a launch screen is not blank, so nothing downstream noticed. `shoot(file)` photographs the screen.
+ */
+async function awaitDrawn({ shoot, launchFrame, out, state, waitMs }) {
+  const t0 = Date.now();
+  for (;;) {
+    shoot(out);
+    const moved = await screenDifference(launchFrame, out);
+    if (moved >= LAUNCH_LOOK) return Date.now() - t0;
+    if (Date.now() - t0 >= waitMs) {
+      throw new Error(
+        `${state}: after the settle and ${Math.round(waitMs / 1000)} s more the screen still looks as it did at launch `
+        + `(${(moved * 100).toFixed(1)}% of it changed), so the app has not drawn this state. It is often the first launch `
+        + 'after an install compiling its shaders: run the capture again, or raise --ready-wait (seconds).',
+      );
+    }
+    await sleep(1000);
+  }
+}
+
 async function setSimOrientation(udid, orientation) {
   const item = ORIENTATION_MENU[orientation];
   if (!item) {
@@ -403,6 +458,10 @@ async function captureIos(flags) {
     // carries its own orientation: the Simulator menu turns the window, not the phone, so the two never mix.
     const posture = flags.posture !== undefined ? postureOf(flags.posture, flags.hinge) : null;
     if (posture && flags.orientation) throw new Error('--posture sets the orientation itself; drop --orientation.');
+    /** Photograph the screen a still is taken of: the posture's display on a Duo, the screen otherwise. */
+    const shoot = (file) => (posture ? shootPosture(udid, posture, file) : sh('xcrun', ['simctl', 'io', udid, 'screenshot', file]));
+    // How long past the settle a state may take to leave its launch screen before the capture fails.
+    const readyWait = Number(flags['ready-wait'] ?? 30);
     try {
     if (flags.build !== undefined) {
       if (!flags.project || !flags.scheme) throw new Error('--build needs --project <.xcodeproj> and --scheme <name>.');
@@ -451,6 +510,9 @@ async function captureIos(flags) {
       const launch = ['simctl', 'launch', udid, flags.bundle, ...langArgs, flags.arg, st];
       if (recording) launch.push(reelArg, 'YES'); // tell the harness to auto-animate this screen
       sh('xcrun', launch);
+      // What the screen shows as the app starts: its launch screen. The still below must differ from it.
+      const launchFrame = recording ? null : path.join(outDir, `.launch-${st}.png`);
+      if (launchFrame) { await sleep(400); shoot(launchFrame); }
       await sleep(settle * 1000);
       // Rotation is asked for AFTER the app is up, never before: iOS resolves an orientation request
       // against whatever is frontmost, so a device turned at the home screen springs back the moment
@@ -476,11 +538,20 @@ async function captureIos(flags) {
       } else {
         await sleep(500); // let the pinned bar paint before the screenshot
         const out = path.join(outDir, `${st}${suffix}.png`);
-        if (posture) shootPosture(udid, posture, out);
-        else {
-          sh('xcrun', ['simctl', 'io', udid, 'screenshot', out]);
-          await uprightCapture(out, orientation);
+        try {
+          const waited = await awaitDrawn({ shoot, launchFrame, out, state: st, waitMs: readyWait * 1000 });
+          if (waited > 0) {
+            // It drew only now: let it come to rest, then take the shot again.
+            console.log(`   … ${st} drew ${(waited / 1000).toFixed(1)} s after the settle`);
+            await settleFrame(udid, outDir);
+            pinStatusBar();
+            await sleep(500);
+            shoot(out);
+          }
+        } finally {
+          fs.rmSync(launchFrame, { force: true });
         }
+        if (!posture) await uprightCapture(out, orientation);
         await stripAlpha(out);
         console.log(`   ✓ ${st}${suffix}.png`);
       }
