@@ -1,0 +1,38 @@
+# .slapignore: the files SLAP leaves out of a commit's size (kirunak R21). Patterns as in .gitignore, from
+# this folder; a file deleted whole is always left out. Only the owner changes this file: they edit it and type
+# `k slapignore approve <repo>` (R23).
+
+# Lock files
+*.lock
+package-lock.json
+npm-shrinkwrap.json
+yarn.lock
+pnpm-lock.yaml
+Package.resolved
+gradle.lockfile
+
+# Build output
+build/
+dist/
+
+# Minified files and source maps
+*.min.js
+*.min.css
+*.map
+
+# Prose
+*.md
+*.mdx
+*.markdown
+*.txt
+*.rst
+*.adoc
+
+# Tables
+*.tsv
+*.csv
+
+# Binary files this repo tracks
+*.gif
+*.mp4
+*.png
