@@ -10,7 +10,7 @@ export const DEFAULT_CONFIGURATION = 'Debug';
 export function buildConfiguration(flags) {
   const c = flags.configuration;
   if (c === undefined) return DEFAULT_CONFIGURATION;
-  if (typeof c !== 'string' || !c.trim()) throw new Error('--configuration needs a name (for example --configuration Capture).');
+  if (typeof c !== 'string' || !c.trim()) throw new Error('--configuration needs a name (for example --configuration Release).');
   return c.trim();
 }
 

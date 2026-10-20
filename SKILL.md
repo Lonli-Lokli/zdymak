@@ -57,7 +57,7 @@ The closed iPhone Duo has a status COLUMN down the right edge instead of a bar: 
 
 ## It can take the screenshots too (don't assume the user must supply them)
 `zdymak capture --platform ios|android|web` DRIVES the app through each screen and writes a store-ready
-PNG per screen — it is not only a compositor. iOS: boots/creates a sim, optionally `--build` +installs (`--configuration <name>`, default Debug; `--configuration Capture` for a portfolio app's capture build),
+PNG per screen — it is not only a compositor. iOS: boots/creates a sim, optionally `--build` +installs (`--configuration <name>`, default Debug; any configuration the scheme defines, e.g. `--configuration Release`),
 relaunches per state via a launch-arg handle, pins the status bar to 9:41, and with `--posture` folds and turns
 an iPhone Duo simulator first (see **Folding phones**). Android: `am start --es <arg>
 <state>` over adb with SystemUI demo mode on for a clean bar. Web: Playwright navigates URL paths itself,

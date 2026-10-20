@@ -417,7 +417,7 @@ Usage:
 Defaults: --config ${DEFAULT_CONFIG}. Needs ffmpeg on PATH (or $FFMPEG).
 --build: iOS builds into Xcode's own DerivedData for the project (one per repo, shared with archives); pin another
 folder with --derived-data <dir>. --configuration <name> builds that Xcode configuration (default Debug;
-a portfolio app's capture build is --configuration Capture). Older versions left a .dd build in every output folder: delete those.
+any configuration the scheme defines, such as --configuration Release). Older versions left a .dd build in every output folder: delete those.
 --clean: wipe the output folder first (capture clears stale PNGs and MOVs, never subfolders) — so the
 folder ends up holding ONLY this run's assets, never a stale screenshot from a removed target/scene.
 README.md documents the config (brand, scenes, targets, theme, music, devices, middleware); SKILL.md is for agents.

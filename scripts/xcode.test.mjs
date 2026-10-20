@@ -13,9 +13,9 @@ test('no --configuration builds Debug, as before', () => {
   assert.equal(configOf(iosBuildArgs(base, 'U1').target), 'Debug');
 });
 
-test('--configuration Capture reaches the argument list', () => {
-  const { target } = iosBuildArgs({ ...base, configuration: 'Capture' }, 'U1');
-  assert.deepEqual(target, ['-project', 'App.xcodeproj', '-scheme', 'App', '-configuration', 'Capture', '-destination', 'id=U1']);
+test('--configuration Release reaches the argument list', () => {
+  const { target } = iosBuildArgs({ ...base, configuration: 'Release' }, 'U1');
+  assert.deepEqual(target, ['-project', 'App.xcodeproj', '-scheme', 'App', '-configuration', 'Release', '-destination', 'id=U1']);
 });
 
 test('a bare --configuration, or an empty one, is refused', () => {
@@ -24,7 +24,7 @@ test('a bare --configuration, or an empty one, is refused', () => {
 });
 
 test('--derived-data is kept beside the configuration', () => {
-  const { dd } = iosBuildArgs({ ...base, configuration: 'Capture', 'derived-data': 'dd' }, 'U1');
+  const { dd } = iosBuildArgs({ ...base, configuration: 'Release', 'derived-data': 'dd' }, 'U1');
   assert.deepEqual(dd, ['-derivedDataPath', path.resolve('dd')]);
 });
 

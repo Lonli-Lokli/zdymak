@@ -878,7 +878,7 @@ folder with `--derived-data <dir>`. Versions before 0.26 built into `<out>/.dd` 
 delete those.
 
 `--configuration <name>` (with `--build`) builds that Xcode configuration instead of `Debug`, for the build, the
-build-settings lookup and the install alike: `--configuration Capture` for a portfolio app's capture build.
+build-settings lookup and the install alike: any configuration the scheme defines works, such as `--configuration Release` or a Release-like one made for screenshots.
 
 `zdymak specs` lists every image target and its exact dimensions. A device that only ships iPhone simply
 omits the others — that's the "use only part of it" contract.

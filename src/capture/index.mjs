@@ -10,8 +10,8 @@
  *   → boots a sim, (optionally builds+installs), then for each state relaunches the app with
  *     `<arg> <state>` and screenshots it. The app just needs a launch-arg "handle" that routes to a
  *     seeded screen (e.g. reads `-marketingScreen <id>` from UserDefaults). Then `zdymak build` composes.
- *   `--configuration <name>` builds that Xcode configuration instead of Debug (a portfolio app's capture build:
- *   `--configuration Capture`).
+ *   `--configuration <name>` builds that Xcode configuration instead of Debug, any configuration the
+ *   scheme defines (for example `--configuration Release`).
  *
  * Simpler modes:
  *   zdymak capture --platform ios|android --name welcome         # single snapshot of the booted device
