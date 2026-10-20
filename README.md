@@ -877,6 +877,9 @@ run. On `capture` it clears only stale PNG/MOV captures, never subfolders.
 folder with `--derived-data <dir>`. Versions before 0.26 built into `<out>/.dd` in every output folder, 2–6 GB each;
 delete those.
 
+`--configuration <name>` (with `--build`) builds that Xcode configuration instead of `Debug`, for the build, the
+build-settings lookup and the install alike: `--configuration Capture` for a portfolio app's capture build.
+
 `zdymak specs` lists every image target and its exact dimensions. A device that only ships iPhone simply
 omits the others — that's the "use only part of it" contract.
 
