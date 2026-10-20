@@ -10,6 +10,8 @@
  *   → boots a sim, (optionally builds+installs), then for each state relaunches the app with
  *     `<arg> <state>` and screenshots it. The app just needs a launch-arg "handle" that routes to a
  *     seeded screen (e.g. reads `-marketingScreen <id>` from UserDefaults). Then `zdymak build` composes.
+ *   `--configuration <name>` builds that Xcode configuration instead of Debug (a portfolio app's capture build:
+ *   `--configuration Capture`).
  *
  * Simpler modes:
  *   zdymak capture --platform ios|android --name welcome         # single snapshot of the booted device
@@ -22,6 +24,7 @@ import path from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { rgbPngBuffer } from '../png.mjs';
 import { captureWeb } from './web.mjs';
+import { iosBuildArgs } from './xcode.mjs';
 import { displays, enterPosture, leavePosture, postureDisplay, postureOf, shootPosture } from './fold.mjs';
 
 /** Flatten over black and rewrite as a NO-ALPHA RGB PNG (App Store & Play reject alpha on screenshots). */
@@ -440,7 +443,7 @@ async function captureIos(flags) {
 
   // FULL WORKFLOW: drive the app through screens by a launch-arg HANDLE, capturing each.
   //   zdymak capture --platform ios --bundle com.x.app --arg -screen --states a,b,c --suffix -light
-  //     [--build --project X.xcodeproj --scheme S] [--device "iPhone 18 Pro Max"] [--settle 3]
+  //     [--build --project X.xcodeproj --scheme S [--configuration Debug]] [--device "iPhone 18 Pro Max"] [--settle 3]
   if (flags.states) {
     if (!flags.bundle || !flags.arg) {
       throw new Error('state capture needs --bundle <id> and --arg <launch-handle> (e.g. -marketingScreen).');
@@ -469,8 +472,7 @@ async function captureIos(flags) {
       // itself use, so a capture reuses their work and leaves no copy behind. It used to be `<out>/.dd`, a fresh
       // 2–6 GB build in every output folder and every worktree; one repo collected 22 of them. --derived-data <dir>
       // still pins a folder for a caller that needs one.
-      const target = ['-project', flags.project, '-scheme', flags.scheme, '-configuration', 'Debug', '-destination', `id=${udid}`];
-      const dd = typeof flags['derived-data'] === 'string' ? ['-derivedDataPath', path.resolve(flags['derived-data'])] : [];
+      const { target, dd } = iosBuildArgs(flags, udid);
       console.log(`▶︎ Building ${flags.scheme} for the simulator (this is the slow step)…`);
       sh('xcodebuild', ['build', ...target, ...dd, '-allowProvisioningUpdates']);
       // Where that build put the app, from Xcode rather than from a guess at its folder layout.
