@@ -38,7 +38,7 @@ get rejected or quietly under-perform.
 | A marketing/social reel | `social-reel` | device-framed | Set `theme.frame: 'android'` for Android captures — the default body is an iPhone, and an Android UI in an iPhone shell misrepresents the app. Never submit this as an App Preview. |
 | A cinematic showcase | `premium-reel` | premium matte | Override `size` for landscape (Mac: `[2880, 1800]`). |
 | **App Store** screenshots | `appstore-iphone-6.9` (+`-6.5`), `appstore-ipad-13` (+`-landscape`), `appstore-mac`, `appstore-watch` | framed (inferred) | Marketing styling is **expected** here: frames, headlines, backgrounds. iPad/Mac/Watch shots are *required* if the app ships there. Pick ONE Watch size and keep it across localizations. |
-| **Google Play** screenshots | `play-phone`, `play-tablet` (+`-portrait`), `play-wear`, `play-feature-graphic` | `bleed` + `caption: false` for the upload | Google forbids device frames, added text and backgrounds on store screenshots (hard requirement for Wear OS). Render a plain set for upload and a styled set for the website — `dir` keeps both. The feature graphic is **required** even without a video. |
+| **Google Play** screenshots | `play-phone`, `play-tablet` (+`-portrait`), `play-wear`, `play-feature-graphic` | phone: a caption under 20% of the image, no device body; tablet and Wear: `bleed` + `caption: false` | Phone screenshots may carry a short tagline (at most 20% of the image) and should avoid device frames; tablet and large-screen screenshots exclude added text; Wear OS forbids frames, text and backgrounds outright. See "Play's rules differ by device" below; `dir` keeps an upload set and a website set apart. The feature graphic is **required** even without a video. |
 | An **in-app purchase** review screenshot | `appstore-iap-review` | interface only (automatic) | Its own slot with its own OLDER size table — the listing sizes are refused. Defaults to 640×920; never pass a listing target's `size:` here. `appstore-iap-promo` is the optional 1024×1024 companion. |
 | **iPhone Duo** screenshots | `appstore-iphone-duo-outer` / `-inner` (+`-landscape` of each) | framed by `duo` / `duo-inner` (inferred) | ONE "iPhone Duo" slot of ten takes all four sizes (1398×2034, 2007×2853, and both turned). Optional now, **required from April 2027** for apps built with the iOS 27.1 SDK. Shoot every posture on the Duo simulator (Xcode 27.1+) with `capture --posture`, and read **Folding phones** below before advising on the layout. The frame keeps the display's true shape and draws NO island or camera; a simulator capture carries iOS's own camera cutout and status, which is the device's and stays. A half-open capture can stand half open in 3D with the scene's `fold: 'laptop'` or `'book'` (see **Folding phones**). |
 | The App Store **product page header / search image** (iOS 27+) | `appstore-header` (3840×1646), `appstore-search` (3:2, 1920×1280–3840×2560), or `appstore-universal` (5244×2950, both) | branded graphic | Like the feature graphic: lockup, tagline, fan, ONE hero — laid out around Apple's art safe area (from its own template). Give it a **landscape** hero with `hero: '<scene id>'`; a phone in a 21:9 strip is the wrong picture. Optional assets. |
@@ -175,11 +175,15 @@ aspect.
   succeeds and the listing is simply half as long. It also fixes ORDER, which stores read from the
   filename: one set whole, then the other, rather than alternating shapes.
 
-## Play wants PLAIN screenshots (Apple wants styled)
-Google's asset guidance forbids device frames, added text and backgrounds on Play screenshots (a hard
-requirement for Wear OS), while Apple expects marketing styling. Render both from one target with `dir`:
-`{ target: 'play-phone', dir: 'play-phone-plain', style: 'bleed', caption: false, theme: { anchor: 'top' } }`
-for the upload, plus a plain `{ target: 'play-phone' }` for the website. Google *does* want a tidy status
+## Play's rules differ by device (Apple wants styled)
+Google's preview-asset guidance (support.google.com/googleplay/android-developer/answer/9866151) differs by
+device. **Phone**: taglines are allowed, recommended "only if necessary", taking no more than 20% of the image,
+and device frames are to be avoided, so a captioned `bleed` or `premium` set (screen on a matte, no device body)
+fits. **Tablet and large screens**: "exclude additional text", since Play's homepages can cut it off, so render
+`caption: false`. **Wear OS**: no frames, no added text, no backgrounds, a hard requirement. Apple expects
+marketing styling. Render more than one set from one target with `dir`, for example
+`{ target: 'play-tablet', dir: 'play-tablet-plain', style: 'bleed', caption: false, theme: { anchor: 'top' } }`
+for the upload beside a styled set for the website. Google *does* want a tidy status
 bar (no carrier/notifications, full battery/wifi/signal) — `statusBar: 'auto'` (the default) paints one into
 the empty band an Android Compose capture leaves behind; `statusBarTime` sets the clock.
 
