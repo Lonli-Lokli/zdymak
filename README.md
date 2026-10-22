@@ -128,7 +128,7 @@ compositor. Give it a way to reach each screen and it will boot the device, walk
 screen in order, and write a store-ready PNG per screen (alpha stripped — stores reject transparency).
 
 ```sh
-# iOS — boots a simulator, optionally BUILDS + installs, then relaunches the app once per screen
+# iOS — optionally BUILDS first, then boots a simulator (+ installs), then relaunches the app once per screen
 zdymak capture --platform ios --bundle com.x.app --arg -marketingScreen   --states welcome,today,study,answer --suffix -light   --build --project App.xcodeproj --scheme App --out ./screenshots
 
 # Android — same idea over adb, driving an intent extra

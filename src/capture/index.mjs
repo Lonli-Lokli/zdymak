@@ -7,7 +7,7 @@
  *   zdymak capture --platform ios --bundle com.x.app --arg -marketingScreen \
  *     --states welcome,today,study,answer --suffix -light \
  *     --build --project App.xcodeproj --scheme App --out marketing/ios/captures
- *   → boots a sim, (optionally builds+installs), then for each state relaunches the app with
+ *   → (optionally) builds first, then boots a sim and installs, then for each state relaunches the app with
  *     `<arg> <state>` and screenshots it. The app just needs a launch-arg "handle" that routes to a
  *     seeded screen (e.g. reads `-marketingScreen <id>` from UserDefaults). Then `zdymak build` composes.
  *   `--configuration <name>` builds that Xcode configuration instead of Debug, any configuration the
@@ -356,18 +356,20 @@ const compareVersions = (a, b) => {
   return 0;
 };
 
-/** Boot (or reuse/create) an iOS simulator → UDID. Prefers --udid, then an already-booted sim, then a
- *  device matching --device (default iPhone 18 Pro Max), creating one if needed. */
 /**
- * Boot (or reuse/create) a simulator. Returns `{ udid, booted, created }` — the two booleans are the
- * TEARDOWN receipt: they say what this process changed, so the cleanup can undo exactly that and leave a
+ * Find (or create) the iOS simulator a capture runs on, WITHOUT booting it: prefers --udid, then an already-booted
+ * sim, then a device matching --device (default iPhone 18 Pro Max), creating one if needed. Returns
+ * `{ udid, booted, created }` — the two booleans are the TEARDOWN receipt: they say what this process changes
+ * (`booted`: whether it boots the sim, in `startIosSim`), so the cleanup can undo exactly that and leave a
  * simulator the user already had running exactly as they left it.
+ *
+ * Booting is a separate step so that `--build` runs first: a booted simulator holds ~1.7 GB, and beside a build
+ * (Xcode, plus Gradle and Kotlin/Native for a Compose Multiplatform app) it ran an 8 GB Mac out of memory. The
+ * build needs only the device's id.
  */
-function bootIosSim(flags) {
+function resolveIosSim(flags) {
   if (flags.udid) {
     const wasBooted = out2('xcrun', ['simctl', 'list', 'devices', 'booted']).includes(flags.udid);
-    spawnSync('xcrun', ['simctl', 'boot', flags.udid], { stdio: 'ignore' });
-    spawnSync('xcrun', ['simctl', 'bootstatus', flags.udid, '-b'], { stdio: 'ignore' });
     return { udid: flags.udid, booted: !wasBooted, created: false };
   }
   if (!flags.device) {
@@ -386,9 +388,14 @@ function bootIosSim(flags) {
     udid = sh('xcrun', ['simctl', 'create', 'zdymak-capture', devtype, runtime]).trim();
     created = true;
   }
+  return { udid, booted: true, created };
+}
+
+/** Boot what `resolveIosSim` found, unless it was already running, and wait until it has booted. */
+function startIosSim({ udid, booted }) {
+  if (!booted) return;
   spawnSync('xcrun', ['simctl', 'boot', udid], { stdio: 'ignore' });
   spawnSync('xcrun', ['simctl', 'bootstatus', udid, '-b'], { stdio: 'ignore' });
-  return { udid, booted: true, created };
 }
 
 /**
@@ -451,8 +458,9 @@ async function captureIos(flags) {
     const states = flags.states.split(',').map((s) => s.trim()).filter(Boolean);
     const suffix = flags.suffix || '';
     const settle = Number(flags.settle || 4);
-    const sim = bootIosSim(flags);
+    const sim = resolveIosSim(flags); // booted after the build, below
     const udid = sim.udid;
+    let started = false;
     const orientation = (flags.orientation || 'portrait').toLowerCase();
     if (!ORIENTATION_MENU[orientation]) {
       throw new Error(`--orientation must be one of: ${Object.keys(ORIENTATION_MENU).join(', ')} (got "${flags.orientation}").`);
@@ -466,6 +474,7 @@ async function captureIos(flags) {
     // How long past the settle a state may take to leave its launch screen before the capture fails.
     const readyWait = Number(flags['ready-wait'] ?? 30);
     try {
+    let app = '';
     if (flags.build !== undefined) {
       if (!flags.project || !flags.scheme) throw new Error('--build needs --project <.xcodeproj> and --scheme <name>.');
       // ONE Xcode build folder per project: Xcode's own DerivedData, the same one `xcodebuild archive` and Xcode
@@ -479,8 +488,13 @@ async function captureIos(flags) {
       let settings = [];
       try { settings = JSON.parse(out2('xcodebuild', ['-showBuildSettings', '-json', ...target, ...dd])); } catch { /* reported below */ }
       const built = settings.map((t) => t.buildSettings ?? {}).find((b) => b.WRAPPER_EXTENSION === 'app') ?? {};
-      const app = built.TARGET_BUILD_DIR && built.WRAPPER_NAME ? path.join(built.TARGET_BUILD_DIR, built.WRAPPER_NAME) : '';
+      app = built.TARGET_BUILD_DIR && built.WRAPPER_NAME ? path.join(built.TARGET_BUILD_DIR, built.WRAPPER_NAME) : '';
       if (!app || !fs.existsSync(app)) throw new Error(`xcodebuild built ${flags.scheme} but reported no .app (looked for ${app || 'TARGET_BUILD_DIR/WRAPPER_NAME'})`);
+    }
+    // Only now, with the build's memory given back, does the simulator boot.
+    startIosSim(sim);
+    started = true;
+    if (app) {
       console.log(`▶︎ Installing ${path.basename(app)}…`);
       sh('xcrun', ['simctl', 'install', udid, app]);
     }
@@ -563,8 +577,8 @@ async function captureIos(flags) {
       // Always: a thrown build/launch error must not strand a booted sim with a faked status bar —
       // nor one lying on its side. A simulator the user already had running is handed back the way
       // they left it, and orientation is part of "the way they left it".
-      if (orientation !== 'portrait') { try { await setSimOrientation(udid, 'portrait'); } catch { /* teardown */ } }
-      if (posture) leavePosture(udid);
+      if (started && orientation !== 'portrait') { try { await setSimOrientation(udid, 'portrait'); } catch { /* teardown */ } }
+      if (started && posture) leavePosture(udid);
       teardownIosSim(sim, flags);
     }
     return; // the workflow is DONE — falling through would try to snap a sim that was just torn down
