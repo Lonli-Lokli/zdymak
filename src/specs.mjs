@@ -234,6 +234,26 @@ export const IMAGE_TARGETS = {
   'play-phone': { store: 'Google Play', w: 1080, h: 1920, alpha: false, format: 'png', label: 'Play phone (9:16; store minimum is 320px per side, 1080+ for promotion eligibility; max 2:1; no alpha)' },
   'play-tablet': { store: 'Google Play', w: 2560, h: 1440, alpha: false, format: 'png', label: 'Play tablet (16:9, 1080–7680px, no alpha)' },
   'play-tablet-portrait': { store: 'Google Play', w: 1600, h: 2560, alpha: false, format: 'png', label: 'Play tablet PORTRAIT (same Play slots as play-tablet, rotated; 1080–7680px, no alpha)' },
+  /**
+   * Google Play's large screens: the 7-inch tablet, 10-inch tablet and Chromebook slots are three device types in
+   * Play Console, each with its own set, and one rule for all three: "between 1,080 and 7,680px", "a 16:9 aspect
+   * ratio for landscape and a 9:16 aspect ratio for portrait", at least four for tablets and Chromebook
+   * (support.google.com/googleplay/android-developer/answer/9866151, read 2026-11-03). `play-tablet` above fills
+   * the 10-inch slot; these fill the other two at the smallest size the rule allows, since a 7-inch screen and a
+   * Chromebook window are not larger than it. Capture a 7-inch tablet as it is (or turned with
+   * `--orientation`), and a Chromebook window on a resizable emulator with `--size 1920x1080 --density 160`.
+   */
+  'play-tablet-7': { store: 'Google Play', w: 1920, h: 1080, alpha: false, format: 'png', label: 'Play 7-inch tablet (16:9, 1080–7680px, no alpha; its own Play slot, beside the 10-inch one)' },
+  'play-tablet-7-portrait': { store: 'Google Play', w: 1080, h: 1920, alpha: false, format: 'png', label: 'Play 7-inch tablet PORTRAIT (9:16, the same 7-inch slot, turned)' },
+  'play-chromebook': { store: 'Google Play', w: 1920, h: 1080, alpha: false, format: 'png', label: 'Play Chromebook (16:9, 1080–7680px, no alpha; at least 4; its own Play slot)' },
+  /**
+   * Android foldables have no Play slot of their own. An open book fold's inner screen is tablet-class and goes in
+   * a tablet slot; a flip open, or a book fold closed, is a phone and goes in the phone slot. These carry the shot
+   * in the foldable's own body (`android-fold`, `android-flip`), for a website set or a styled set beside the
+   * plain upload one. Capture each posture with `capture --platform android --posture`.
+   */
+  'play-fold': { store: 'Google Play', w: 2560, h: 1440, alpha: false, format: 'png', label: 'Play book foldable OPEN (16:9, the tablet slots; framed by android-fold)' },
+  'play-flip': { store: 'Google Play', w: 1080, h: 1920, alpha: false, format: 'png', label: 'Play flip foldable OPEN (9:16, the phone slot; framed by android-flip)' },
   'play-wear': { store: 'Google Play', w: 1080, h: 1080, alpha: false, format: 'png', label: 'Play Wear OS (1:1 square, 384–3840px, no alpha)' },
   'play-feature-graphic': { store: 'Google Play', w: 1024, h: 500, alpha: false, format: 'png', graphic: true, label: 'Play feature graphic (1024×500, no alpha) — brand banner, not a per-scene shot' },
   'play-icon': { store: 'Google Play', w: 512, h: 512, alpha: true, format: 'png', graphic: true, icon: true, maxBytes: 1024 * 1024, label: 'Play app icon (512×512, 32-bit PNG — the one asset where alpha is allowed; ≤1MB). Built from brand.logo.' },

@@ -70,6 +70,16 @@ export type ImageTargetId =
   | 'play-tablet'
   /** The SAME two Play tablet slots as `play-tablet`, upright — capture with `--size 1600x2560`. */
   | 'play-tablet-portrait'
+  /** Play's 7-inch tablet slot, its own set: 1920×1080 (16:9). Framed by `android-tablet`. */
+  | 'play-tablet-7'
+  /** The same 7-inch slot, upright: 1080×1920. */
+  | 'play-tablet-7-portrait'
+  /** Play's Chromebook slot: 1920×1080 (16:9). Framed by `chromebook`. Capture with `--size 1920x1080 --density 160`. */
+  | 'play-chromebook'
+  /** A book foldable open, for a tablet slot or a website set: 2560×1440. Framed by `android-fold`. */
+  | 'play-fold'
+  /** A flip foldable open, for the phone slot or a website set: 1080×1920. Framed by `android-flip`. */
+  | 'play-flip'
   | 'play-wear'
   | 'play-feature-graphic'
   | 'play-icon'
@@ -192,11 +202,14 @@ export type RenderStyle = 'framed' | 'premium' | 'bleed' | 'reel';
  * `laptop`/`chromebook`/`desktop` draw a clamshell and are mainly for layout members; `mac` (and any
  * unknown id) adds no body, since Mac captures already carry their own window chrome. `duo` and
  * `duo-inner` are the iPhone Duo's displays — a plain body at the display's true aspect, with no
- * Dynamic Island, camera or crease, because Apple publishes none. `none` asks for no body by name.
+ * Dynamic Island, camera or crease, because Apple publishes none. `android-tablet`, `android-fold` and
+ * `android-flip` are Android's large screens, the two foldables with their hinge marked on the bezel, never over
+ * the screen. `none` asks for no body by name.
  */
 export type FrameId =
   | 'phone' | 'iphone' | 'android' | 'ipad' | 'tablet' | 'watch'
   | 'duo' | 'duo-inner'
+  | 'android-tablet' | 'android-fold' | 'android-flip'
   | 'laptop' | 'chromebook' | 'desktop'
   | 'macbook' | 'mac-window' | 'mac' | 'none';
 

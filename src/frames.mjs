@@ -104,6 +104,82 @@ export function drawAndroidPhoneFrame(ctx, img, cx, cy, screenW, opts = {}) {
   return { bodyH, bodyY, screen: { x: sx, y: sy, w: screenW, h: screenH, r: Math.round(screenW * 0.105) } };
 }
 
+/**
+ * Android large screens: a tablet and the two foldables, a dark body with an even bezel, corners taken from the
+ * SHORT side so a turned screen keeps them, and the screen at the capture's own aspect. A foldable's hinge is
+ * marked where it meets the body's edge, outside the screen, so nothing the app drew is covered: a book fold's
+ * hinge splits the screen's width when the capture is upright and its height when turned; a flip's the other
+ * way round. The proportions are drawn, not measured from any one model.
+ */
+export const ANDROID_BODIES = {
+  'android-tablet': { bezel: 0.045, radius: 0.04, hinge: null },
+  'android-fold': { bezel: 0.03, radius: 0.035, hinge: 'fold' },
+  'android-flip': { bezel: 0.045, radius: 0.1, hinge: 'flip' },
+};
+
+/** Where a foldable's hinge runs on a screen of `w`×`h`: 'vertical' (splits the width) or 'horizontal'. */
+export function hingeAxis(kind, w, h) {
+  const upright = h >= w;
+  if (kind === 'fold') return upright ? 'vertical' : 'horizontal';
+  if (kind === 'flip') return upright ? 'horizontal' : 'vertical';
+  return null;
+}
+
+function drawAndroidBody(id) {
+  const { bezel: bz, radius: rr, hinge } = ANDROID_BODIES[id];
+  return function drawAndroidLargeFrame(ctx, img, cx, cy, screenW, opts = {}) {
+    const screenH = screenHeight(img, screenW, opts);
+    const short = Math.min(screenW, screenH);
+    const bezel = Math.max(2, Math.round(short * bz));
+    const screenR = Math.round(short * rr);
+    const bodyW = screenW + bezel * 2;
+    const bodyH = screenH + bezel * 2;
+    const bodyX = Math.round(cx - bodyW / 2);
+    const bodyY = Math.round(cy - bodyH / 2);
+    const sx = bodyX + bezel;
+    const sy = bodyY + bezel;
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = Math.round(short * 0.09);
+    ctx.shadowOffsetY = Math.round(short * 0.035);
+    roundRectPath(ctx, bodyX, bodyY, bodyW, bodyH, screenR + bezel);
+    ctx.fillStyle = '#0b0b0a';
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    roundRectPath(ctx, sx, sy, screenW, screenH, screenR);
+    ctx.clip();
+    paintScreen(ctx, img, sx, sy, screenW, screenH);
+    ctx.restore();
+
+    const axis = hingeAxis(hinge, screenW, screenH);
+    if (axis) {
+      // Two short marks on the bezel where the hinge meets the edge, a shade lighter than the body.
+      const t = Math.max(1, Math.round(bezel * 0.35));
+      ctx.fillStyle = '#2a2a28';
+      if (axis === 'vertical') {
+        const x = Math.round(sx + screenW / 2 - t / 2);
+        ctx.fillRect(x, bodyY, t, bezel);
+        ctx.fillRect(x, sy + screenH, t, bezel);
+      } else {
+        const y = Math.round(sy + screenH / 2 - t / 2);
+        ctx.fillRect(bodyX, y, bezel, t);
+        ctx.fillRect(sx + screenW, y, bezel, t);
+      }
+    }
+    return { bodyH, bodyY, hinge: axis, screen: { x: sx, y: sy, w: screenW, h: screenH, r: screenR } };
+  };
+}
+
+/** Android tablet (7in and 10in). See the note above `ANDROID_BODIES`. */
+export const drawAndroidTabletFrame = drawAndroidBody('android-tablet');
+/** Android book foldable, open. See the note above `ANDROID_BODIES`. */
+export const drawAndroidFoldFrame = drawAndroidBody('android-fold');
+/** Android flip foldable, open. See the note above `ANDROID_BODIES`. */
+export const drawAndroidFlipFrame = drawAndroidBody('android-flip');
+
 /** iPad: dark unibody, tight even bezel, gentler corners, no island. */
 export function drawIpadFrame(ctx, img, cx, cy, screenW, opts = {}) {
   const screenH = screenHeight(img, screenW, opts);
@@ -423,6 +499,7 @@ export function frameFor(id) {
   return {
     phone: drawPhoneFrame, iphone: drawPhoneFrame,
     android: drawAndroidPhoneFrame,
+    'android-tablet': drawAndroidTabletFrame, 'android-fold': drawAndroidFoldFrame, 'android-flip': drawAndroidFlipFrame,
     ipad: drawIpadFrame, tablet: drawIpadFrame,
     duo: drawDuoFrame, 'duo-inner': drawDuoInnerFrame,
     watch: drawWatchFrame,
@@ -438,6 +515,11 @@ export function inferFrame(target) {
   // Play targets are matched FIRST: `play-tablet` contains "tablet", so an ipad/tablet test placed above
   // this would frame Android tablet captures in an iPad body — the same misrepresentation we refuse to
   // make on phones.
+  // The Play large-screen targets that have a body of their own, before the generic Play rule below.
+  if (/^play-chromebook/.test(target)) return 'chromebook';
+  if (/^play-tablet-7/.test(target)) return 'android-tablet';
+  if (/^play-fold/.test(target)) return 'android-fold';
+  if (/^play-flip/.test(target)) return 'android-flip';
   if (/^play/.test(target) || /android/.test(target)) return 'android';
   // Before the iPhone test: `appstore-iphone-duo-outer` contains "iphone", and a Duo screenshot in an
   // iPhone body would carry a Dynamic Island the Duo is not documented to have. Inner before outer,
