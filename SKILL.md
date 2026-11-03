@@ -428,7 +428,9 @@ the target infers, i.e. a cluster of devices inside a phone bezel.
 
 `zdymak check <png|dir>… [--language <tag>]` is the checker every `capture` runs on each shot: it refuses a blank screen,
 the launch screen, a system dialog, the on-screen keyboard, the home screen or another app, a status bar not in demo mode
-and another language than the set's, naming the shot and the reason (exit 1; `--force` reports only; `--json` for
+another language than the set's, letterbox bars (a phone-sized app inside a tablet or Chromebook window), a screen
+still changing a second after the shot (`--motion <state>=<share>` for a scene that moves by design) and two scenes of
+one set that are the same picture, naming the shot and the reason (exit 1; `--force` reports only; `--json` for
 machines). The device's facts at capture time are kept in `.zdymak-check/` beside the shots; the picture's words are read
 with Vision on macOS. Use it instead of re-implementing any of this in a CI job or a release gate.
 

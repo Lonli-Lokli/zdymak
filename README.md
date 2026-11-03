@@ -1354,6 +1354,9 @@ job or a release gate. It refuses, naming the shot and the reason:
 | `wrong-app` | the home screen or another app in front | the focused window (Android), the app not running (iOS), home screen labels |
 | `status-bar` | a status bar not in demo mode: the real clock, a battery not full | demo mode allowed (Android), the simulator's override (iOS), the clock and battery in the top strip |
 | `language` | the device or app in another language than the set's | the app's locale (Android), the script of the picture's words, English words on a non-English Latin set |
+| `motion` | a shot taken while the screen was still changing: over 1% of it changed in the second after the shot, or over the scene's own allowance (`--motion`) | the device, at capture |
+| `letterbox` | the app drawn at phone size inside a tablet or Chromebook window: bars of one colour on two opposite sides, each over 5% of the side, leaving a phone-shaped box (long side 1.6 times the short) in a shot that is not that shape | the picture |
+| `duplicate` | two scenes of one set that are the same picture: under 0.5% of the sampled pixels differ, in one folder at one size; the later shot is refused, naming the earlier | the set |
 | `unreadable` | a file that is not a PNG this tool can decode | the picture |
 
 What the device says is read at capture time and kept beside the shot in `.zdymak-check/<name>.json` (a hidden folder
@@ -1365,6 +1368,13 @@ does not read Devanagari, so a set in Hindi gets no language verdict from the pi
 reports without failing. `--json` prints `{ file, refusals, notes, colours, dominant, blank }` per file. The checker is
 exported as `checkShot`, `factRefusals` and `textRefusals`; the blank measurement as `captureBlankness`, with the
 thresholds `BLANK_COLOURS` and `BLANK_DOMINANCE`.
+
+A scene that moves by design (a clock, a falling piece, a looping animation) is given its own allowance with
+`capture --motion <state>=<share>,…` (a bare share is the default for every scene, `0.01` unless set). The motion,
+the letterbox and the duplicate thresholds are exported as `MOTION_STILL`, `LETTERBOX_BAR`, `LETTERBOX_BOX`,
+`LETTERBOX_SHOT` and `DUPLICATE_LOOK`, the set check as `checkSet` and the bar finder as `letterboxOf`. The test
+fixtures in `scripts/fixtures/bad-shots` hold one known-bad shot per rule, each refused for its own rule
+(`node scripts/make-bad-shots.mjs` draws them again).
 
 On Android a state capture now force-stops the app before each state, as iOS terminates it, so each state starts cold
 and is compared with its own launch frame.
