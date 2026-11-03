@@ -746,6 +746,30 @@ export declare function captureBlankness(file: string): Promise<{ colours: numbe
 export declare const BLANK_COLOURS: number;
 export declare const BLANK_DOMINANCE: number;
 
+/** One reason the checker refuses a shot. */
+export interface CheckRefusal { rule: 'unreadable' | 'blank' | 'launch' | 'dialog' | 'keyboard' | 'wrong-app' | 'status-bar' | 'language'; reason: string }
+/** The checker's verdict on one shot: its refusals, and notes on the rules it could not apply. */
+export interface CheckResult { file: string; refusals: CheckRefusal[]; notes: string[]; colours?: number; dominant?: number; blank?: boolean; unreadable?: boolean }
+/** The checker's rules, in report order. */
+export declare const CHECK_RULES: ReadonlyArray<CheckRefusal['rule']>;
+/** The status bar time zdymak pins (9:41). */
+export declare const DEMO_TIME: string;
+/**
+ * Check one shot as every capture does: blankness and the picture's words, plus the device's facts kept beside it at
+ * capture time (`.zdymak-check/<name>.json`). `language` is the set's; `text: false` skips reading the words.
+ */
+export declare function checkShot(file: string, opts?: { facts?: Record<string, unknown> | null; language?: string; time?: string; text?: boolean }): Promise<CheckResult>;
+/** One line per refusal, naming the shot and the reason. */
+export declare function describeRefusals(results: CheckResult[], cwd?: string): string[];
+/** The refusals a device's facts carry. */
+export declare function factRefusals(facts: Record<string, unknown> | null): CheckRefusal[];
+/** The refusals a picture's words carry; `lines` as readText returns them. */
+export declare function textRefusals(lines: Array<{ text: string; conf: number; x: number; y: number; w: number; h: number }>, opts?: { language?: string; time?: string }): CheckRefusal[];
+/** The words in a picture (Vision, macOS), boxes in fractions from the top left, or `{ error }` where they cannot be read. */
+export declare function readText(file: string, language?: string): Array<{ text: string; conf: number; x: number; y: number; w: number; h: number }> | { error: string };
+/** The device's facts kept beside a shot at capture time, or null. */
+export declare function readFacts(file: string): Record<string, unknown> | null;
+
 
 /**
  * Identity helper — returns the config unchanged, but gives editors the type in a plain `.mjs` file.

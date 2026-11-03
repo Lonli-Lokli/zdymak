@@ -6,7 +6,7 @@
  *   zdymak screenshots [--config <path>] [--out <dir>] [--locale <ids>]  # per-device store screenshots
  *   zdymak specs                                          # print the store spec matrix
  *   zdymak capture --platform ios|android --name <screen> [--record] [--out <dir>]
- *   zdymak check   <png|dir>… [--json] [--force]        # is there a screen in each capture?
+ *   zdymak check   <png|dir>… [--language <tag>] [--json] [--force]   # may a store show each shot?
  *   zdymak help
  */
 import path from 'node:path';
@@ -21,7 +21,8 @@ import { buildDeviceScreenshots, localizeScenes, localizeBrand, untranslatedScen
 import { VIDEO_TARGETS, IMAGE_TARGETS, videoTarget } from './specs.mjs';
 import { runCapture } from './capture/index.mjs';
 import { resolveVideo, resolveReel, paletteAt } from './destinations.mjs';
-import { validateVideo, validateImage, captureBlankness, BLANK_COLOURS, BLANK_DOMINANCE } from './validate.mjs';
+import { validateVideo, validateImage } from './validate.mjs';
+import { checkShot } from './checker.mjs';
 import { normalizeMiddleware, runMiddleware } from './middleware.mjs';
 import { pathToFileURL } from 'node:url';
 
@@ -307,39 +308,38 @@ function pngsIn(paths) {
 }
 
 /**
- * `zdymak check <png|dir>…` — is there a screen in each capture? The same measurement `build` and `screenshots` apply
- * to their input (see validate.mjs: under BLANK_COLOURS distinct colours AND over BLANK_DOMINANCE of one colour), as its
- * own command so anything that photographs an app — a CI job, a release gate, a device test — can ask zdymak instead
- * of re-implementing it. Exits 1 on a blank or unreadable file; `--force` reports but exits 0.
+ * `zdymak check <png|dir>…` — may a store show each shot? The checker every capture runs (checker.mjs): blank, the
+ * launch screen, a system dialog, the on-screen keyboard, the wrong app or the home screen, a status bar not in demo
+ * mode, another language than the set's. What the device said at capture time is read from the facts kept beside each
+ * shot; the picture is read again here. `--language <tag>` names the set's language when no facts carry it, `--time`
+ * the pinned clock (9:41), `--no-text` skips reading the picture's words. Exits 1 on any refusal; `--force` reports
+ * but exits 0.
  */
 async function cmdCheck(flags, rest) {
   const files = pngsIn(rest);
   if (!files.length) throw new Error('check: pass PNG files or folders, e.g. zdymak check shots/');
   const results = [];
   for (const file of files) {
-    const m = await captureBlankness(file);
-    results.push({
-      file,
-      colours: m ? m.colours : null,
-      dominant: m ? m.dominant : null,
-      blank: !!m && m.colours < BLANK_COLOURS && m.dominant > BLANK_DOMINANCE,
-      unreadable: !m,
-    });
+    results.push(await checkShot(file, {
+      language: flags.language,
+      time: flags.time,
+      text: flags['no-text'] === undefined,
+    }));
   }
-  const bad = results.filter((r) => r.blank || r.unreadable);
+  const bad = results.filter((r) => r.refusals.length);
   if (flags.json) {
     console.log(JSON.stringify(results, null, 2));
   } else {
-    console.log(`zdymak check • ${results.length} capture(s)`);
+    console.log(`zdymak check • ${results.length} shot(s)`);
     for (const r of results) {
       const rel = path.relative(process.cwd(), r.file) || r.file;
-      if (r.unreadable) console.log(`  ✗ ${rel}  UNREADABLE — not a PNG this tool can decode`);
-      else if (r.blank) console.log(`  ✗ ${rel}  BLANK — ${r.colours} distinct colours, ${(r.dominant * 100).toFixed(1)}% one colour: the app drew nothing`);
-      else console.log(`  ✓ ${rel}  ${r.colours} colours, ${(r.dominant * 100).toFixed(1)}% dominant`);
+      if (!r.refusals.length) console.log(`  ✓ ${rel}`);
+      for (const x of r.refusals) console.log(`  ✗ ${rel}  ${x.rule.toUpperCase()} — ${x.reason}`);
+      for (const n of r.notes) console.log(`    · ${n}`);
     }
   }
   if (bad.length && !flags.force) process.exitCode = 1;
-  else if (bad.length) console.warn(`⚠︎ ${bad.length} capture(s) failed the check; --force reports them without failing`);
+  else if (bad.length) console.warn(`⚠︎ ${bad.length} shot(s) failed the check; --force reports them without failing`);
 }
 
 /** How a target's size reads: one size, a list, or a range with the size zdymak writes by default. */
@@ -379,7 +379,7 @@ Usage:
                   # LIVE-FOOTAGE montage from clips/images. "reel" may be an ARRAY — every entry
                   # is built (App Preview + Play promo from one config); --only picks by name.
   zdymak screenshots [--config <path>] [--out <dir>] [--clean] [--locale <ids>]
-  zdymak check    <png|dir>… [--json] [--force]
+  zdymak check    <png|dir>… [--language <tag>] [--time 9:41] [--no-text] [--json] [--force]
                   # is there a screen in each capture? The measurement build/screenshots apply to their input (a
                   # capture with under 400 distinct colours AND over 95% one colour drew nothing), as a command
                   # of its own for CI, release gates and device tests. Exits 1 on a blank or unreadable file.

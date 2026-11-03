@@ -25,6 +25,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { rgbPngBuffer } from '../png.mjs';
 import { captureWeb } from './web.mjs';
 import { iosBuildArgs } from './xcode.mjs';
+import { DEMO_TIME, androidFacts, checkShot, describeRefusals, iosFacts, writeFacts } from '../checker.mjs';
 import { displays, enterPosture, leavePosture, postureDisplay, postureOf, shootPosture } from './fold.mjs';
 
 /** Flatten over black and rewrite as a NO-ALPHA RGB PNG (App Store & Play reject alpha on screenshots). */
@@ -418,6 +419,26 @@ function teardownIosSim({ udid, booted, created }, flags) {
 
 const simctlOk = () => spawnSync('xcrun', ['simctl', 'help'], { stdio: 'ignore' }).status === 0;
 
+/**
+ * Run the checker (checker.mjs) on a shot just taken, with what the device says right now kept beside it, and print
+ * its refusals as they come. The run refuses them together at its end (`refuseShots`), so one run names every bad shot.
+ */
+async function checkCaptured(file, facts, flags) {
+  writeFacts(file, facts);
+  const r = await checkShot(file, { facts, text: flags['no-text'] === undefined });
+  for (const x of r.refusals) console.log(`   ✗ ${path.basename(file)}: ${x.rule}: ${x.reason}`);
+  return r;
+}
+
+/** Throw the checker's refusals, one line per shot and reason; `--force` keeps the shots and only warns. */
+function refuseShots(results, flags) {
+  const lines = describeRefusals(results);
+  if (!lines.length) return;
+  const msg = `the checker refused ${results.filter((r) => r.refusals.length).length} shot(s):\n  ${lines.join('\n  ')}`;
+  if (flags.force !== undefined) console.warn(`⚠︎ ${msg}\n  (--force: the shots are kept)`);
+  else throw new Error(msg);
+}
+
 async function captureIos(flags) {
   if (!simctlOk()) {
     // Common when xcode-select points at the CommandLineTools (no simctl): fall back to Xcode.app.
@@ -521,6 +542,7 @@ async function captureIos(flags) {
     const langArgs = iosLanguageArgs(flags);
     if (langArgs.length) console.log(`▸ launching in ${flags.language} (AppleLocale ${langArgs[3]})`);
     console.log(`▶︎ ${verb} for ${states.length} screens via "${flags.arg} <id>" on ${flags.bundle}…`);
+    const checked = [];
     for (const [i, st] of states.entries()) {
       spawnSync('xcrun', ['simctl', 'terminate', udid, flags.bundle], { stdio: 'ignore' });
       const launch = ['simctl', 'launch', udid, flags.bundle, ...langArgs, flags.arg, st];
@@ -554,6 +576,7 @@ async function captureIos(flags) {
       } else {
         await sleep(500); // let the pinned bar paint before the screenshot
         const out = path.join(outDir, `${st}${suffix}.png`);
+        let launchDifference = null;
         try {
           const waited = await awaitDrawn({ shoot, launchFrame, out, state: st, waitMs: readyWait * 1000 });
           if (waited > 0) {
@@ -564,14 +587,18 @@ async function captureIos(flags) {
             await sleep(500);
             shoot(out);
           }
+          launchDifference = await screenDifference(launchFrame, out);
         } finally {
           fs.rmSync(launchFrame, { force: true });
         }
         if (!posture) await uprightCapture(out, orientation);
         await stripAlpha(out);
         console.log(`   ✓ ${st}${suffix}.png`);
+        const facts = iosFacts({ udid, bundle: flags.bundle, language: flags.language, time: DEMO_TIME });
+        checked.push(await checkCaptured(out, { ...facts, state: st, launchDifference, launchLook: LAUNCH_LOOK }, flags));
       }
     }
+    refuseShots(checked, flags);
     console.log(`Done → ${outDir}`);
     } finally {
       // Always: a thrown build/launch error must not strand a booted sim with a faked status bar —
@@ -589,6 +616,8 @@ async function captureIos(flags) {
   sh('xcrun', ['simctl', 'io', 'booted', 'screenshot', out]);
   await stripAlpha(out);
   console.log(`✓ ${out}  (alpha stripped, store-ready)`);
+  const facts = iosFacts({ udid: 'booted', bundle: flags.bundle, language: flags.language, time: DEMO_TIME });
+  refuseShots([await checkCaptured(out, facts, flags)], flags);
 }
 
 /** Toggle Android SystemUI Demo Mode → a clean, Play-native status bar (Google's own convention):
@@ -645,12 +674,18 @@ async function captureAndroid(flags) {
     return;
   }
 
-  const grab = async (file) => {
+  const shoot = (file) => {
     const b = spawnSync('adb', ['exec-out', 'screencap', '-p'], { maxBuffer: 64 * 1024 * 1024 });
     if (b.status !== 0) throw new Error(`adb screencap failed: ${b.stderr}`);
     fs.writeFileSync(file, b.stdout);
+  };
+  const grab = async (file) => {
+    shoot(file);
     await stripAlpha(file);
   };
+  const pkg = flags.package || (flags.component ? String(flags.component).split('/')[0] : null);
+  const time = flags.time || DEMO_TIME;
+  const facts = () => androidFacts({ pkg, language: flags.language, time });
 
   // The display override goes on FIRST, demo mode second — and even that is not enough on its own.
   //
@@ -680,13 +715,35 @@ async function captureAndroid(flags) {
         await recordAndroidStates(states, suffix, outDir, flags);
       } else {
         console.log(`▶︎ Driving ${states.length} screens via "--es ${flags.arg} <id>" on ${flags.component}…`);
+        const readyWait = Number(flags['ready-wait'] ?? 30);
+        const checked = [];
         for (const st of states) {
+          // A cold start per state, as iOS terminates and relaunches: the state's extra is read where the app
+          // starts, and the frame just after the start is what "still the launch screen" is measured against.
+          spawnSync('adb', ['shell', 'am', 'force-stop', pkg], { stdio: 'ignore' });
           sh('adb', ['shell', 'am', 'start', '-n', flags.component, '--es', flags.arg, st]);
+          const launchFrame = path.join(outDir, `.launch-${st}.png`);
+          await sleep(400);
+          shoot(launchFrame);
           await sleep(settle * 1000);
           const out = path.join(outDir, `${st}${suffix}.png`);
-          await grab(out);
+          let launchDifference = null;
+          try {
+            const waited = await awaitDrawn({ shoot, launchFrame, out, state: st, waitMs: readyWait * 1000 });
+            if (waited > 0) {
+              console.log(`   … ${st} drew ${(waited / 1000).toFixed(1)} s after the settle`);
+              await sleep(2000);
+              shoot(out);
+            }
+            launchDifference = await screenDifference(launchFrame, out);
+          } finally {
+            fs.rmSync(launchFrame, { force: true });
+          }
+          await stripAlpha(out);
           console.log(`   ✓ ${st}${suffix}.png`);
+          checked.push(await checkCaptured(out, { ...facts(), state: st, launchDifference, launchLook: LAUNCH_LOOK }, flags));
         }
+        refuseShots(checked, flags);
       }
       console.log(`Done → ${outDir}`);
     } else {
@@ -698,6 +755,7 @@ async function captureAndroid(flags) {
       const out = path.join(outDir, `${flags.name || 'shot'}.png`);
       await grab(out);
       console.log(`✓ ${out}  (alpha stripped, store-ready)`);
+      refuseShots([await checkCaptured(out, facts(), flags)], flags);
     }
   } finally {
     // Teardown in reverse: leave demo mode while the override is still on, THEN restore the display.

@@ -26,4 +26,5 @@ export { TRANSITIONS, TRANSITION_IDS, transitionFor } from './transitions.mjs';
 export { EFFECTS, EFFECT_IDS, effectFor } from './effects.mjs';
 export { run } from './cli.mjs';
 export { captureBlankness, validateCapture, BLANK_COLOURS, BLANK_DOMINANCE } from './validate.mjs';
+export { CHECK_RULES, DEMO_TIME, checkShot, describeRefusals, factRefusals, textRefusals, readText, readFacts } from './checker.mjs';
 export { MiddlewareRefusal, normalizeMiddleware, runMiddleware } from './middleware.mjs';

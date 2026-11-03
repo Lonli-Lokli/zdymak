@@ -15,7 +15,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'zdymak-cli-'));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 const zdymak = (args, opts = {}) =>
-  spawnSync(process.execPath, [bin, ...args], { encoding: 'utf8', cwd: tmp, ...opts });
+  spawnSync(process.execPath, [bin, ...args], { encoding: 'utf8', cwd: tmp, env: { ...process.env, ZDYMAK_NO_OCR: '1' }, ...opts });
 
 /** A flat single-colour screen: what an app that drew nothing photographs as. */
 function blankPng(file) {
@@ -59,7 +59,7 @@ test('check fails a blank capture and says why', () => {
 test('check searches a folder and reports each file; one blank fails the run', () => {
   const r = zdymak(['check', shots]);
   assert.equal(r.status, 1);
-  assert.match(r.stdout, /2 capture\(s\)/);
+  assert.match(r.stdout, /2 shot\(s\)/);
   assert.match(r.stdout, /✓ .*real\.png/);
   assert.match(r.stdout, /✗ .*blank\.png/);
 });
