@@ -1,0 +1,48 @@
+{
+  "unreadable.png": [
+    "unreadable"
+  ],
+  "blank.png": [
+    "blank"
+  ],
+  "launch.png": [
+    "launch"
+  ],
+  "motion.png": [
+    "motion"
+  ],
+  "dialog-not-responding.png": [
+    "dialog"
+  ],
+  "dialog-crash.png": [
+    "dialog"
+  ],
+  "keyboard.png": [
+    "keyboard"
+  ],
+  "wrong-app-home.png": [
+    "wrong-app"
+  ],
+  "wrong-app-ios-quit.png": [
+    "wrong-app"
+  ],
+  "status-bar-android.png": [
+    "status-bar"
+  ],
+  "status-bar-ios.png": [
+    "status-bar"
+  ],
+  "language.png": [
+    "language"
+  ],
+  "letterbox-tablet.png": [
+    "letterbox"
+  ],
+  "letterbox-sideways.png": [
+    "letterbox"
+  ],
+  "duplicate-1.png": [],
+  "duplicate-2.png": [
+    "duplicate"
+  ]
+}
