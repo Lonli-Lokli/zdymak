@@ -1,7 +1,8 @@
 // Writes the checker's fixture folders: scripts/fixtures/bad-shots (one shot per refusal, each with the device facts a
 // capture would have kept beside it, and expected.json naming the rule each shot must be refused for) and
-// scripts/fixtures/good-shots (shots no rule may refuse). The pictures are drawn, not captured, so they carry no app.
-//   node scripts/make-bad-shots.mjs        (then: npm run check:checker)
+// scripts/fixtures/good-shots (shots no rule may refuse), and scripts/fixtures/launch (the launch check's frames). The
+// pictures are drawn, not captured, so they carry no app.
+//   node scripts/make-bad-shots.mjs        (then: npm run check:checker and npm run check:captions)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -122,4 +123,34 @@ col.getContext('2d').fillStyle = '#f4f1ea';
 col.getContext('2d').fillRect(0, 0, 480, 360);
 col.getContext('2d').drawImage(scene(280, 360, 104), 100, 0);
 ok('tablet-readable-width', col);
+// The launch check's frames (scripts/launch-look.test.mjs), at a 13-inch tablet's size: one launch screen twice, its
+// mark moved between the two as a launch animation moves it, and a result card a scene can show by its first frame.
+const LAUNCH = path.join(here, 'fixtures', 'launch');
+fs.mkdirSync(LAUNCH, { recursive: true });
+const [LW, LH] = [2064, 2752];
+const launchScreen = (dy) => {
+  const c = createCanvas(LW, LH);
+  const g = c.getContext('2d');
+  g.fillStyle = '#EDE1CC';
+  g.fillRect(0, 0, LW, LH);
+  g.fillStyle = '#16343B';
+  g.beginPath(); g.arc(LW / 2, LH / 2, 180, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#1A9E8C';
+  g.fillRect(LW / 2 - 30, LH / 2 - 420 + dy, 60, 180);
+  return c;
+};
+save(launchScreen(0), path.join(LAUNCH, 'launch-1.png'));
+save(launchScreen(40), path.join(LAUNCH, 'launch-2.png'));
+const card = createCanvas(LW, LH);
+const cg = card.getContext('2d');
+cg.fillStyle = '#EDE1CC';
+cg.fillRect(0, 0, LW, LH);
+cg.fillStyle = '#F6EFE3';
+cg.fillRect(232, 520, 1600, 1700);
+cg.fillStyle = '#16343B';
+cg.fillRect(332, 640, 1400, 160);
+for (let r = 0; r < 4; r++) cg.fillRect(332, 920 + r * 260, 900 - r * 150, 90);
+cg.fillStyle = '#1A9E8C';
+cg.fillRect(332, 1960, 1400, 160);
+save(card, path.join(LAUNCH, 'drawn-at-once.png'));
 console.log(`wrote ${Object.keys(expected).length} bad shots to ${path.relative(process.cwd(), BAD)} and 4 good to ${path.relative(process.cwd(), GOOD)}`);
