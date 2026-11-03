@@ -150,9 +150,16 @@ There's also a single-shot mode (`--name welcome`) that snaps whatever is curren
 **iOS never photographs a launch screen.** After `--settle` (seconds, default `4`) an iOS still is compared
 with the screen as it was 0.4 s after the launch; while less than 4% of it has changed, the app has not
 drawn the state yet, and zdymak waits up to `--ready-wait` more seconds (default `30`), lets the screen come
-to rest and shoots then, or fails naming the state. The first launch after an install compiles the app's
-shaders, and on a loaded machine that outlasted an 18 s settle: the shot went to the store as a picture of
-the launch screen, which is not blank, so nothing else caught it.
+to rest and shoots then. The first launch after an install compiles the app's shaders, and on a loaded
+machine that outlasted an 18 s settle: the shot went to the store as a picture of the launch screen, which
+is not blank, so nothing else caught it.
+
+A scene that draws in under 0.4 s is already on that first frame, so an unchanged screen alone does not mean
+a launch screen. The run learns what its launch screen looks like from the states that left it: a first frame
+that looks like none of those is the scene drawn at once, shot without the wait and measured against the
+launch screen instead. A state that never changed is judged when every state is shot, so the order of the
+states does not matter: the capture fails naming it when its first frame looks like a launch screen the run
+saw give way, or when the run saw none. Android stills are checked the same way.
 
 ### Composing the shot: `tilt`, `deviceScale`, `deviceY`
 

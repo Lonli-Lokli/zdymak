@@ -223,25 +223,78 @@ export const LAUNCH_LOOK = 0.04;
 /**
  * Wait until the screen no longer looks as it did just after the launch, so a state is never photographed
  * on its launch screen. A fixed `--settle` cannot promise that: the first launch after an install compiles
- * the app's shaders, and on a loaded machine that took longer than Niva's 18 s settle, so its store shot
- * "A daily field of logic." went to App Store Connect as a picture of the launch screen (2026-10-13), and
- * a launch screen is not blank, so nothing downstream noticed. `shoot(file)` photographs the screen.
+ * the app's shaders, and on a loaded machine that took longer than an 18 s settle, so one app's store shot
+ * went to App Store Connect as a picture of the launch screen (2026-10-13), and a launch screen is not blank,
+ * so nothing downstream noticed. `shoot(file)` photographs the screen.
+ *
+ * The frame just after the launch is not always the launch screen: a scene that draws in under 0.4 s is already
+ * on it, and then "unchanged since the launch" is the scene at rest. So `known` holds the launch screens this run
+ * has seen give way to a scene ([gaveWay]); a launch frame that looks like none of them, once there is one, is
+ * the scene drawn at once and is shot without waiting. A state that never leaves its launch frame is not refused
+ * here: [launchDifferences] judges it once the run has shot every state, against every launch screen it learnt.
+ * Returns how long the state took to draw after the settle, and whether it was drawn by its first frame.
  */
-async function awaitDrawn({ shoot, launchFrame, out, state, waitMs }) {
+async function awaitDrawn({ shoot, launchFrame, out, waitMs, known }) {
   const t0 = Date.now();
+  shoot(out);
+  if (known.length && !(await isLaunchScreen(launchFrame, known))) return { waited: 0, atOnce: true };
   for (;;) {
-    shoot(out);
-    const moved = await screenDifference(launchFrame, out);
-    if (moved >= LAUNCH_LOOK) return Date.now() - t0;
-    if (Date.now() - t0 >= waitMs) {
-      throw new Error(
-        `${state}: after the settle and ${Math.round(waitMs / 1000)} s more the screen still looks as it did at launch `
-        + `(${(moved * 100).toFixed(1)}% of it changed), so the app has not drawn this state. It is often the first launch `
-        + 'after an install compiling its shaders: run the capture again, or raise --ready-wait (seconds).',
-      );
-    }
+    if (await screenDifference(launchFrame, out) >= LAUNCH_LOOK) return { waited: Date.now() - t0, atOnce: false };
+    if (Date.now() - t0 >= waitMs) return { waited: 0, atOnce: false };
     await sleep(1000);
+    shoot(out);
   }
+}
+
+/** Whether `frame` looks like one of `screens` (under [LAUNCH_LOOK] from it); with none, it may be one, so yes. */
+async function isLaunchScreen(frame, screens) {
+  for (const s of screens) if (await screenDifference(s, frame) < LAUNCH_LOOK) return true;
+  return screens.length === 0;
+}
+
+/**
+ * The launch frames of a run's states whose shot changed from them: the launch screens it saw give way.
+ * Each state is `{ state, frame, moved, atOnce }`: its launch frame, the share of its shot that differs from that
+ * frame, and whether [awaitDrawn] took the frame for the scene itself (such a frame is never a launch screen).
+ */
+export function gaveWay(states) {
+  return states.filter((s) => !s.atOnce && s.moved >= LAUNCH_LOOK).map((s) => s.frame);
+}
+
+/**
+ * The launch check of a whole run, made once every state is shot, so the order of the states does not matter.
+ * A state whose shot changed from its launch frame is measured against that frame, as before. A state whose shot
+ * did not is the launch screen that stayed when its frame looks like a launch screen the run saw give way, or
+ * when the run saw none: it throws, naming the state. Otherwise its frame was already the scene, and it is
+ * measured against the nearest of those launch screens. Returns each state's `launchDifference` for the checker.
+ * Limits: a run in which no state leaves a launch screen learns none, so every unchanged state is refused, as before;
+ * and a first state drawn at once that then moves by [LAUNCH_LOOK] is taken for a launch screen that gave way.
+ */
+export async function launchDifferences(states, waitMs) {
+  const known = gaveWay(states);
+  const differences = [];
+  for (const s of states) {
+    if (await isLaunchScreen(s.frame, known)) {
+      if (s.moved < LAUNCH_LOOK) {
+        throw new Error(
+          `${s.state}: after the settle and ${Math.round(waitMs / 1000)} s more the screen still looks as it did at launch `
+          + `(${(s.moved * 100).toFixed(1)}% of it changed), so the app has not drawn this state. It is often the first launch `
+          + 'after an install compiling its shaders: run the capture again, or raise --ready-wait (seconds).',
+        );
+      }
+      differences.push(s.moved);
+    } else {
+      let least = 1;
+      for (const k of known) least = Math.min(least, await screenDifference(k, s.frame));
+      differences.push(least);
+    }
+  }
+  return differences;
+}
+
+/** Remove the launch frames a run kept in `outDir` for [launchDifferences]. */
+function dropLaunchFrames(outDir) {
+  for (const f of fs.readdirSync(outDir)) if (f.startsWith('.launch-') && f.endsWith('.png')) fs.rmSync(path.join(outDir, f), { force: true });
 }
 
 /**
@@ -514,6 +567,8 @@ async function captureIos(flags) {
     const shoot = (file) => (posture ? shootPosture(udid, posture, file) : sh('xcrun', ['simctl', 'io', udid, 'screenshot', file]));
     // How long past the settle a state may take to leave its launch screen before the capture fails.
     const readyWait = Number(flags['ready-wait'] ?? 30);
+    // Each still state's launch frame, kept to the run's end (see launchDifferences).
+    const launches = [];
     try {
     let app = '';
     if (flags.build !== undefined) {
@@ -563,6 +618,7 @@ async function captureIos(flags) {
     if (langArgs.length) console.log(`▸ launching in ${flags.language} (AppleLocale ${langArgs[3]})`);
     console.log(`▶︎ ${verb} for ${states.length} screens via "${flags.arg} <id>" on ${flags.bundle}…`);
     const checked = [];
+    const shot = [];
     for (const [i, st] of states.entries()) {
       spawnSync('xcrun', ['simctl', 'terminate', udid, flags.bundle], { stdio: 'ignore' });
       const launch = ['simctl', 'launch', udid, flags.bundle, ...langArgs, flags.arg, st];
@@ -596,30 +652,28 @@ async function captureIos(flags) {
       } else {
         await sleep(500); // let the pinned bar paint before the screenshot
         const out = path.join(outDir, `${st}${suffix}.png`);
-        let launchDifference = null;
-        let motion = null;
-        try {
-          const waited = await awaitDrawn({ shoot, launchFrame, out, state: st, waitMs: readyWait * 1000 });
-          if (waited > 0) {
-            // It drew only now: let it come to rest, then take the shot again.
-            console.log(`   … ${st} drew ${(waited / 1000).toFixed(1)} s after the settle`);
-            await settleFrame(udid, outDir);
-            pinStatusBar();
-            await sleep(500);
-            shoot(out);
-          }
-          launchDifference = await screenDifference(launchFrame, out);
-          motion = await motionAfter(shoot, out);
-        } finally {
-          fs.rmSync(launchFrame, { force: true });
+        const drawn = await awaitDrawn({ shoot, launchFrame, out, waitMs: readyWait * 1000, known: gaveWay(launches) });
+        if (drawn.atOnce) console.log(`   … ${st} was drawn by its first frame`);
+        if (drawn.waited > 0) {
+          // It drew only now: let it come to rest, then take the shot again.
+          console.log(`   … ${st} drew ${(drawn.waited / 1000).toFixed(1)} s after the settle`);
+          await settleFrame(udid, outDir);
+          pinStatusBar();
+          await sleep(500);
+          shoot(out);
         }
+        launches.push({ state: st, frame: launchFrame, moved: await screenDifference(launchFrame, out), atOnce: drawn.atOnce });
+        const motion = await motionAfter(shoot, out);
         if (!posture) await uprightCapture(out, orientation);
         await stripAlpha(out);
         console.log(`   ✓ ${st}${suffix}.png`);
         const facts = iosFacts({ udid, bundle: flags.bundle, language: flags.language, time: DEMO_TIME });
-        checked.push(await checkCaptured(out, { ...facts, state: st, launchDifference, launchLook: LAUNCH_LOOK, motion, motionAllowed: motionAllowance(flags.motion, st) }, flags));
+        shot.push({ out, facts: { ...facts, state: st, launchLook: LAUNCH_LOOK, motion, motionAllowed: motionAllowance(flags.motion, st) } });
       }
     }
+    // The launch check is the run's, once every state is shot: what the launch screen looks like is learnt from them.
+    const differences = await launchDifferences(launches, readyWait * 1000);
+    for (const [k, s] of shot.entries()) checked.push(await checkCaptured(s.out, { ...s.facts, launchDifference: differences[k] }, flags));
     await refuseShots(checked, flags);
     console.log(`Done → ${outDir}`);
     } finally {
@@ -629,6 +683,7 @@ async function captureIos(flags) {
       if (started && orientation !== 'portrait') { try { await setSimOrientation(udid, 'portrait'); } catch { /* teardown */ } }
       if (started && posture) leavePosture(udid);
       teardownIosSim(sim, flags);
+      dropLaunchFrames(outDir);
     }
     return; // the workflow is DONE — falling through would try to snap a sim that was just torn down
   }
@@ -764,6 +819,8 @@ async function captureAndroid(flags) {
         console.log(`▶︎ Driving ${states.length} screens via "--es ${flags.arg} <id>" on ${flags.component}…`);
         const readyWait = Number(flags['ready-wait'] ?? 30);
         const checked = [];
+        const launches = [];
+        const shot = [];
         for (const st of states) {
           // A cold start per state, as iOS terminates and relaunches: the state's extra is read where the app
           // starts, and the frame just after the start is what "still the launch screen" is measured against.
@@ -774,25 +831,22 @@ async function captureAndroid(flags) {
           shoot(launchFrame);
           await sleep(settle * 1000);
           const out = path.join(outDir, `${st}${suffix}.png`);
-          let launchDifference = null;
-          let motion = null;
-          try {
-            const waited = await awaitDrawn({ shoot, launchFrame, out, state: st, waitMs: readyWait * 1000 });
-            if (waited > 0) {
-              console.log(`   … ${st} drew ${(waited / 1000).toFixed(1)} s after the settle`);
-              await sleep(2000);
-              shoot(out);
-            }
-            launchDifference = await screenDifference(launchFrame, out);
-            motion = await motionAfter(shoot, out);
-          } finally {
-            fs.rmSync(launchFrame, { force: true });
+          const drawn = await awaitDrawn({ shoot, launchFrame, out, waitMs: readyWait * 1000, known: gaveWay(launches) });
+          if (drawn.atOnce) console.log(`   … ${st} was drawn by its first frame`);
+          if (drawn.waited > 0) {
+            console.log(`   … ${st} drew ${(drawn.waited / 1000).toFixed(1)} s after the settle`);
+            await sleep(2000);
+            shoot(out);
           }
+          launches.push({ state: st, frame: launchFrame, moved: await screenDifference(launchFrame, out), atOnce: drawn.atOnce });
+          const motion = await motionAfter(shoot, out);
           await stripAlpha(out);
           checkShape(out);
           console.log(`   ✓ ${st}${suffix}.png`);
-          checked.push(await checkCaptured(out, { ...facts(), state: st, launchDifference, launchLook: LAUNCH_LOOK, motion, motionAllowed: motionAllowance(flags.motion, st) }, flags));
+          shot.push({ out, facts: { ...facts(), state: st, launchLook: LAUNCH_LOOK, motion, motionAllowed: motionAllowance(flags.motion, st) } });
         }
+        const differences = await launchDifferences(launches, readyWait * 1000);
+        for (const [k, s] of shot.entries()) checked.push(await checkCaptured(s.out, { ...s.facts, launchDifference: differences[k] }, flags));
         await refuseShots(checked, flags);
       }
       console.log(`Done → ${outDir}`);
@@ -811,6 +865,7 @@ async function captureAndroid(flags) {
       await refuseShots([await checkCaptured(out, { ...facts(), motion, motionAllowed: motionAllowance(flags.motion, scene) }, flags)], flags);
     }
   } finally {
+    dropLaunchFrames(outDir);
     // Teardown in reverse: leave demo mode while the override is still on, THEN restore the display.
     // Resetting size first restarts SystemUI and takes demo mode with it, so the `exit` broadcast
     // lands on a bar that never entered — harmless today, but it leaves the emulator's demo state
