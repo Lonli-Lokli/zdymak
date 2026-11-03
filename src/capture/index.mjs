@@ -25,7 +25,9 @@ import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { rgbPngBuffer } from '../png.mjs';
 import { captureWeb } from './web.mjs';
 import { iosBuildArgs } from './xcode.mjs';
-import { DEMO_TIME, androidFacts, checkShot, describeRefusals, iosFacts, writeFacts } from '../checker.mjs';
+import {
+  DEMO_TIME, MOTION_GAP_MS, androidFacts, checkSet, checkShot, describeRefusals, iosFacts, motionAllowance, writeFacts,
+} from '../checker.mjs';
 import { displays, enterPosture, leavePosture, postureDisplay, postureOf, shootPosture } from './fold.mjs';
 import { androidPostureOf, enterAndroidPosture, leaveAndroidPosture, pngFromScreencap, shapeMatches, turnAndroid } from './android-fold.mjs';
 
@@ -242,6 +244,22 @@ async function awaitDrawn({ shoot, launchFrame, out, state, waitMs }) {
   }
 }
 
+/**
+ * Photograph the screen again [MOTION_GAP_MS] after a shot and return the share of it that changed: the checker's
+ * `motion`, refused over the scene's allowance (`--motion`). A shot taken mid-transition, under a toast or while a
+ * scroll comes to rest shows here, where the launch check (one look against the launch frame) cannot see it.
+ */
+async function motionAfter(shoot, out) {
+  const again = path.join(path.dirname(out), `.motion-${path.basename(out)}`);
+  try {
+    await sleep(MOTION_GAP_MS);
+    await shoot(again);
+    return await screenDifference(out, again);
+  } finally {
+    fs.rmSync(again, { force: true });
+  }
+}
+
 async function setSimOrientation(udid, orientation) {
   const item = ORIENTATION_MENU[orientation];
   if (!item) {
@@ -431,8 +449,9 @@ async function checkCaptured(file, facts, flags) {
   return r;
 }
 
-/** Throw the checker's refusals, one line per shot and reason; `--force` keeps the shots and only warns. */
-function refuseShots(results, flags) {
+/** Throw the checker's refusals (each shot's, and the set's: two scenes the same picture), one line per shot and reason; `--force` keeps the shots and only warns. */
+async function refuseShots(results, flags) {
+  await checkSet(results);
   const lines = describeRefusals(results);
   if (!lines.length) return;
   const msg = `the checker refused ${results.filter((r) => r.refusals.length).length} shot(s):\n  ${lines.join('\n  ')}`;
@@ -578,6 +597,7 @@ async function captureIos(flags) {
         await sleep(500); // let the pinned bar paint before the screenshot
         const out = path.join(outDir, `${st}${suffix}.png`);
         let launchDifference = null;
+        let motion = null;
         try {
           const waited = await awaitDrawn({ shoot, launchFrame, out, state: st, waitMs: readyWait * 1000 });
           if (waited > 0) {
@@ -589,6 +609,7 @@ async function captureIos(flags) {
             shoot(out);
           }
           launchDifference = await screenDifference(launchFrame, out);
+          motion = await motionAfter(shoot, out);
         } finally {
           fs.rmSync(launchFrame, { force: true });
         }
@@ -596,10 +617,10 @@ async function captureIos(flags) {
         await stripAlpha(out);
         console.log(`   ✓ ${st}${suffix}.png`);
         const facts = iosFacts({ udid, bundle: flags.bundle, language: flags.language, time: DEMO_TIME });
-        checked.push(await checkCaptured(out, { ...facts, state: st, launchDifference, launchLook: LAUNCH_LOOK }, flags));
+        checked.push(await checkCaptured(out, { ...facts, state: st, launchDifference, launchLook: LAUNCH_LOOK, motion, motionAllowed: motionAllowance(flags.motion, st) }, flags));
       }
     }
-    refuseShots(checked, flags);
+    await refuseShots(checked, flags);
     console.log(`Done → ${outDir}`);
     } finally {
       // Always: a thrown build/launch error must not strand a booted sim with a faked status bar —
@@ -614,11 +635,14 @@ async function captureIos(flags) {
 
   // Single snapshot of whatever is on the booted sim.
   const out = path.join(outDir, `${flags.name || 'shot'}.png`);
-  sh('xcrun', ['simctl', 'io', 'booted', 'screenshot', out]);
+  const snap = (file) => sh('xcrun', ['simctl', 'io', 'booted', 'screenshot', file]);
+  snap(out);
+  const motion = await motionAfter(snap, out);
   await stripAlpha(out);
   console.log(`✓ ${out}  (alpha stripped, store-ready)`);
   const facts = iosFacts({ udid: 'booted', bundle: flags.bundle, language: flags.language, time: DEMO_TIME });
-  refuseShots([await checkCaptured(out, facts, flags)], flags);
+  const scene = flags.name || 'shot';
+  await refuseShots([await checkCaptured(out, { ...facts, motion, motionAllowed: motionAllowance(flags.motion, scene) }, flags)], flags);
 }
 
 /** Toggle Android SystemUI Demo Mode → a clean, Play-native status bar (Google's own convention):
@@ -751,6 +775,7 @@ async function captureAndroid(flags) {
           await sleep(settle * 1000);
           const out = path.join(outDir, `${st}${suffix}.png`);
           let launchDifference = null;
+          let motion = null;
           try {
             const waited = await awaitDrawn({ shoot, launchFrame, out, state: st, waitMs: readyWait * 1000 });
             if (waited > 0) {
@@ -759,15 +784,16 @@ async function captureAndroid(flags) {
               shoot(out);
             }
             launchDifference = await screenDifference(launchFrame, out);
+            motion = await motionAfter(shoot, out);
           } finally {
             fs.rmSync(launchFrame, { force: true });
           }
           await stripAlpha(out);
           checkShape(out);
           console.log(`   ✓ ${st}${suffix}.png`);
-          checked.push(await checkCaptured(out, { ...facts(), state: st, launchDifference, launchLook: LAUNCH_LOOK }, flags));
+          checked.push(await checkCaptured(out, { ...facts(), state: st, launchDifference, launchLook: LAUNCH_LOOK, motion, motionAllowed: motionAllowance(flags.motion, st) }, flags));
         }
-        refuseShots(checked, flags);
+        await refuseShots(checked, flags);
       }
       console.log(`Done → ${outDir}`);
     } else {
@@ -778,9 +804,11 @@ async function captureAndroid(flags) {
       await sleep(Number(flags['bar-settle'] ?? 1500));
       const out = path.join(outDir, `${flags.name || 'shot'}.png`);
       await grab(out);
+      const motion = await motionAfter(grab, out);
       checkShape(out);
       console.log(`✓ ${out}  (alpha stripped, store-ready)`);
-      refuseShots([await checkCaptured(out, facts(), flags)], flags);
+      const scene = flags.name || 'shot';
+      await refuseShots([await checkCaptured(out, { ...facts(), motion, motionAllowed: motionAllowance(flags.motion, scene) }, flags)], flags);
     }
   } finally {
     // Teardown in reverse: leave demo mode while the override is still on, THEN restore the display.

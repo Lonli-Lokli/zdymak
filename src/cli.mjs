@@ -22,7 +22,7 @@ import { VIDEO_TARGETS, IMAGE_TARGETS, videoTarget } from './specs.mjs';
 import { runCapture } from './capture/index.mjs';
 import { resolveVideo, resolveReel, paletteAt } from './destinations.mjs';
 import { validateVideo, validateImage } from './validate.mjs';
-import { checkShot } from './checker.mjs';
+import { checkSet, checkShot } from './checker.mjs';
 import { normalizeMiddleware, runMiddleware } from './middleware.mjs';
 import { pathToFileURL } from 'node:url';
 
@@ -310,7 +310,8 @@ function pngsIn(paths) {
 /**
  * `zdymak check <png|dir>…` — may a store show each shot? The checker every capture runs (checker.mjs): blank, the
  * launch screen, a system dialog, the on-screen keyboard, the wrong app or the home screen, a status bar not in demo
- * mode, another language than the set's. What the device said at capture time is read from the facts kept beside each
+ * mode, another language than the set's, letterbox bars, a screen still moving after the shot (from the facts kept at
+ * capture), and two scenes of one folder at one size that are the same picture. What the device said at capture time is read from the facts kept beside each
  * shot; the picture is read again here. `--language <tag>` names the set's language when no facts carry it, `--time`
  * the pinned clock (9:41), `--no-text` skips reading the picture's words. Exits 1 on any refusal; `--force` reports
  * but exits 0.
@@ -326,6 +327,7 @@ async function cmdCheck(flags, rest) {
       text: flags['no-text'] === undefined,
     }));
   }
+  await checkSet(results);
   const bad = results.filter((r) => r.refusals.length);
   if (flags.json) {
     console.log(JSON.stringify(results, null, 2));
@@ -387,6 +389,7 @@ Usage:
   zdymak capture  --platform ios --bundle <id> --arg <handle> --states <a,b,c> [--suffix -light]
                   [--build --project <.xcodeproj> --scheme <name> [--configuration <name>] [--derived-data <dir>]] [--device <sim>] [--out <dir>] [--clean] [--keep]
                   [--orientation portrait|landscape-left|landscape-right]
+                  [--motion <share>|<state>=<share>,…]   # how much a scene may still move a second after its shot (default 0.01)
                   [--posture closed|closed-turned|closed-turned-right|open|open-upright|half-book|half-laptop [--hinge <deg>]]
                   [--language <tag> [--applelocale <id>]]
                   # full workflow: start the app, drive each screen by a launch handle, snap store-ready PNGs
@@ -405,6 +408,7 @@ Usage:
                   # must have the posture's shape, so an app that did not turn is an error, not a portrait set.
   zdymak capture  --platform android --component <pkg/act> --arg <extra> --states <a,b,c> [--out <dir>]
                   [--posture closed|half-open|open [--hinge <deg>]] [--orientation portrait|landscape]
+                  [--motion <share>|<state>=<share>,…]
                   # --posture folds a foldable EMULATOR (a book fold or a flip) through its console's hinge
                   # sensor and waits for the device state it names (CLOSED, HALF_OPENED, OPENED), read with
                   # cmd device_state (Android 14+); a real phone is refused. --orientation turns the screen with
