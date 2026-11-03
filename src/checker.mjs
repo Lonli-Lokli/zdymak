@@ -20,19 +20,22 @@
  * no text reader off macOS) is a `note`, never a refusal: a false refusal blocks a release on a correct file.
  */
 import path from 'node:path';
+import { loadImage, createCanvas } from '@napi-rs/canvas';
 import { captureBlankness, BLANK_COLOURS, BLANK_DOMINANCE } from './validate.mjs';
-import { DEMO_TIME, factRefusals, primary, readFacts } from './checker-device.mjs';
+import { DEMO_TIME, MOTION_STILL, factRefusals, primary, readFacts } from './checker-device.mjs';
 import { readText } from './ocr.mjs';
 
 export { OCR_CONFIDENCE, readText } from './ocr.mjs';
 
 export {
-  DEMO_TIME, androidFacts, factRefusals, factsPath, iosFacts, parseAndroidFocus, parseAppLocales, parseIosRunning,
+  DEMO_TIME, MOTION_GAP_MS, MOTION_STILL, androidFacts, factRefusals, factsPath, iosFacts, parseAndroidFocus, parseAppLocales, parseIosRunning,
   parseKeyboardShown, readFacts, writeFacts,
 } from './checker-device.mjs';
 
 /** The rules, in the order a report lists them. */
-export const CHECK_RULES = ['unreadable', 'blank', 'launch', 'dialog', 'keyboard', 'wrong-app', 'status-bar', 'language'];
+export const CHECK_RULES = [
+  'unreadable', 'blank', 'launch', 'motion', 'dialog', 'keyboard', 'wrong-app', 'status-bar', 'language', 'letterbox', 'duplicate',
+];
 
 // ---------------------------------------------------------------- the picture's words
 
@@ -148,6 +151,127 @@ export function textRefusals(lines, { language, time = DEMO_TIME } = {}) {
   return out;
 }
 
+// ---------------------------------------------------------------- the picture's pixels
+
+/** Each letterbox bar is at least this share of the side it stands on. */
+export const LETTERBOX_BAR = 0.05;
+/** The box between the bars is phone-shaped: its long side at least this many times its short side ... */
+export const LETTERBOX_BOX = 1.6;
+/** ... in a shot that is not itself that shape (a tablet, a Chromebook window, a phone turned the other way). */
+export const LETTERBOX_SHOT = 1.5;
+/** How far a bar's pixels may stray from its colour, per channel (compression, dithering). */
+const BAR_TOLERANCE = 8;
+
+const near = (d, i, c) => Math.abs(d[i] - c[0]) <= BAR_TOLERANCE && Math.abs(d[i + 1] - c[1]) <= BAR_TOLERANCE && Math.abs(d[i + 2] - c[2]) <= BAR_TOLERANCE;
+
+/**
+ * The bars a phone-sized app leaves when the system draws it inside a larger screen or window (Android's letterbox,
+ * an iPhone-only app on an iPad): `{ sides, bars: [a, b], box }` or null. Pure, on RGBA pixels. A bar is a run of
+ * whole columns (or rows) of one colour from the edge; the status and navigation strips (top and bottom
+ * [STATUS_STRIP]) are left out, since the system draws them across the bars. Both bars must be wide, of one colour,
+ * and leave a phone-shaped box in a shot that is not phone-shaped: a tablet layout that keeps a readable width
+ * on a plain ground is wider than that, and a phone's own shot never qualifies.
+ */
+export function letterboxOf({ data, width: w, height: h }) {
+  const strip = Math.ceil(h * STATUS_STRIP);
+  const colour = (x, y) => { const i = (y * w + x) * 4; return [data[i], data[i + 1], data[i + 2]]; };
+  const column = (x, c) => { for (let y = strip; y < h - strip; y += 2) if (!near(data, (y * w + x) * 4, c)) return false; return true; };
+  const row = (y, c) => { for (let x = 0; x < w; x += 2) if (!near(data, (y * w + x) * 4, c)) return false; return true; };
+  const run = (from, step, end, fits, at) => {
+    const c = at(from);
+    let n = 0;
+    for (let i = from; i !== end && fits(i, c); i += step) n++;
+    return { n, c };
+  };
+  const same = (a, b) => a.every((v, k) => Math.abs(v - b[k]) <= BAR_TOLERANCE);
+  // Bars on the left and right: a phone held upright inside a wider screen.
+  const l = run(0, 1, w, column, (x) => colour(x, strip));
+  const r = run(w - 1, -1, -1, column, (x) => colour(x, strip));
+  if (l.n >= w * LETTERBOX_BAR && r.n >= w * LETTERBOX_BAR && same(l.c, r.c) && l.n + r.n < w) {
+    const box = w - l.n - r.n;
+    if (h / box >= LETTERBOX_BOX && h / w < LETTERBOX_SHOT) return { sides: 'left and right', bars: [l.n, r.n], box: [box, h], colour: l.c };
+  }
+  // Bars above and below: a phone on its side inside a taller screen. The strips count as part of the bars.
+  const t = run(strip, 1, h, row, (y) => colour(0, y));
+  const b = run(h - 1 - strip, -1, -1, row, (y) => colour(0, y));
+  const top = t.n ? t.n + strip : 0;
+  const bottom = b.n ? b.n + strip : 0;
+  if (top >= h * LETTERBOX_BAR && bottom >= h * LETTERBOX_BAR && same(t.c, b.c) && top + bottom < h) {
+    const box = h - top - bottom;
+    if (w / box >= LETTERBOX_BOX && w / h < LETTERBOX_SHOT) return { sides: 'top and bottom', bars: [top, bottom], box: [w, box], colour: t.c };
+  }
+  return null;
+}
+
+/** A shot's RGBA pixels, or null when it cannot be decoded. */
+export async function pixelsOf(file) {
+  let img;
+  try { img = await loadImage(file); } catch { return null; }
+  const ctx = createCanvas(img.width, img.height).getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  return { width: img.width, height: img.height, data: ctx.getImageData(0, 0, img.width, img.height).data };
+}
+
+/** Under this share of changed pixels (sampled as the launch check does), two scenes are the same picture. */
+export const DUPLICATE_LOOK = 0.005;
+
+/** Every 4th pixel's colour, the sample two shots are compared on. */
+function sampleOf({ data, width: w, height: h }) {
+  const out = [];
+  for (let y = 0; y < h; y += 4) for (let x = 0; x < w; x += 4) { const i = (y * w + x) * 4; out.push(data[i], data[i + 1], data[i + 2]); }
+  return Uint8Array.from(out);
+}
+
+/** The share of sampled pixels that differ by more than 32 on any channel, as the launch check measures. */
+export function sampleDifference(a, b) {
+  let moved = 0;
+  for (let i = 0; i < a.length; i += 3) {
+    if (Math.abs(a[i] - b[i]) > 32 || Math.abs(a[i + 1] - b[i + 1]) > 32 || Math.abs(a[i + 2] - b[i + 2]) > 32) moved++;
+  }
+  return a.length ? moved / (a.length / 3) : 0;
+}
+
+/**
+ * The checks across a set: two scenes of one set that are the same picture. A set is the shots of one folder at one
+ * size (one device, one language, one posture); the later of two refuses, naming the earlier. Adds the refusals to
+ * `results` (checkShot's) in place and returns them.
+ */
+export async function checkSet(results) {
+  const sets = new Map();
+  for (const r of results) {
+    if (r.unreadable) continue;
+    const px = await pixelsOf(r.file);
+    if (!px) continue;
+    const key = `${path.dirname(r.file)}|${px.width}x${px.height}`;
+    const sample = sampleOf(px);
+    const seen = sets.get(key) || [];
+    const twin = seen.find((s) => sampleDifference(s.sample, sample) < DUPLICATE_LOOK);
+    if (twin) {
+      const d = sampleDifference(twin.sample, sample);
+      r.refusals.push({ rule: 'duplicate', reason: `the same picture as ${path.basename(twin.file)} (${(d * 100).toFixed(2)}% differs): two scenes of one set must show different things` });
+    } else seen.push({ file: r.file, sample });
+    sets.set(key, seen);
+  }
+  return results;
+}
+
+/**
+ * A scene's motion allowance from `--motion`: one share for every scene ("0.05"), or per scene
+ * ("clock=0.2,board=0.05", a bare share among them the default). Scenes not named keep [MOTION_STILL].
+ */
+export function motionAllowance(spec, state) {
+  if (spec === undefined || spec === null || spec === true || spec === '') return MOTION_STILL;
+  let fallback = MOTION_STILL;
+  for (const part of String(spec).split(',').map((s) => s.trim()).filter(Boolean)) {
+    const m = /^(?:([^=]+)=)?([\d.]+)$/.exec(part);
+    const n = m ? Number(m[2]) : NaN;
+    if (!m || !(n >= 0 && n <= 1)) throw new Error(`--motion: "${part}" is not a share from 0 to 1, or <state>=<share>`);
+    if (!m[1]) fallback = n;
+    else if (m[1].trim() === state) return n;
+  }
+  return fallback;
+}
+
 // ---------------------------------------------------------------- one shot, a folder
 
 /**
@@ -162,6 +286,14 @@ export async function checkShot(file, { facts, language, time, text = true } = {
   const blank = m.colours < BLANK_COLOURS && m.dominant > BLANK_DOMINANCE;
   if (blank) {
     refusals.push({ rule: 'blank', reason: `${m.colours} distinct colours, ${(m.dominant * 100).toFixed(1)}% one colour: the app drew nothing` });
+  }
+  const px = await pixelsOf(file);
+  const lb = px && letterboxOf(px);
+  if (lb) {
+    refusals.push({
+      rule: 'letterbox',
+      reason: `bars ${lb.bars.join(' and ')} px wide on the ${lb.sides}, the app drawn in a ${lb.box.join('x')} phone-shaped box: the app was letterboxed, not laid out for this screen`,
+    });
   }
   const f = facts === undefined ? readFacts(file) : facts;
   if (f) refusals.push(...factRefusals(f));

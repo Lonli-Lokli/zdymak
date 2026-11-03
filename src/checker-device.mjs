@@ -95,10 +95,28 @@ export function iosFacts({ udid, bundle, language, time }) {
 
 export const primary = (tag) => String(tag || '').split(/[-_]/)[0].toLowerCase();
 
+/**
+ * A scene with no allowance of its own may change this share of the screen between its shot and a second shot taken
+ * [MOTION_GAP_MS] later; more, and the shot was taken while the screen was still changing (a transition, a toast, a
+ * scroll coming to rest). A scene that moves by design (a clock, a falling piece) is given its own allowance
+ * (`--motion <state>=<share>`). The checker's own threshold, to be tuned on real store sets.
+ */
+export const MOTION_STILL = 0.01;
+/** How long after the shot the second shot is taken. */
+export const MOTION_GAP_MS = 1000;
+
 /** The refusals the device's facts carry. Pure, so a folder check re-reads them from the sidecar. */
 export function factRefusals(f) {
   const out = [];
   if (!f) return out;
+  if (typeof f.motion === 'number' && f.motion > (f.motionAllowed ?? MOTION_STILL)) {
+    const allowed = f.motionAllowed ?? MOTION_STILL;
+    out.push({
+      rule: 'motion',
+      reason: `the device: ${(f.motion * 100).toFixed(1)}% of the screen changed in the ${MOTION_GAP_MS / 1000} s after the shot, `
+        + `over the ${(allowed * 100).toFixed(1)}% this scene allows, so the screen was still changing`,
+    });
+  }
   if (typeof f.launchDifference === 'number' && f.launchDifference < f.launchLook) {
     out.push({
       rule: 'launch',

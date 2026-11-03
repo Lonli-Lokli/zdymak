@@ -760,7 +760,7 @@ export declare const BLANK_COLOURS: number;
 export declare const BLANK_DOMINANCE: number;
 
 /** One reason the checker refuses a shot. */
-export interface CheckRefusal { rule: 'unreadable' | 'blank' | 'launch' | 'dialog' | 'keyboard' | 'wrong-app' | 'status-bar' | 'language'; reason: string }
+export interface CheckRefusal { rule: 'unreadable' | 'blank' | 'launch' | 'motion' | 'dialog' | 'keyboard' | 'wrong-app' | 'status-bar' | 'language' | 'letterbox' | 'duplicate'; reason: string }
 /** The checker's verdict on one shot: its refusals, and notes on the rules it could not apply. */
 export interface CheckResult { file: string; refusals: CheckRefusal[]; notes: string[]; colours?: number; dominant?: number; blank?: boolean; unreadable?: boolean }
 /** The checker's rules, in report order. */
@@ -772,6 +772,22 @@ export declare const DEMO_TIME: string;
  * capture time (`.zdymak-check/<name>.json`). `language` is the set's; `text: false` skips reading the words.
  */
 export declare function checkShot(file: string, opts?: { facts?: Record<string, unknown> | null; language?: string; time?: string; text?: boolean }): Promise<CheckResult>;
+/** Adds the set's refusals (two scenes of one folder at one size that are the same picture) to `checkShot`'s results. */
+export declare function checkSet(results: CheckResult[]): Promise<CheckResult[]>;
+/** The letterbox bars in a picture's RGBA pixels, or null. */
+export declare function letterboxOf(pixels: { data: Uint8ClampedArray | Uint8Array; width: number; height: number }): { sides: string; bars: [number, number]; box: [number, number]; colour: number[] } | null;
+/** A scene's motion allowance from `--motion` ("0.05" or "clock=0.2,board=0.05"). */
+export declare function motionAllowance(spec: string | undefined, state: string): number;
+/** The share of the screen a scene with no allowance of its own may change in the second after its shot. */
+export declare const MOTION_STILL: number;
+/** Each letterbox bar is at least this share of its side. */
+export declare const LETTERBOX_BAR: number;
+/** The box between letterbox bars is at least this long against its short side. */
+export declare const LETTERBOX_BOX: number;
+/** A shot this long against its short side or longer is phone-shaped and has no letterbox. */
+export declare const LETTERBOX_SHOT: number;
+/** Under this share of sampled pixels differing, two scenes are the same picture. */
+export declare const DUPLICATE_LOOK: number;
 /** One line per refusal, naming the shot and the reason. */
 export declare function describeRefusals(results: CheckResult[], cwd?: string): string[];
 /** The refusals a device's facts carry. */
