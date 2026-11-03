@@ -434,6 +434,14 @@ one set that are the same picture, naming the shot and the reason (exit 1; `--fo
 machines). The device's facts at capture time are kept in `.zdymak-check/` beside the shots; the picture's words are read
 with Vision on macOS. Use it instead of re-implementing any of this in a CI job or a release gate.
 
+
+`zdymak compare <png|dir>… --target <id> [--language <tag>]` holds each shot against the approved reference for its store
+target (`references/<target>/<scene>.png`, source language only): the source language by pixels, other languages by
+layout with text and captions masked, a right-to-left language against the reference mirrored. The thresholds are the
+config's `compare.pixel` and `compare.layout`, with no default: measure the noise first with
+`zdymak compare --measure first/ second/` on two captures of one build and set each above it. What is beyond its
+threshold, or a new source-language scene, goes to `references/review/index.html`, one page to send to a phone; answer
+with `zdymak approve <review dir> <id…>` (it becomes the reference) or `zdymak reject`. It exits 1 while anything waits.
 The config key `middleware` takes `(ctx, next)` functions or `{ name, commands, run }` objects, first entry outermost, around
 build, video, reel, screenshots, capture and check. Before `await next()` an entry may refuse with `ctx.fail(reason)`; after it
 it can inspect what the run made via `ctx.changedFiles()` and `ctx.outDir`. The config is passed raw, so a config that cannot

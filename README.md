@@ -1381,6 +1381,41 @@ and is compared with its own launch frame.
 
 <br>
 
+### `zdymak compare` — is this the picture you approved?
+
+```sh
+zdymak compare shots/en --target ios-13              # each shot against references/ios-13/<scene>.png
+zdymak compare shots/ar --target ios-13 --language ar
+zdymak approve references/review <id>…               # or --all; reject the same way
+zdymak compare --measure run-1/ run-2/               # the noise between two captures, as TSV
+```
+
+One reference per store target and scene, in the source language only (`sourceLocale`, English by default), kept in
+`references/<target>/<scene>.png` with `approvals.json` recording each approval. A source-language shot is compared with
+its reference **by pixels**: the share of pixels that differ at all. A shot in another language is compared with the
+source-language reference **by layout**: both are reduced to cells of `LAYOUT_CELL` (16) pixels, every cell a line of
+text touches in either picture (read with the text reader, so captions too) is left out, and a cell counts as moved when
+its mean colour shifts by more than `LAYOUT_TOLERANCE` (32) on a channel. A right-to-left language (`RTL_LANGUAGES`:
+Arabic, Hebrew, Persian, Urdu and others) is compared with the reference mirrored.
+
+The thresholds live in the config and have **no default**:
+
+```js
+compare: { references: 'references', pixel: 0.002, layout: 0.03 }   // example values only
+```
+
+Set each above the noise you measure between two captures of one build: capture the same set twice and run
+`zdymak compare --measure first/ second/` (add `--language` for a translated set, `--mirror` to measure a right-to-left
+set against the source one). Write down the numbers and how they were measured beside the thresholds.
+
+A shot beyond its threshold, a new source-language scene with no reference, or a shot of another size goes to review:
+`references/review/` (or `--review <dir>`) receives the approved shot, the new one and the difference (changed pixels,
+or moved cells with the masked text hatched) for each, `review.json`, and `index.html`, one self-contained page you can
+send to a phone. Its Approve and Reject buttons gather the answers into the `zdymak approve` and `zdymak reject` lines
+to paste back. An approved source-language shot becomes the reference; an approved translated shot is remembered by its
+content so the same picture is not asked about again. A translated shot whose scene has no reference yet is refused
+until the source-language one is approved. `compare` exits 1 while anything waits.
+
 ## Programmatic use
 
 ```js

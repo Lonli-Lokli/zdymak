@@ -656,6 +656,11 @@ export interface Config {
   screenshotsDir?: string;
   /** What a `{locale}` token in `capturesDir` resolves to on the base pass. Defaults to `'en'`. */
   sourceLocale?: string;
+  /**
+   * `zdymak compare`: where the approved references live and the thresholds a new shot is judged by. Neither threshold
+   * has a default: set each above the noise measured between two captures of one build (`zdymak compare --measure`).
+   */
+  compare?: CompareConfig;
   /** Appended to `scene.id` to form the filename: `<id><suffix>.png`. */
   suffix?: string;
   /** The shared scene list — used by the top-level `targets` and by any device without its own. */
@@ -1065,3 +1070,38 @@ export declare function registerFonts(fontPaths?: string[]): void;
 
 /** Run the CLI programmatically. */
 export declare function run(argv?: string[]): Promise<void>;
+
+export interface CompareConfig {
+  /** The references folder, `<references>/<target>/<scene>.png` plus `approvals.json`. Default `references`. */
+  references?: string;
+  /** The share of pixels (0 to 1) a source-language shot may differ from its reference by. */
+  pixel?: number;
+  /** The share of layout cells, text masked, a translated shot may differ from the source-language reference by. */
+  layout?: number;
+}
+export interface PixelsOf { width: number; height: number; data: Uint8ClampedArray }
+export interface TextBox { x: number; y: number; w: number; h: number; text?: string; conf?: number }
+export type TextReader = (file: string, language?: string) => TextBox[] | { error: string };
+export interface CompareItem {
+  id: string; file: string; scene: string; target: string; language: string; source: boolean; reference: string;
+  kind: 'same' | 'accepted' | 'new' | 'size' | 'pixel' | 'layout' | 'no-reference';
+  measure?: number; threshold?: number; mirror?: boolean; review: boolean; blocked: boolean; reason: string;
+  files?: { new: string; old?: string; diff?: string };
+}
+export declare const LAYOUT_CELL: number;
+export declare const LAYOUT_TOLERANCE: number;
+export declare const RTL_LANGUAGES: string[];
+export declare const APPROVALS_FILE: string;
+export declare function isRtl(language?: string): boolean;
+export declare function mirrored(pixels: PixelsOf): PixelsOf;
+export declare function mirroredBoxes(boxes: TextBox[]): TextBox[];
+export declare function pixelDifference(a: PixelsOf, b: PixelsOf): { share: number; changed: Uint8Array };
+export declare function layoutDifference(a: PixelsOf, b: PixelsOf, boxes?: TextBox[]): { share: number; moved: number[]; masked: number[]; cols: number; rows: number };
+export declare function pixelsAgainst(shot: string, reference: string): Promise<{ share?: number; size?: [string, string] }>;
+export declare function layoutAgainst(shot: string, reference: string, options?: { language?: string; mirror?: boolean; textOf?: TextReader }): Promise<{ share?: number; size?: [string, string]; mirror?: boolean }>;
+export declare function thresholdsOf(compare?: CompareConfig): { pixel: number; layout: number };
+export declare function compareShots(files: string[], options: { target: string; refs: string; thresholds: { pixel: number; layout: number }; language?: string; sourceLocale?: string; textOf?: TextReader }): Promise<CompareItem[]>;
+export declare function writeReview(items: CompareItem[], dir: string, options: { refs: string }): Promise<string>;
+export declare function decide(dir: string, ids: string[], verdict: 'approve' | 'reject', options?: { all?: boolean; now?: Date }): CompareItem[];
+export declare function readApprovals(refs: string): { references: Record<string, { sha256: string; approved: string; from: string }>; accepted: Record<string, { target: string; scene: string; language: string; approved: string }> };
+export declare function measurePairs(first: string, second: string, options?: { language?: string; mirror?: boolean; textOf?: TextReader }): Promise<{ scene: string; first: string; second: string; pixel: number | null; layout: number | null; size: [string, string] | null }[]>;
