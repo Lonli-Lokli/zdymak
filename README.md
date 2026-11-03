@@ -548,7 +548,8 @@ non-consumable can leave the promotional slot empty and submit fine.
 | Asset | Size | Required? | Target |
 |---|---|---|---|
 | Phone screenshots | 1080×1920 (320–3840 px per side, **max 2:1**) | 2–8; min 2 to publish | `play-phone` |
-| Tablet screenshots | 2560×1440 (16:9) | recommended for large-screen | `play-tablet` (+ `play-tablet-portrait`, same slots) |
+| Tablet screenshots | 2560×1440 (16:9) | recommended for large-screen | `play-tablet` (+ `play-tablet-portrait`, same slots); `play-tablet-7` for the 7" slot |
+| Chromebook screenshots | 1920×1080 (16:9), 1080–7680px | at least 4 | `play-chromebook` |
 | Wear OS screenshots | 1080×1080 (**1:1**, 384–3840) | **required** for Wear listings | `play-wear` |
 | Feature graphic | **1024×500** | **required** | `play-feature-graphic` |
 | App icon | 512×512, ≤1 MB, alpha OK | **required** | `play-icon` (from `brand.logo`) |
@@ -680,6 +681,10 @@ specifications* and Google's *Add preview assets* pages.
 | `play-phone` | 1080×1920 | Play phone | 2–8 per form factor; 320–3840 px per side, max 2:1 |
 | `play-tablet` | 2560×1440 | Play 7"/10" tablet + Chromebook | Recommended for large-screen visibility |
 | `play-tablet-portrait` | 1600×2560 | the same two Play slots, upright | Optional — capture with `--size 1600x2560`, not by rotating |
+| `play-tablet-7` | 1920×1080 | Play 7" tablet, a set of its own | Capture the 7" tablet as it is; `-portrait` (1080×1920) turned with `--orientation portrait` |
+| `play-chromebook` | 1920×1080 | Play Chromebook, a set of its own (at least 4) | Capture a resizable emulator with `--size 1920x1080 --density 160`; framed by `chromebook` |
+| `play-fold` | 2560×1440 | a book foldable open, for a tablet slot or a website set | Framed by `android-fold`; capture with `--posture open` |
+| `play-flip` | 1080×1920 | a flip open, for the phone slot or a website set | Framed by `android-flip`; capture with `--posture open` |
 | `play-wear` | 1080×1080 | Play Wear OS (1:1) | **Required** for Wear OS listings, min 384×384 |
 | `play-feature-graphic` | 1024×500 | Play feature graphic | **Required** even without a video; it's also the promo-video thumbnail, so keep the centre clear |
 | `play-icon` | 512×512 | Play app icon | The only target where alpha is allowed |

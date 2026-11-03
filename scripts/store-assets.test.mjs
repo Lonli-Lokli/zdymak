@@ -12,7 +12,7 @@ import { createCanvas } from '@napi-rs/canvas';
 import { IMAGE_TARGETS, VIDEO_TARGETS } from '../src/specs.mjs';
 import { buildDeviceScreenshots, pickHero } from '../src/screenshots.mjs';
 import { creativeLayout } from '../src/graphic.mjs';
-import { inferFrame, frameFor, drawPhoneFrame, drawDuoFrame, drawDuoInnerFrame, duoAspect, screenAspectFor } from '../src/frames.mjs';
+import { inferFrame, frameFor, drawPhoneFrame, drawDuoFrame, drawDuoInnerFrame, duoAspect, screenAspectFor, drawAndroidFoldFrame, drawAndroidFlipFrame, drawAndroidTabletFrame, hingeAxis } from '../src/frames.mjs';
 import { pngInfo, sizeViolations, videoViolations, inRange, validateImage } from '../src/validate.mjs';
 import { resolveVideo, resolveReel } from '../src/destinations.mjs';
 import { h264Level } from '../src/encode.mjs';
@@ -538,4 +538,64 @@ test('a reel is measured against its destination after the encode: refused when 
   assert.equal(forced.status, 0, forced.stdout + forced.stderr);
   assert.match(forced.stderr, /--force: written anyway/);
   assert.doesNotMatch(forced.stderr, /plays SILENT/, 'a creative video works silently by design, so no nag about music');
+});
+
+test('Play\'s 7-inch and Chromebook slots are targets of their own, at Google\'s 16:9 and 9:16 within 1080–7680px', () => {
+  for (const id of ['play-tablet-7', 'play-tablet-7-portrait', 'play-chromebook', 'play-fold', 'play-flip']) {
+    const t = IMAGE_TARGETS[id];
+    assert.ok(t, id);
+    assert.equal(t.alpha, false, id);
+    assert.ok(Math.min(t.w, t.h) >= 1080 && Math.max(t.w, t.h) <= 7680, id);
+    assert.ok(Math.abs(Math.max(t.w, t.h) / Math.min(t.w, t.h) - 16 / 9) < 0.01, `${id} is 16:9 or 9:16`);
+  }
+  assert.ok(IMAGE_TARGETS['play-tablet-7'].w > IMAGE_TARGETS['play-tablet-7'].h);
+  assert.ok(IMAGE_TARGETS['play-tablet-7-portrait'].h > IMAGE_TARGETS['play-tablet-7-portrait'].w);
+});
+
+test('the large-screen Play targets infer their own bodies, and the older Play ones are unchanged', () => {
+  assert.equal(inferFrame('play-tablet-7'), 'android-tablet');
+  assert.equal(inferFrame('play-tablet-7-portrait'), 'android-tablet');
+  assert.equal(inferFrame('play-chromebook'), 'chromebook');
+  assert.equal(inferFrame('play-fold'), 'android-fold');
+  assert.equal(inferFrame('play-flip'), 'android-flip');
+  assert.equal(inferFrame('play-tablet'), 'android');
+  assert.equal(inferFrame('play-phone'), 'android');
+  for (const id of ['android-tablet', 'android-fold', 'android-flip', 'chromebook']) assert.ok(frameFor(id), id);
+});
+
+test('a foldable\'s hinge is marked on the bezel across the right axis, and the screen under it is the capture', () => {
+  assert.equal(hingeAxis('fold', 2076, 2152), 'vertical'); // a book fold open, upright: the hinge splits the width
+  assert.equal(hingeAxis('fold', 2152, 2076), 'horizontal');
+  assert.equal(hingeAxis('flip', 1080, 2636), 'horizontal'); // a flip open, upright: the hinge splits the height
+  assert.equal(hingeAxis('flip', 2636, 1080), 'vertical');
+  const white = createCanvas(519, 538);
+  const wg = white.getContext('2d');
+  wg.fillStyle = '#ffffff';
+  wg.fillRect(0, 0, 519, 538);
+  const g = createCanvas(1000, 1000).getContext('2d');
+  const { screen, hinge } = drawAndroidFoldFrame(g, white, 500, 500, 600);
+  assert.equal(hinge, 'vertical');
+  const at = (x, y) => [...g.getImageData(Math.round(x), Math.round(y), 1, 1).data.slice(0, 3)];
+  assert.deepEqual(at(screen.x + screen.w / 2, screen.y + screen.h / 2), [255, 255, 255], 'nothing drawn over the screen');
+  assert.deepEqual(at(screen.x + screen.w / 2, screen.y - 2), [0x2a, 0x2a, 0x28], 'the hinge mark on the top bezel');
+  assert.equal(drawAndroidFlipFrame(g, createCanvas(360, 878), 500, 500, 300).hinge, 'horizontal');
+  assert.equal(drawAndroidTabletFrame(g, createCanvas(1024, 600), 500, 500, 800).hinge, null);
+});
+
+test('the 7-inch, Chromebook and foldable targets render framed at their exact size as no-alpha PNGs', async () => {
+  const dir = path.join(tmp, 'large-android');
+  capture(path.join(dir, 'tab.png'), 1024, 600); // a 7-inch tablet, as the emulator shows it
+  capture(path.join(dir, 'tabp.png'), 600, 1024);
+  capture(path.join(dir, 'cb.png'), 1920, 1080); // a Chromebook window
+  capture(path.join(dir, 'fold.png'), 2076, 2152); // a book fold's inner screen
+  capture(path.join(dir, 'flip.png'), 1080, 2636);
+  const out = path.join(tmp, 'out-large-android');
+  const shots = [['play-tablet-7', 'tab'], ['play-tablet-7-portrait', 'tabp'], ['play-chromebook', 'cb'], ['play-fold', 'fold'], ['play-flip', 'flip']];
+  for (const [target, id] of shots) {
+    const written = await buildDeviceScreenshots({ device: device(target, dir, [id], [{ target }]), brand, outDir: out });
+    assert.equal(written.length, 1, target);
+    const info = pngInfo(written[0].file);
+    assert.deepEqual([info.w, info.h], [IMAGE_TARGETS[target].w, IMAGE_TARGETS[target].h], target);
+    assert.equal(info.colourType, 2, `${target} must be RGB, no alpha`);
+  }
 });

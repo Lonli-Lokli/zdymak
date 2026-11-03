@@ -38,7 +38,7 @@ get rejected or quietly under-perform.
 | A marketing/social reel | `social-reel` | device-framed | Set `theme.frame: 'android'` for Android captures — the default body is an iPhone, and an Android UI in an iPhone shell misrepresents the app. Never submit this as an App Preview. |
 | A cinematic showcase | `premium-reel` | premium matte | Override `size` for landscape (Mac: `[2880, 1800]`). |
 | **App Store** screenshots | `appstore-iphone-6.9` (+`-6.5`), `appstore-ipad-13` (+`-landscape`), `appstore-mac`, `appstore-watch` | framed (inferred) | Marketing styling is **expected** here: frames, headlines, backgrounds. iPad/Mac/Watch shots are *required* if the app ships there. Pick ONE Watch size and keep it across localizations. |
-| **Google Play** screenshots | `play-phone`, `play-tablet` (+`-portrait`), `play-wear`, `play-feature-graphic` | phone: a caption under 20% of the image, no device body; tablet and Wear: `bleed` + `caption: false` | Phone screenshots may carry a short tagline (at most 20% of the image) and should avoid device frames; tablet and large-screen screenshots exclude added text; Wear OS forbids frames, text and backgrounds outright. See "Play's rules differ by device" below; `dir` keeps an upload set and a website set apart. The feature graphic is **required** even without a video. |
+| **Google Play** screenshots | `play-phone`, `play-tablet` (+`-portrait`), `play-tablet-7` (+`-portrait`), `play-chromebook`, `play-fold`, `play-flip`, `play-wear`, `play-feature-graphic` | phone: a caption under 20% of the image, no device body; tablet and Wear: `bleed` + `caption: false` | Phone screenshots may carry a short tagline (at most 20% of the image) and should avoid device frames; tablet and large-screen screenshots exclude added text; Wear OS forbids frames, text and backgrounds outright. See "Play's rules differ by device" below; `dir` keeps an upload set and a website set apart. The feature graphic is **required** even without a video. |
 | An **in-app purchase** review screenshot | `appstore-iap-review` | interface only (automatic) | Its own slot with its own OLDER size table — the listing sizes are refused. Defaults to 640×920; never pass a listing target's `size:` here. `appstore-iap-promo` is the optional 1024×1024 companion. |
 | **iPhone Duo** screenshots | `appstore-iphone-duo-outer` / `-inner` (+`-landscape` of each) | framed by `duo` / `duo-inner` (inferred) | ONE "iPhone Duo" slot of ten takes all four sizes (1398×2034, 2007×2853, and both turned). Optional now, **required from April 2027** for apps built with the iOS 27.1 SDK. Shoot every posture on the Duo simulator (Xcode 27.1+) with `capture --posture`, and read **Folding phones** below before advising on the layout. The frame keeps the display's true shape and draws NO island or camera; a simulator capture carries iOS's own camera cutout and status, which is the device's and stays. A half-open capture can stand half open in 3D with the scene's `fold: 'laptop'` or `'book'` (see **Folding phones**). |
 | The App Store **product page header / search image** (iOS 27+) | `appstore-header` (3840×1646), `appstore-search` (3:2, 1920×1280–3840×2560), or `appstore-universal` (5244×2950, both) | branded graphic | Like the feature graphic: lockup, tagline, fan, ONE hero — laid out around Apple's art safe area (from its own template). Give it a **landscape** hero with `hero: '<scene id>'`; a phone in a 21:9 strip is the wrong picture. Optional assets. |
@@ -168,12 +168,31 @@ aspect.
   the device did not turn, since the alternative is a full set of good portrait shots filed as landscape.
   The usual cause is the app: iOS refuses an orientation the plist omits, and iPad reads
   `UISupportedInterfaceOrientations~ipad`.
-- **Android:** no flag — use `--size 1600x2560`, which relayouts the app to a real upright tablet
-  (800×1280dp at density 320). Rotating the 16:9 figure instead gives 405×720dp, a large phone.
+- **Android:** `--size 1600x2560` relayouts the app to a real upright tablet (800×1280dp at density 320);
+  rotating the 16:9 figure instead gives 405×720dp, a large phone. A tablet shot as it is (a 7" one) is
+  turned with `--orientation portrait|landscape`, read against the screen's own shape, so the same word
+  works on a tablet that is wide at rest and a phone that is tall. A shot of the other shape fails the run.
 - **Filenames collide.** Both orientations land in one store slot, and both targets emit `01-….png`, so
   rename one set on the way to the upload directory or the second silently overwrites the first — the copy
   succeeds and the listing is simply half as long. It also fixes ORDER, which stores read from the
   filename: one set whole, then the other, rather than alternating shapes.
+
+### Android large screens: the 7" tablet, the Chromebook and the foldables
+Play Console has a 7-inch tablet set, a 10-inch tablet set and a Chromebook set, each its own, under one
+rule: 16:9 or 9:16, 1080 to 7680px, at least four. `play-tablet` fills the 10-inch set; `play-tablet-7`
+(+`-portrait`) and `play-chromebook` fill the other two, framed by `android-tablet` and `chromebook` for a
+styled set (the upload set stays `bleed`, `caption: false`, as below).
+
+- **Chromebook:** a resizable emulator in its desktop size, `--size 1920x1080 --density 160`, is a
+  Chromebook window; the override is put back after the run.
+- **Foldables:** `--posture closed|half-open|open` folds a foldable EMULATOR (a book fold or a flip) through
+  its console's hinge sensor (`adb emu sensor set hinge-angle0`) and waits for the device state it names
+  (`CLOSED`, `HALF_OPENED`, `OPENED`, read from `cmd device_state`, Android 14+). The ids differ between
+  profiles, so they are matched by name. `--hinge` sets the half-open angle (default 90). A real phone has
+  no console for its hinge, so the flag refuses it. Combine with `--orientation` for a book fold turned
+  tabletop. Play has no foldable slot: an open book fold goes in a tablet set (`play-fold`, framed by
+  `android-fold`), a flip open or a closed book fold in the phone set (`play-flip`, `android-flip`). The
+  frames mark the hinge on the bezel only, never over the screen.
 
 ## Play's rules differ by device (Apple wants styled)
 Google's preview-asset guidance (support.google.com/googleplay/android-developer/answer/9866151) differs by
