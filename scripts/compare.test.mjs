@@ -7,7 +7,8 @@ import path from 'node:path';
 import { createCanvas } from '@napi-rs/canvas';
 import { rgbPngBuffer } from '../src/png.mjs';
 import {
-  compareShots, layoutDifference, mirrored, mirroredBoxes, pixelDifference, readApprovals, thresholdsOf,
+  compareShots, isCleared, layoutDifference, mirrored, mirroredBoxes, pixelDifference, readApprovals, recordPasses, sha256,
+  thresholdsOf,
 } from '../src/compare.mjs';
 import { decide, writeReview } from '../src/review.mjs';
 import { measurePairs } from '../src/noise.mjs';
@@ -67,6 +68,32 @@ test('no threshold, no verdict: compare asks for the measured noise', () => {
   assert.throws(() => thresholdsOf({}), /compare\.pixel and compare\.layout.*--measure/);
   assert.throws(() => thresholdsOf({ pixel: 0.01 }), /compare\.layout/);
   assert.deepEqual(thresholdsOf({ pixel: 0, layout: 0.02 }), { pixel: 0, layout: 0.02 });
+});
+
+test('a store target may set its own thresholds over the block\'s, and still none is guessed', () => {
+  const compare = { pixel: 0, layout: 0, targets: { 'play-tablet': { pixel: 0.41 } } };
+  assert.deepEqual(thresholdsOf(compare, 'play-tablet'), { pixel: 0.41, layout: 0 });
+  assert.deepEqual(thresholdsOf(compare, 'ios-13'), { pixel: 0, layout: 0 });
+  assert.throws(() => thresholdsOf({ targets: { 'play-tablet': { pixel: 0.1 } } }, 'play-tablet'), /compare\.layout is not set for play-tablet/);
+});
+
+test('a pass is recorded by content, an uploader clears only what passed or was approved, and a shot sent to review loses its pass', async () => {
+  const dir = tmp();
+  const refs = path.join(dir, 'references');
+  const ref = screen(path.join(refs, 'ios-13', 'home.png'));
+  const same = screen(path.join(dir, 'a', 'home.png'));
+  const moved = screen(path.join(dir, 'b', 'home.png'), { button: 40 });
+  const [ok] = await compareShots([same], { target: 'ios-13', refs, thresholds: THRESHOLDS, textOf });
+  const [over] = await compareShots([moved], { target: 'ios-13', refs, thresholds: THRESHOLDS, textOf });
+  assert.equal(ok.review, false);
+  assert.equal(over.review, true);
+  let approvals = recordPasses(refs, [ok, over]);
+  assert.equal(isCleared(approvals, sha256(same)), true);
+  assert.equal(isCleared(approvals, sha256(moved)), false);
+  assert.equal(isCleared(readApprovals(refs), sha256(moved)), false);
+  approvals = recordPasses(refs, [{ ...ok, review: true }]);
+  assert.equal(isCleared(approvals, sha256(same)), false, 'the same picture over a tighter threshold is no longer cleared');
+  assert.equal(isCleared({ references: { 'ios-13/home': { sha256: sha256(ref) } } }, sha256(ref)), true, 'an approved reference is cleared');
 });
 
 test('a new English scene goes to review, an approved one is the reference, a changed one waits again, a rejected one changes nothing', async () => {

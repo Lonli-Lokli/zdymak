@@ -1078,6 +1078,8 @@ export interface CompareConfig {
   pixel?: number;
   /** The share of layout cells, text masked, a translated shot may differ from the source-language reference by. */
   layout?: number;
+  /** Either threshold for one store target, over the block's own (devices differ in their noise). */
+  targets?: Record<string, { pixel?: number; layout?: number }>;
 }
 export interface PixelsOf { width: number; height: number; data: Uint8ClampedArray }
 export interface TextBox { x: number; y: number; w: number; h: number; text?: string; conf?: number }
@@ -1099,9 +1101,15 @@ export declare function pixelDifference(a: PixelsOf, b: PixelsOf): { share: numb
 export declare function layoutDifference(a: PixelsOf, b: PixelsOf, boxes?: TextBox[]): { share: number; moved: number[]; masked: number[]; cols: number; rows: number };
 export declare function pixelsAgainst(shot: string, reference: string): Promise<{ share?: number; size?: [string, string] }>;
 export declare function layoutAgainst(shot: string, reference: string, options?: { language?: string; mirror?: boolean; textOf?: TextReader }): Promise<{ share?: number; size?: [string, string]; mirror?: boolean }>;
-export declare function thresholdsOf(compare?: CompareConfig): { pixel: number; layout: number };
+export declare function thresholdsOf(compare?: CompareConfig, target?: string): { pixel: number; layout: number };
+export type Approvals = ReturnType<typeof readApprovals>;
+/** Record what passed, by sha256, in approvals.json's `passed`; a shot sent to review loses its pass. */
+export declare function recordPasses(refs: string, items: CompareItem[], options?: { now?: Date }): Approvals;
+/** Whether content (a sha256) is cleared to publish: an approved reference, an approved translated shot, or a pass. */
+export declare function isCleared(approvals: Approvals, sum: string): boolean;
+export declare function sha256(file: string): string;
 export declare function compareShots(files: string[], options: { target: string; refs: string; thresholds: { pixel: number; layout: number }; language?: string; sourceLocale?: string; textOf?: TextReader }): Promise<CompareItem[]>;
 export declare function writeReview(items: CompareItem[], dir: string, options: { refs: string }): Promise<string>;
 export declare function decide(dir: string, ids: string[], verdict: 'approve' | 'reject', options?: { all?: boolean; now?: Date }): CompareItem[];
-export declare function readApprovals(refs: string): { references: Record<string, { sha256: string; approved: string; from: string }>; accepted: Record<string, { target: string; scene: string; language: string; approved: string }> };
+export declare function readApprovals(refs: string): { references: Record<string, { sha256: string; approved: string; from: string }>; accepted: Record<string, { target: string; scene: string; language: string; approved: string }>; passed?: Record<string, { target: string; scene: string; language: string; kind: string; measure: number | null; threshold: number | null; at: string }> };
 export declare function measurePairs(first: string, second: string, options?: { language?: string; mirror?: boolean; textOf?: TextReader }): Promise<{ scene: string; first: string; second: string; pixel: number | null; layout: number | null; size: [string, string] | null }[]>;

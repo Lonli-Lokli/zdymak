@@ -33,7 +33,7 @@ export {
 export { MiddlewareRefusal, normalizeMiddleware, runMiddleware } from './middleware.mjs';
 export {
   APPROVALS_FILE, LAYOUT_CELL, LAYOUT_TOLERANCE, RTL_LANGUAGES, compareShots, isRtl, layoutAgainst, layoutDifference,
-  mirrored, mirroredBoxes, pixelDifference, pixelsAgainst, readApprovals, thresholdsOf,
+  mirrored, mirroredBoxes, pixelDifference, pixelsAgainst, readApprovals, thresholdsOf, recordPasses, isCleared, sha256,
 } from './compare.mjs';
 export { decide, writeReview } from './review.mjs';
 export { measurePairs } from './noise.mjs';

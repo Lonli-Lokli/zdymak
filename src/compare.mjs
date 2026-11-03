@@ -143,7 +143,7 @@ export async function pixelsAgainst(shotFile, refFile) {
 
 /** The approvals record of a references folder. */
 export function readApprovals(refs) {
-  try { return JSON.parse(fs.readFileSync(path.join(refs, APPROVALS_FILE), 'utf8')); } catch { return { references: {}, accepted: {} }; }
+  try { return JSON.parse(fs.readFileSync(path.join(refs, APPROVALS_FILE), 'utf8')); } catch { return { references: {}, accepted: {}, passed: {} }; }
 }
 
 export function writeApprovals(refs, approvals) {
@@ -153,15 +153,43 @@ export function writeApprovals(refs, approvals) {
 
 /**
  * The thresholds a comparison judges by, from the config's `compare` block. Neither has a default: each must be set
- * above the noise measured between two captures of one build.
+ * above the noise measured between two captures of one build. Devices differ in their noise (a simulator can repeat a
+ * picture exactly where an emulator does not), so `compare.targets[<target>]` may set either for one store target,
+ * over the block's own `pixel` and `layout`.
  */
-export function thresholdsOf(compare = {}) {
-  const missing = ['pixel', 'layout'].filter((k) => !(typeof compare[k] === 'number' && compare[k] >= 0 && compare[k] < 1));
+export function thresholdsOf(compare = {}, target) {
+  const own = (target && compare.targets?.[target]) || {};
+  const value = { pixel: own.pixel ?? compare.pixel, layout: own.layout ?? compare.layout };
+  const missing = ['pixel', 'layout'].filter((k) => !(typeof value[k] === 'number' && value[k] >= 0 && value[k] < 1));
   if (missing.length) {
-    throw new Error(`compare: the config's compare.${missing.join(' and compare.')} is not set (a share from 0 to 1). `
+    throw new Error(`compare: the config's compare.${missing.join(' and compare.')} is not set${target ? ` for ${target}` : ''} (a share from 0 to 1). `
       + 'Measure the noise between two captures of one build with `zdymak compare --measure <first> <second>` and set each above it.');
   }
-  return { pixel: compare.pixel, layout: compare.layout };
+  return value;
+}
+
+/**
+ * Record what a comparison passed, by content, in `approvals.json`'s `passed`: a shot within its threshold, or an
+ * accepted one. An uploader reads the file to send only shots that passed or were approved (`isCleared`); a shot that
+ * a later comparison sends to review loses its pass.
+ */
+export function recordPasses(refs, items, { now = new Date() } = {}) {
+  const approvals = readApprovals(refs);
+  approvals.passed ??= {};
+  for (const i of items) {
+    const sum = sha256(i.file);
+    if (!i.review && !i.blocked) {
+      approvals.passed[sum] = { target: i.target, scene: i.scene, language: i.language, kind: i.kind, measure: i.measure ?? null, threshold: i.threshold ?? null, at: now.toISOString() };
+    } else delete approvals.passed[sum];
+  }
+  writeApprovals(refs, approvals);
+  return approvals;
+}
+
+/** Whether a file's content is cleared to publish: an approved reference, an approved translated shot, or a pass. */
+export function isCleared(approvals, sum) {
+  return Boolean(approvals.passed?.[sum] || approvals.accepted?.[sum]
+    || Object.values(approvals.references || {}).some((r) => r.sha256 === sum));
 }
 
 /**

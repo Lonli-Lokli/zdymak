@@ -23,7 +23,7 @@ import { runCapture } from './capture/index.mjs';
 import { resolveVideo, resolveReel, paletteAt } from './destinations.mjs';
 import { validateVideo, validateImage } from './validate.mjs';
 import { checkSet, checkShot } from './checker.mjs';
-import { compareShots, thresholdsOf } from './compare.mjs';
+import { compareShots, recordPasses, thresholdsOf } from './compare.mjs';
 import { measurePairs } from './noise.mjs';
 import { decide, writeReview } from './review.mjs';
 import { normalizeMiddleware, runMiddleware } from './middleware.mjs';
@@ -376,10 +376,13 @@ async function cmdCompare(flags, rest) {
   }
   const cfg = raw?.compare || {};
   const refs = path.resolve(flags.references ? process.cwd() : dir, flags.references || cfg.references || 'references');
-  const thresholds = thresholdsOf({ pixel: flags.pixel !== undefined ? Number(flags.pixel) : cfg.pixel, layout: flags.layout !== undefined ? Number(flags.layout) : cfg.layout });
+  const fromFlags = { ...(flags.pixel !== undefined && { pixel: Number(flags.pixel) }), ...(flags.layout !== undefined && { layout: Number(flags.layout) }) };
+  const thresholds = { ...thresholdsOf(cfg, flags.target), ...fromFlags };
+  thresholdsOf(thresholds);
   const files = pngsIn(rest);
   if (!files.length) throw new Error('compare: pass PNG files or folders, e.g. zdymak compare shots/ --target ios-13');
   const items = await compareShots(files, { target: flags.target, refs, thresholds, language: flags.language, sourceLocale: raw?.sourceLocale || 'en', textOf });
+  recordPasses(refs, items);
   const waiting = items.filter((i) => i.review);
   const blocked = items.filter((i) => i.blocked);
   for (const i of items) console.log(`  ${i.review ? '?' : i.blocked ? '✗' : '✓'} ${i.target} ${i.language} ${i.scene}: ${i.reason}`);
