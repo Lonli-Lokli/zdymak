@@ -27,6 +27,7 @@ import { captureWeb } from './web.mjs';
 import { iosBuildArgs } from './xcode.mjs';
 import { DEMO_TIME, androidFacts, checkShot, describeRefusals, iosFacts, writeFacts } from '../checker.mjs';
 import { displays, enterPosture, leavePosture, postureDisplay, postureOf, shootPosture } from './fold.mjs';
+import { androidPostureOf, enterAndroidPosture, leaveAndroidPosture, shapeMatches, turnAndroid } from './android-fold.mjs';
 
 /** Flatten over black and rewrite as a NO-ALPHA RGB PNG (App Store & Play reject alpha on screenshots). */
 async function stripAlpha(file) {
@@ -699,6 +700,26 @@ async function captureAndroid(flags) {
   // It fails silently in the worst way: every adb broadcast returns success, the run is green, and the
   // only tell is the time in the corner of a finished asset. `--size`/`--density` is exactly the store
   // VIDEO path (Play wants 1080x1920), which is why this hit the promo and never the screenshots.
+  // A foldable's posture first (it can change the screen: a closed book fold shows its outer one), then the turn,
+  // read against the screen the posture left on, then the display override. Torn down in reverse.
+  const posture = flags.posture !== undefined ? androidPostureOf(flags.posture, flags.hinge) : null;
+  const orientation = flags.orientation !== undefined ? String(flags.orientation).toLowerCase() : null;
+  if (orientation && flags.size) throw new Error('--orientation turns the screen and --size sets its shape; use one.');
+  const folded = posture ? enterAndroidPosture(posture) : null;
+  if (posture) console.log(`▸ posture ${posture.name}: hinge ${posture.hinge}°, the device reports ${posture.state}`);
+  let turned = null;
+  try { turned = orientation ? turnAndroid(orientation) : null; } catch (e) { leaveAndroidPosture(folded); throw e; }
+  if (turned) { console.log(`▸ ${orientation}: user rotation ${turned.rotation}`); await sleep(1500); }
+  /** A shot whose shape is not the orientation asked for is refused: the app or the device did not turn. */
+  const checkShape = (file) => {
+    if (!orientation) return;
+    const head = fs.readFileSync(file).subarray(16, 24);
+    const w = head.readUInt32BE(0);
+    const h = head.readUInt32BE(4);
+    if (!shapeMatches(orientation, w, h)) {
+      throw new Error(`${path.basename(file)} is ${w}×${h}, but ${orientation} was asked for: the screen did not turn.`);
+    }
+  };
   const display = androidDisplay(flags);
   androidDemo(true, flags); // clean marketing status bar (Google convention)
   const language = androidLanguage(flags); // per-app locale override; reset in the finally below
@@ -740,6 +761,7 @@ async function captureAndroid(flags) {
             fs.rmSync(launchFrame, { force: true });
           }
           await stripAlpha(out);
+          checkShape(out);
           console.log(`   ✓ ${st}${suffix}.png`);
           checked.push(await checkCaptured(out, { ...facts(), state: st, launchDifference, launchLook: LAUNCH_LOOK }, flags));
         }
@@ -754,6 +776,7 @@ async function captureAndroid(flags) {
       await sleep(Number(flags['bar-settle'] ?? 1500));
       const out = path.join(outDir, `${flags.name || 'shot'}.png`);
       await grab(out);
+      checkShape(out);
       console.log(`✓ ${out}  (alpha stripped, store-ready)`);
       refuseShots([await checkCaptured(out, facts(), flags)], flags);
     }
@@ -765,6 +788,8 @@ async function captureAndroid(flags) {
     language.reset();
     androidDemo(false, flags);
     display.reset();
+    turned?.reset();
+    leaveAndroidPosture(folded);
   }
 }
 

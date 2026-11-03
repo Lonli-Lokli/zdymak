@@ -403,6 +403,13 @@ Usage:
                   # (vendored duoctl helper, compiled on first use) and photographs the screen that is on. A
                   # half-open posture is reached by opening flat and folding back (--hinge, default 110). The shot
                   # must have the posture's shape, so an app that did not turn is an error, not a portrait set.
+  zdymak capture  --platform android --component <pkg/act> --arg <extra> --states <a,b,c> [--out <dir>]
+                  [--posture closed|half-open|open [--hinge <deg>]] [--orientation portrait|landscape]
+                  # --posture folds a foldable EMULATOR (a book fold or a flip) through its console's hinge
+                  # sensor and waits for the device state it names (CLOSED, HALF_OPENED, OPENED), read with
+                  # cmd device_state (Android 14+); a real phone is refused. --orientation turns the screen with
+                  # auto-rotate off, read against the screen's own shape, and a shot of the other shape fails.
+                  # Both are put back after the run. A Chromebook window is --size 1920x1080 --density 160.
   zdymak capture  --platform android --record --component <pkg/act> --arg <extra> --states <a,b,c>
                   [--size 1080x1920] [--density 400] [--duration 60] [--trim <s>] [--hold 1.5]
                   [--fps 30] [--bitrate 20000000] [--keep-raw] [--out <dir>]
