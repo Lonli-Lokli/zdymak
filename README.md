@@ -1413,7 +1413,31 @@ compare: { references: 'references', pixel: 0.002, layout: 0.03 }   // example v
 
 Set each above the noise you measure between two captures of one build: capture the same set twice and run
 `zdymak compare --measure first/ second/` (add `--language` for a translated set, `--mirror` to measure a right-to-left
-set against the source one). Write down the numbers and how they were measured beside the thresholds.
+set against the source one). Write down the numbers and how they were measured beside the thresholds. A store target
+can set its own pair, for a device whose noise differs from the rest:
+
+```js
+compare: { pixel: 0, layout: 0, targets: { 'play-tablet': { pixel: 0.41, layout: 0.1 } } }
+```
+
+**Measured, 2026-11-03.** One app's five scenes, captured twice from one build, compared with `--measure`:
+
+| Device | Pair | Pixel noise (max of 5) | Layout noise (max of 5) |
+|---|---|---|---|
+| iPad Pro 13-inch (M5) simulator | English twice | 0 | 0 |
+| iPad Pro 13-inch (M5) simulator | Arabic twice | 0 | 0 |
+| Android API 36 emulator, store set at 1080x1920 | English twice | 0.4070 | 0.0972 |
+| iPad simulator, for scale | English against Arabic mirrored (a real translation) | 0.5798 | 0.5086 |
+
+The simulator repeats a picture exactly, so its thresholds are 0: every measured pair passes (a share equal to its
+threshold passes) and any changed pixel or moved cell waits for review. The emulator did not: its two runs caught the
+app's moving parts at different frames and a bottom panel some 16 pixels apart, which is a capture that has not come to
+rest rather than noise. Thresholds just above it (0.41 and 0.10) let a large change through unseen; make such a capture
+still (stop the motion in the capture build, wait for the insets to settle) and measure again before trusting them.
+
+`compare` records every shot it passes, by its content's sha256, in `approvals.json` under `passed` (a shot it sends to
+review loses its pass). An uploader can then refuse any file that is not an approved reference, an approved translated
+shot or a pass: `isCleared(readApprovals(refs), sha256(file))`.
 
 A shot beyond its threshold, a new source-language scene with no reference, or a shot of another size goes to review:
 `references/review/` (or `--review <dir>`) receives the approved shot, the new one and the difference (changed pixels,
