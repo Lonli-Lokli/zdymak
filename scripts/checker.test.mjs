@@ -2,9 +2,15 @@
 //   node --test scripts/checker.test.mjs        (or: npm run check:checker)
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
-  factRefusals, parseAndroidFocus, parseAppLocales, parseIosRunning, parseKeyboardShown, scriptOf, textRefusals,
+  MOTION_STILL, checkSet, checkShot, factRefusals, letterboxOf, motionAllowance, parseAndroidFocus, parseAppLocales,
+  parseIosRunning, parseKeyboardShown, scriptOf, textRefusals,
 } from '../src/checker.mjs';
+
+const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
 const rules = (list) => list.map((r) => r.rule).sort();
 const android = (over) => ({ platform: 'android', app: 'com.example.app', language: 'en-US', time: '9:41', focus: { window: 'com.example.app/com.example.app.Main', app: 'com.example.app' }, keyboard: false, appLocales: ['en-US'], systemLocale: 'en-US', demoAllowed: true, ...over });
@@ -88,4 +94,64 @@ test('the picture: words in another script than the set, and English on a Latin 
   assert.deepEqual(rules(textRefusals([line('Touchez une case pour l’ouvrir et marquez les mines')], { language: 'fr' })), []);
   assert.deepEqual(rules(textRefusals(english, { language: 'hi' })), [], 'Vision does not read Devanagari: no verdict from the picture');
   assert.deepEqual(rules(textRefusals([line('OK')], { language: 'ru' })), [], 'too few letters for a verdict');
+});
+
+test('the device: a screen still changing past the scene\'s allowance', () => {
+  assert.deepEqual(factRefusals(android({ motion: MOTION_STILL / 2 })), []);
+  assert.deepEqual(rules(factRefusals(android({ motion: 0.05 }))), ['motion']);
+  assert.deepEqual(factRefusals(android({ motion: 0.05, motionAllowed: 0.2 })), []);
+  assert.equal(motionAllowance(undefined, 'home'), MOTION_STILL);
+  assert.equal(motionAllowance('0.05', 'home'), 0.05);
+  assert.equal(motionAllowance('clock=0.2,0.03', 'clock'), 0.2);
+  assert.equal(motionAllowance('clock=0.2,0.03', 'home'), 0.03);
+  assert.equal(motionAllowance('clock=0.2', 'home'), MOTION_STILL);
+  assert.throws(() => motionAllowance('clock=lots', 'clock'), /--motion/);
+});
+
+/** RGBA pixels: `paint(x, y)` gives [r, g, b]. */
+const pixels = (width, height, paint) => {
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) { const i = (y * width + x) * 4; [data[i], data[i + 1], data[i + 2]] = paint(x, y); data[i + 3] = 255; }
+  return { data, width, height };
+};
+const busy = (x, y) => [x % 251, y % 241, (x * y) % 239];
+
+test('the picture: letterbox bars, and the layouts that are not', () => {
+  // A phone-shaped app in the middle of a landscape tablet, black either side.
+  const pillar = pixels(400, 300, (x, y) => (x >= 130 && x < 270 ? busy(x, y) : [0, 0, 0]));
+  assert.equal(letterboxOf(pillar)?.sides, 'left and right');
+  // A phone on its side in a portrait tablet, with the status strip drawn across the top bar.
+  const sideways = pixels(300, 400, (x, y) => (y < 10 ? busy(x, y) : y >= 130 && y < 270 ? busy(x, y) : [40, 40, 40]));
+  assert.equal(letterboxOf(sideways)?.sides, 'top and bottom');
+  // A readable-width column on a plain ground is wider than a phone; a phone's own shot with plain margins is phone-shaped.
+  assert.equal(letterboxOf(pixels(400, 300, (x, y) => (x >= 80 && x < 320 ? busy(x, y) : [240, 240, 230]))), null);
+  assert.equal(letterboxOf(pixels(180, 390, (x, y) => (x >= 20 && x < 160 ? busy(x, y) : [240, 240, 230]))), null);
+  // Bars of two colours are the app's own design, not the system's letterbox.
+  assert.equal(letterboxOf(pixels(400, 300, (x, y) => (x < 130 ? [0, 0, 0] : x >= 270 ? [200, 0, 0] : busy(x, y)))), null);
+  // Nothing at all is blank's to refuse, not a letterbox.
+  assert.equal(letterboxOf(pixels(400, 300, () => [0, 0, 0])), null);
+});
+
+test('the bad-shot fixtures: each is refused for its own rule, shot by shot, and nothing else', async () => {
+  const dir = path.join(fixtures, 'bad-shots');
+  const expected = JSON.parse(fs.readFileSync(path.join(dir, 'expected.json'), 'utf8'));
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.png')).sort();
+  assert.deepEqual(files, Object.keys(expected).sort(), 'every fixture has its expected rule');
+  const results = [];
+  for (const f of files) results.push(await checkShot(path.join(dir, f), { text: false }));
+  await checkSet(results);
+  for (const r of results) assert.deepEqual(rules(r.refusals), expected[path.basename(r.file)], path.basename(r.file));
+  const covered = new Set(Object.values(expected).flat());
+  for (const rule of ['unreadable', 'blank', 'launch', 'motion', 'dialog', 'keyboard', 'wrong-app', 'status-bar', 'language', 'letterbox', 'duplicate']) {
+    assert.ok(covered.has(rule), `a fixture for ${rule}`);
+  }
+});
+
+test('the good-shot fixtures: no rule refuses them', async () => {
+  const dir = path.join(fixtures, 'good-shots');
+  const results = [];
+  for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.png'))) results.push(await checkShot(path.join(dir, f), { text: false }));
+  await checkSet(results);
+  assert.ok(results.length >= 4);
+  for (const r of results) assert.deepEqual(r.refusals, [], path.basename(r.file));
 });
