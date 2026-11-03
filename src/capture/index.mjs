@@ -27,7 +27,7 @@ import { captureWeb } from './web.mjs';
 import { iosBuildArgs } from './xcode.mjs';
 import { DEMO_TIME, androidFacts, checkShot, describeRefusals, iosFacts, writeFacts } from '../checker.mjs';
 import { displays, enterPosture, leavePosture, postureDisplay, postureOf, shootPosture } from './fold.mjs';
-import { androidPostureOf, enterAndroidPosture, leaveAndroidPosture, shapeMatches, turnAndroid } from './android-fold.mjs';
+import { androidPostureOf, enterAndroidPosture, leaveAndroidPosture, pngFromScreencap, shapeMatches, turnAndroid } from './android-fold.mjs';
 
 /** Flatten over black and rewrite as a NO-ALPHA RGB PNG (App Store & Play reject alpha on screenshots). */
 async function stripAlpha(file) {
@@ -678,7 +678,9 @@ async function captureAndroid(flags) {
   const shoot = (file) => {
     const b = spawnSync('adb', ['exec-out', 'screencap', '-p'], { maxBuffer: 64 * 1024 * 1024 });
     if (b.status !== 0) throw new Error(`adb screencap failed: ${b.stderr}`);
-    fs.writeFileSync(file, b.stdout);
+    const { png, note } = pngFromScreencap(b.stdout);
+    if (note && !shoot.noted) { shoot.noted = true; console.log(`   (screencap: ${note.split('\n')[0].slice(0, 120)})`); }
+    fs.writeFileSync(file, png);
   };
   const grab = async (file) => {
     shoot(file);

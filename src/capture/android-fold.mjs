@@ -150,3 +150,16 @@ export function turnAndroid(orientation, { serial } = {}) {
     },
   };
 }
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+/**
+ * The PNG in `adb exec-out screencap -p`'s output, and any text before it. On a device with more than one display
+ * (a book fold, a desktop-sized emulator) screencap writes a warning to stdout ahead of the picture, so the file
+ * is not a PNG until it is cut at the signature. Throws, with the text, when there is no picture at all.
+ */
+export function pngFromScreencap(buf) {
+  const at = buf.indexOf(PNG_SIGNATURE);
+  if (at < 0) throw new Error(`adb screencap returned no PNG: ${buf.subarray(0, 300).toString('utf8').trim()}`);
+  return { png: buf.subarray(at), note: at > 0 ? buf.subarray(0, at).toString('utf8').trim() : null };
+}

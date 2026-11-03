@@ -61,3 +61,14 @@ test('a shot of the other shape is caught, and a square one passes either way', 
   assert.equal(shapeMatches('portrait', 2076, 2152), true);
   assert.equal(shapeMatches('portrait', 1000, 1000), true);
 });
+
+test('a screencap with a warning ahead of the picture is cut at the PNG signature; one with no picture is refused', async () => {
+  const { pngFromScreencap } = await import('../src/capture/android-fold.mjs');
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  const warned = Buffer.concat([Buffer.from('[Warning] Multiple displays were found, but no display id was specified!\n'), png]);
+  const cut = pngFromScreencap(warned);
+  assert.deepEqual([...cut.png], [...png]);
+  assert.match(cut.note, /Multiple displays/);
+  assert.equal(pngFromScreencap(png).note, null);
+  assert.throws(() => pngFromScreencap(Buffer.from('error: device offline')), /no PNG: error: device offline/);
+});
