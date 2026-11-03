@@ -1329,18 +1329,40 @@ error when the config loads. Middleware runs with the full power of the file it 
 `middleware` key, with the same semantics, is in [vydanne](https://github.com/Lonli-Lokli/vydanne), so a check written for
 one reads the same in the other.
 
-### `zdymak check` — is there a screen in this capture?
+### `zdymak check` — may a store show this shot?
 
 ```sh
-zdymak check shots/            # files and folders, searched recursively
+zdymak check shots/                    # files and folders, searched recursively
+zdymak check shots/fr-FR --language fr # the set's language, when the shots carry no device facts
 zdymak check a.png b.png --json
 ```
 
-The blank-capture measurement that `build` and `screenshots` apply to their input, as a command of its own, so a CI job,
-a release gate or a device test can ask zdymak instead of re-implementing it: a capture with under 400 distinct colours
-and over 95% of one colour drew nothing. It exits 1 on a blank or unreadable file; `--force` reports without failing,
-`--json` prints `{ file, colours, dominant, blank, unreadable }` per file. The same function is exported as
-`captureBlankness`, with the thresholds `BLANK_COLOURS` and `BLANK_DOMINANCE`.
+The checker every `capture` runs on each shot it takes, as a command of its own for a folder of finished shots, a CI
+job or a release gate. It refuses, naming the shot and the reason:
+
+| rule | refuses | read from |
+|---|---|---|
+| `blank` | a screen that drew nothing: under 400 distinct colours and over 95% one colour | the picture |
+| `launch` | the launch screen in place of the scene: under 4% of the screen changed since the frame just after launch | the device, at capture |
+| `dialog` | "isn't responding", "System UI isn't responding", a crash dialog, a permission prompt, an iOS alert | the focused window (Android), the picture's words |
+| `keyboard` | the on-screen keyboard | the input method (Android), a keyboard row of letters in the lower half |
+| `wrong-app` | the home screen or another app in front | the focused window (Android), the app not running (iOS), home screen labels |
+| `status-bar` | a status bar not in demo mode: the real clock, a battery not full | demo mode allowed (Android), the simulator's override (iOS), the clock and battery in the top strip |
+| `language` | the device or app in another language than the set's | the app's locale (Android), the script of the picture's words, English words on a non-English Latin set |
+| `unreadable` | a file that is not a PNG this tool can decode | the picture |
+
+What the device says is read at capture time and kept beside the shot in `.zdymak-check/<name>.json` (a hidden folder
+that `check` and uploaders do not walk), so checking the folder later still knows it; a shot without those facts gets a
+note, not a refusal. The picture's words are read with Apple's Vision on macOS (`src/ocr.swift`, compiled once into the
+temporary folder); elsewhere, or with `--no-text` or `ZDYMAK_NO_OCR=1`, the word rules are skipped with a note. Vision
+does not read Devanagari, so a set in Hindi gets no language verdict from the picture. `--time` names the pinned clock
+(9:41). It exits 1 on any refusal; `capture` fails its run after the last state with every refusal listed. `--force`
+reports without failing. `--json` prints `{ file, refusals, notes, colours, dominant, blank }` per file. The checker is
+exported as `checkShot`, `factRefusals` and `textRefusals`; the blank measurement as `captureBlankness`, with the
+thresholds `BLANK_COLOURS` and `BLANK_DOMINANCE`.
+
+On Android a state capture now force-stops the app before each state, as iOS terminates it, so each state starts cold
+and is compared with its own launch frame.
 
 <br>
 

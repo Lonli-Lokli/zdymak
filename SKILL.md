@@ -407,9 +407,11 @@ the target infers, i.e. a cluster of devices inside a phone bezel.
 
 ## Middleware and `check` — the app's own rules, and a pixel check anyone can call
 
-`zdymak check <png|dir>…` tells you whether each capture has a screen in it (the blank-capture measurement `build` already
-applies to its input): exit 1 on a blank or unreadable file, `--json` for machines. Use it instead of re-implementing the
-measurement in a CI job or a release gate.
+`zdymak check <png|dir>… [--language <tag>]` is the checker every `capture` runs on each shot: it refuses a blank screen,
+the launch screen, a system dialog, the on-screen keyboard, the home screen or another app, a status bar not in demo mode
+and another language than the set's, naming the shot and the reason (exit 1; `--force` reports only; `--json` for
+machines). The device's facts at capture time are kept in `.zdymak-check/` beside the shots; the picture's words are read
+with Vision on macOS. Use it instead of re-implementing any of this in a CI job or a release gate.
 
 The config key `middleware` takes `(ctx, next)` functions or `{ name, commands, run }` objects, first entry outermost, around
 build, video, reel, screenshots, capture and check. Before `await next()` an entry may refuse with `ctx.fail(reason)`; after it
