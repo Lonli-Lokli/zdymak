@@ -31,3 +31,9 @@ export {
   describeRefusals, factRefusals, letterboxOf, motionAllowance, textRefusals, readText, readFacts,
 } from './checker.mjs';
 export { MiddlewareRefusal, normalizeMiddleware, runMiddleware } from './middleware.mjs';
+export {
+  APPROVALS_FILE, LAYOUT_CELL, LAYOUT_TOLERANCE, RTL_LANGUAGES, compareShots, isRtl, layoutAgainst, layoutDifference,
+  mirrored, mirroredBoxes, pixelDifference, pixelsAgainst, readApprovals, thresholdsOf,
+} from './compare.mjs';
+export { decide, writeReview } from './review.mjs';
+export { measurePairs } from './noise.mjs';

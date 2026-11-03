@@ -31,7 +31,7 @@ const DEFAULT_BRAND = {
 export const CONFIG_KEYS = [
   'brand', 'screenshotsDir', 'suffix', 'scenes', 'targets', 'sceneDur', 'xfade',
   'timing', 'theme', 'stillTheme', 'music', 'devices', 'captions', 'reel', 'out',
-  'sourceLocale', 'middleware',
+  'sourceLocale', 'middleware', 'compare',
 ];
 
 /**

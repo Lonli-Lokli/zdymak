@@ -23,6 +23,9 @@ import { runCapture } from './capture/index.mjs';
 import { resolveVideo, resolveReel, paletteAt } from './destinations.mjs';
 import { validateVideo, validateImage } from './validate.mjs';
 import { checkSet, checkShot } from './checker.mjs';
+import { compareShots, thresholdsOf } from './compare.mjs';
+import { measurePairs } from './noise.mjs';
+import { decide, writeReview } from './review.mjs';
 import { normalizeMiddleware, runMiddleware } from './middleware.mjs';
 import { pathToFileURL } from 'node:url';
 
@@ -344,6 +347,59 @@ async function cmdCheck(flags, rest) {
   else if (bad.length) console.warn(`⚠︎ ${bad.length} shot(s) failed the check; --force reports them without failing`);
 }
 
+/** The config read raw (compare works without scenes): `{ raw, dir }`, raw null when there is no config. */
+async function rawConfig(flags) {
+  const configPath = path.resolve(flags.config || DEFAULT_CONFIG);
+  if (configPath.endsWith('.json') || !fs.existsSync(configPath)) return { raw: null, dir: process.cwd() };
+  const mod = await import(pathToFileURL(configPath).href);
+  return { raw: mod.default ?? mod.config ?? mod, dir: path.dirname(configPath) };
+}
+
+/**
+ * `zdymak compare <png|dir>… --target <id>` — is each shot the picture already approved for that store target? A
+ * source-language shot against its reference by pixels, a translated one against the source-language reference by
+ * layout, text masked and mirrored for a right-to-left language, each against the config's `compare.pixel` and
+ * `compare.layout`. What needs the owner is written to a review folder (`--review`, default `<references>/review`)
+ * with a page for the phone; exits 1 while anything waits. `--measure <first> <second>` prints the pixel and layout
+ * noise between two captures as TSV instead (`--mirror` mirrors the first).
+ */
+async function cmdCompare(flags, rest) {
+  const { raw, dir } = await rawConfig(flags);
+  const textOf = flags['no-text'] ? () => [] : undefined;
+  if (flags.measure) {
+    const [first, second] = [flags.measure, rest[0]];
+    if (!first || !second) throw new Error('compare --measure: pass two captures, e.g. zdymak compare --measure run-1/ run-2/');
+    const rows = await measurePairs(first, second, { language: flags.language, mirror: !!flags.mirror, textOf });
+    console.log('scene\tpixel\tlayout\tsize');
+    for (const r of rows) console.log([r.scene, r.pixel ?? '', r.layout ?? '', r.size ? r.size.join('/') : ''].join('\t'));
+    return;
+  }
+  const cfg = raw?.compare || {};
+  const refs = path.resolve(flags.references ? process.cwd() : dir, flags.references || cfg.references || 'references');
+  const thresholds = thresholdsOf({ pixel: flags.pixel !== undefined ? Number(flags.pixel) : cfg.pixel, layout: flags.layout !== undefined ? Number(flags.layout) : cfg.layout });
+  const files = pngsIn(rest);
+  if (!files.length) throw new Error('compare: pass PNG files or folders, e.g. zdymak compare shots/ --target ios-13');
+  const items = await compareShots(files, { target: flags.target, refs, thresholds, language: flags.language, sourceLocale: raw?.sourceLocale || 'en', textOf });
+  const waiting = items.filter((i) => i.review);
+  const blocked = items.filter((i) => i.blocked);
+  for (const i of items) console.log(`  ${i.review ? '?' : i.blocked ? '✗' : '✓'} ${i.target} ${i.language} ${i.scene}: ${i.reason}`);
+  if (waiting.length) {
+    const page = await writeReview(items, path.resolve(flags.review || path.join(refs, 'review')), { refs });
+    console.log(`${waiting.length} shot(s) wait for review: ${page}`);
+  }
+  if (flags.json) console.log(JSON.stringify(items.map(({ diff, ...i }) => i), null, 2));
+  if (waiting.length || blocked.length) process.exitCode = 1;
+}
+
+/** `zdymak approve|reject <review dir> <id…>|--all` — answer a review; an approved source-language shot becomes the reference. */
+function cmdDecide(verdict, flags, rest) {
+  const [dir, ...ids] = rest;
+  if (!dir || (!ids.length && !flags.all)) throw new Error(`${verdict}: pass the review folder and the items, e.g. zdymak ${verdict} references/review <id>… (or --all)`);
+  for (const it of decide(dir, ids, verdict, { all: !!flags.all })) {
+    console.log(`  ${verdict === 'approve' ? '✓' : '✗'} ${it.id}${verdict === 'approve' && it.source ? ' is the reference now' : ''}`);
+  }
+}
+
 /** How a target's size reads: one size, a list, or a range with the size zdymak writes by default. */
 function dimText(s) {
   if (s.range) return `${s.w}×${s.h} (any ${s.range.ratio.join(':')} from ${s.range.min.join('×')} to ${s.range.max.join('×')})`;
@@ -385,6 +441,13 @@ Usage:
                   # is there a screen in each capture? The measurement build/screenshots apply to their input (a
                   # capture with under 400 distinct colours AND over 95% one colour drew nothing), as a command
                   # of its own for CI, release gates and device tests. Exits 1 on a blank or unreadable file.
+  zdymak compare  <png|dir>… --target <id> [--language <tag>] [--references <dir>] [--review <dir>] [--pixel <share>] [--layout <share>] [--json]
+                  # each shot against the approved reference for its store target: the source language by pixels,
+                  # other languages by layout with text masked (right-to-left against the reference mirrored).
+                  # Thresholds from the config's compare.pixel / compare.layout. Exits 1 while a shot waits for review.
+  zdymak compare  --measure <first> <second> [--language <tag>] [--mirror]   # pixel + layout noise, TSV
+  zdymak approve  <review dir> <id…>|--all    # an approved source-language shot becomes the reference
+  zdymak reject   <review dir> <id…>|--all
   zdymak specs
   zdymak capture  --platform ios --bundle <id> --arg <handle> --states <a,b,c> [--suffix -light]
                   [--build --project <.xcodeproj> --scheme <name> [--configuration <name>] [--derived-data <dir>]] [--device <sim>] [--out <dir>] [--clean] [--keep]
@@ -494,6 +557,8 @@ export async function run(argv = process.argv.slice(2)) {
         case 'specs': cmdSpecs(); break;
         case 'capture': await runCapture(flags, rest); break;
         case 'check': await cmdCheck(flags, rest); break;
+        case 'compare': await cmdCompare(flags, rest); break;
+        case 'approve': case 'reject': cmdDecide(cmd, flags, rest); break;
         case 'help': case undefined: case '--help': case '-h': cmdHelp(); break;
         default:
           console.error(`Unknown command "${cmd}".\n`);
