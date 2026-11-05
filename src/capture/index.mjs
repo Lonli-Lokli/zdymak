@@ -193,35 +193,112 @@ async function settleFrame(udid, outDir, { maxMs = 9000, display = null } = {}) 
   }
 }
 
-/**
- * The share of the screen that differs between two captures: every 4th pixel, counted as different when
- * a channel moved by more than 32. Two shots of one launch screen come out near 0 (a swaying mark is a
- * percent or two); a launch screen against the app's first screen comes out at a large share of it.
- */
-export async function screenDifference(fileA, fileB) {
-  const [a, b] = await Promise.all([loadImage(fileA), loadImage(fileB)]);
-  if (a.width !== b.width || a.height !== b.height) return 1;
-  const pixels = (img) => {
-    const c = createCanvas(img.width, img.height);
-    const ctx = c.getContext('2d');
-    ctx.drawImage(img, 0, 0);
-    return ctx.getImageData(0, 0, img.width, img.height).data;
-  };
-  const pa = pixels(a);
-  const pb = pixels(b);
+/** A capture's pixels, RGBA. */
+async function pixelsOf(file) {
+  const img = await loadImage(file);
+  const c = createCanvas(img.width, img.height);
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  return { width: img.width, height: img.height, data: ctx.getImageData(0, 0, img.width, img.height).data };
+}
+
+/** How far apart two colours must be, in any channel, to count as different (in time and, for detail, in space). */
+const STEP = 32;
+
+/** The share of every 4th pixel whose colour moved by more than [STEP] in a channel between `a` and `b`. */
+function colourShare(a, b) {
+  const pa = a.data;
+  const pb = b.data;
   let total = 0;
   let moved = 0;
   for (let y = 0; y < a.height; y += 4) {
     for (let x = 0; x < a.width; x += 4) {
       const i = (y * a.width + x) * 4;
       total++;
-      if (Math.abs(pa[i] - pb[i]) > 32 || Math.abs(pa[i + 1] - pb[i + 1]) > 32 || Math.abs(pa[i + 2] - pb[i + 2]) > 32) moved++;
+      if (Math.abs(pa[i] - pb[i]) > STEP || Math.abs(pa[i + 1] - pb[i + 1]) > STEP || Math.abs(pa[i + 2] - pb[i + 2]) > STEP) moved++;
     }
   }
   return total ? moved / total : 0;
 }
 
-/** Under this share of changed pixels, a capture still shows what the screen showed at launch. */
+/**
+ * The share of the screen that differs between two captures: every 4th pixel, counted as different when
+ * a channel moved by more than 32. Two shots of one launch screen come out near 0 (a swaying mark is a
+ * percent or two); a launch screen against the app's first screen comes out at a large share of it.
+ */
+export async function screenDifference(fileA, fileB) {
+  const [a, b] = await Promise.all([pixelsOf(fileA), pixelsOf(fileB)]);
+  if (a.width !== b.width || a.height !== b.height) return 1;
+  return colourShare(a, b);
+}
+
+/** A screen is cut into square tiles this many to its shorter side to find where it holds detail. */
+const DETAIL_TILES = 64;
+
+/**
+ * Which tiles of a capture hold detail: a step of more than [STEP] in a channel between a pixel and the one 4 to
+ * its right or below, looked for at every 4th pixel. A launch screen is flat ground and one mark, so only the mark's
+ * tiles do, and a shift of the whole ground's colour changes none.
+ */
+function detailTiles(img) {
+  const side = Math.max(1, Math.round(Math.min(img.width, img.height) / DETAIL_TILES));
+  const across = Math.ceil(img.width / side);
+  const tiles = new Uint8Array(across * Math.ceil(img.height / side));
+  const p = img.data;
+  for (let y = 0; y + 4 < img.height; y += 4) {
+    for (let x = 0; x + 4 < img.width; x += 4) {
+      const i = (y * img.width + x) * 4;
+      const right = i + 16;
+      const below = i + img.width * 16;
+      for (let c = 0; c < 3; c++) {
+        if (Math.abs(p[i + c] - p[right + c]) > STEP || Math.abs(p[i + c] - p[below + c]) > STEP) {
+          tiles[Math.floor(y / side) * across + Math.floor(x / side)] = 1;
+          break;
+        }
+      }
+    }
+  }
+  return tiles;
+}
+
+/** The share of tiles that hold detail in one capture and not in the other. */
+function detailShare(a, b) {
+  const ta = detailTiles(a);
+  const tb = detailTiles(b);
+  let changed = 0;
+  for (let k = 0; k < ta.length; k++) if (ta[k] !== tb[k]) changed++;
+  return ta.length ? changed / ta.length : 0;
+}
+
+/**
+ * How far a capture is from a launch frame: the larger of the share whose colour changed ([screenDifference]) and
+ * the share of tiles whose detail changed ([detailShare]); both are read against [LAUNCH_LOOK].
+ *
+ * Colour alone missed a dark result card over a dimmed scene on a tablet (2064×2752): the scrim, the card and the
+ * scene under them sit within 32 of the launch screen's dark ground, so only the card's words and buttons count, 3.6%,
+ * and the drawn card was refused twice. Lowering the tolerance cannot help: two launch frames of that run differ by
+ * 16 to 24 in the ground (0.4% apart at 24 or more, 99.9% at 16). Detail ignores the ground's colour and sees the words.
+ *
+ * Measured with this function on that run and an earlier one (10 launch frames, 10 shots), tiles of 1/64 of the
+ * shorter side (32 px there) and a step over 32: the 36 pairs of launch frames within LAUNCH_LOOK of each other by
+ * colour are at most 1.7% apart (a frame taken before its mark drew against one with it), and each of the 100 launch
+ * frame and shot pairs is at least 8.3% apart, the lowest being the result card (colour 3.5%). Against a stand-in
+ * launch screen (that ground and that mark, under each shot's own status bar) for 65 shots in 13 other sets (phones,
+ * foldables, tablets, a 1920×1080 screen), the 4 shots under LAUNCH_LOOK by colour are 5.4 to 8.4% apart by detail
+ * (lowest: a result card at 1920×1080), and the mark arriving on bare ground moves at most 3.4% (the mark at 1.5 times
+ * its tablet size on a 1080-wide phone, over a third of its width). Only a 1024×600 screen went past 4%, where the
+ * mark copied at its tablet pixels spans 43% of the shorter side and arrives at 4.6%: a launch mark that large on a
+ * small screen could pass for a scene as it draws in.
+ * The larger of the two shares is never under the colour share, so nothing the colour check let through is refused.
+ */
+export async function launchChange(fileA, fileB) {
+  const [a, b] = await Promise.all([pixelsOf(fileA), pixelsOf(fileB)]);
+  if (a.width !== b.width || a.height !== b.height) return 1;
+  const byColour = colourShare(a, b);
+  return byColour >= LAUNCH_LOOK ? byColour : Math.max(byColour, detailShare(a, b));
+}
+
+/** Under this share of changed pixels (and of changed detail, [launchChange]), a capture still shows what the screen showed at launch. */
 export const LAUNCH_LOOK = 0.04;
 
 /**
@@ -243,7 +320,7 @@ async function awaitDrawn({ shoot, launchFrame, out, waitMs, known }) {
   shoot(out);
   if (known.length && !(await isLaunchScreen(launchFrame, known))) return { waited: 0, atOnce: true };
   for (;;) {
-    if (await screenDifference(launchFrame, out) >= LAUNCH_LOOK) return { waited: Date.now() - t0, atOnce: false };
+    if (await launchChange(launchFrame, out) >= LAUNCH_LOOK) return { waited: Date.now() - t0, atOnce: false };
     if (Date.now() - t0 >= waitMs) return { waited: 0, atOnce: false };
     await sleep(1000);
     shoot(out);
@@ -252,7 +329,7 @@ async function awaitDrawn({ shoot, launchFrame, out, waitMs, known }) {
 
 /** Whether `frame` looks like one of `screens` (under [LAUNCH_LOOK] from it); with none, it may be one, so yes. */
 async function isLaunchScreen(frame, screens) {
-  for (const s of screens) if (await screenDifference(s, frame) < LAUNCH_LOOK) return true;
+  for (const s of screens) if (await launchChange(s, frame) < LAUNCH_LOOK) return true;
   return screens.length === 0;
 }
 
@@ -289,7 +366,7 @@ export async function launchDifferences(states, waitMs) {
       differences.push(s.moved);
     } else {
       let least = 1;
-      for (const k of known) least = Math.min(least, await screenDifference(k, s.frame));
+      for (const k of known) least = Math.min(least, await launchChange(k, s.frame));
       differences.push(least);
     }
   }
@@ -675,7 +752,7 @@ async function captureIos(flags) {
           await sleep(500);
           shoot(out);
         }
-        launches.push({ state: st, frame: launchFrame, moved: await screenDifference(launchFrame, out), atOnce: drawn.atOnce });
+        launches.push({ state: st, frame: launchFrame, moved: await launchChange(launchFrame, out), atOnce: drawn.atOnce });
         const motion = await motionAfter(shoot, out);
         if (!posture) await uprightCapture(out, orientation);
         await stripAlpha(out);
@@ -879,7 +956,7 @@ async function captureAndroid(flags) {
             await sleep(2000);
             shoot(out);
           }
-          launches.push({ state: st, frame: launchFrame, moved: await screenDifference(launchFrame, out), atOnce: drawn.atOnce });
+          launches.push({ state: st, frame: launchFrame, moved: await launchChange(launchFrame, out), atOnce: drawn.atOnce });
           const motion = await motionAfter(shoot, out);
           await stripAlpha(out);
           checkShape(out);

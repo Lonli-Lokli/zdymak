@@ -148,7 +148,8 @@ There's also a single-shot mode (`--name welcome`) that snaps whatever is curren
 `--record` for a screen recording you can feed to the live-footage `reel`.
 
 **iOS never photographs a launch screen.** After `--settle` (seconds, default `4`) an iOS still is compared
-with the screen as it was 0.4 s after the launch; while less than 4% of it has changed, the app has not
+with the screen as it was 0.4 s after the launch; while less than 4% of it has changed, in colour and in detail
+(a dark card over a dimmed scene can stay within a launch screen's dark ground in colour), the app has not
 drawn the state yet, and zdymak waits up to `--ready-wait` more seconds (default `30`), lets the screen come
 to rest and shoots then. The first launch after an install compiles the app's shaders, and on a loaded
 machine that outlasted an 18 s settle: the shot went to the store as a picture of the launch screen, which
