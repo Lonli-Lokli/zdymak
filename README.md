@@ -292,7 +292,8 @@ iOS 27.1:
 - **It waits for the screen in reads, not seconds**: three reads in a row of the wanted display, a second
   apart, out of 60 just after the boot, 20 after a fold and 10 before a shot. A devicectl read can itself
   take many seconds on a simulator just booted, and a clock budget failed postures that had taken. When the
-  wanted screen never comes on, it folds the phone once more from closed before it refuses.
+  wanted screen has not come on, it waits once more (a simulator can show a fold twenty reads late), then folds
+  the phone once more from closed before it refuses.
 - **The shot must have the posture's shape.** An iPhone app turns only when its Info.plist lists the
   landscape orientations *and* it allows them on a phone that folds; one that does not stays upright,
   and that is an error rather than a portrait set filed as landscape.

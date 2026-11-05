@@ -95,8 +95,9 @@ test('fold closes, waits for the outer screen, opens flat, turns, then folds bac
 test('fold folds once more when the wanted screen does not come on, and refuses a second miss with both reads', () => {
   const sent = [];
   let reads = 0;
-  // Closed (outer on) for the first wait, the inner never comes on for 20 reads, then closed again, then inner.
-  const script = [...Array(3).fill('1'), ...Array(READS.fold).fill('1'), ...Array(3).fill('1'), '3'];
+  // Closed (outer on) for the first wait, the inner never comes on in two waits of 20 reads, then closed again,
+  // then inner.
+  const script = [...Array(3).fill('1'), ...Array(2 * READS.fold).fill('1'), ...Array(3).fill('1'), '3'];
   const logged = [];
   const on = fold(postureOf('half-book'), { outer: '1', want: '3', send: (...a) => sent.push(a.join(' ')),
     read: () => script[Math.min(reads++, script.length - 1)], wait: noWait, log: (l) => logged.push(l) });
@@ -107,6 +108,32 @@ test('fold folds once more when the wanted screen does not come on, and refuses 
   assert.throws(
     () => fold(postureOf('half-book'), { outer: '1', want: '3', send: () => {}, read: reader(['1']), wait: noWait }),
     (e) => /half-book wants the inner screen \(display 3\) on/.test(e.message) && /\| again:/.test(e.message),
+  );
+});
+
+test('a wanted screen that comes on after its reads ran out gets one more wait, not a re-fold', () => {
+  // One store run (2026-11-05): open's inner screen came on two reads after its 20, just as the re-fold closed the
+  // phone, so the closing read the inner screen (1, 1, 3, 3, …) and the posture was refused for the outer one.
+  const sent = [];
+  let reads = 0;
+  const script = [...Array(3).fill('1'), ...Array(READS.fold).fill('1'), '1', '1', '3'];
+  const logged = [];
+  const on = fold(postureOf('open'), { outer: '1', want: '3', send: (...a) => sent.push(a.join(' ')),
+    read: () => script[Math.min(reads++, script.length - 1)], wait: noWait, log: (l) => logged.push(l) });
+  assert.equal(on, '3');
+  assert.equal(sent.filter((c) => c === 'hinge 0').length, 1);
+  assert.match(logged[0], /open: the inner screen \(display 3\) came on late/);
+});
+
+test('a retry whose closing fails names the wanted screen and the closing, not the outer screen alone', () => {
+  let reads = 0;
+  // Closed, then the inner never comes on in two waits, then closed again never reads the outer.
+  const script = [...Array(3).fill('1'), ...Array(2 * READS.fold).fill('1'), ...Array(READS.fold).fill('none')];
+  assert.throws(
+    () => fold(postureOf('half-book'), { outer: '1', want: '3', send: () => {},
+      read: () => script[Math.min(reads++, script.length - 1)], wait: noWait }),
+    (e) => /^half-book wants the inner screen \(display 3\) on/.test(e.message)
+      && /folding it closed again, the outer screen \(display 1\) never came on/.test(e.message),
   );
 });
 

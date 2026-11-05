@@ -164,8 +164,9 @@ function helper(udid, bin, ...args) {
  * pause) so its order and its one retry can be tested without one. Closes the phone and waits for the outer screen,
  * then opens flat and folds back for the inner one (see the file comment). When the wanted screen does not come on,
  * it folds the phone again ONCE from closed: a fold sent to a simulator just booted can be lost (one store run,
- * 2026-11-05: half open like a book, the inner screen never lit in twenty reads). A second miss refuses, naming
- * the reads of both tries.
+ * 2026-11-05: half open like a book, the inner screen never lit in twenty reads). Before that re-fold the wanted
+ * screen gets one more wait of the same length, without a fold, since the simulator can be that late to show one. A
+ * second miss refuses, naming the reads of both tries, and says so when it was the closing for the retry that failed.
  */
 export function fold(posture, { outer, want, send, read, wait = pause, log = () => {} }) {
   const refuse = (screen, id, reads) => new Error(`${posture.name} wants the ${screen} screen (display ${id}) on, and `
@@ -174,7 +175,12 @@ export function fold(posture, { outer, want, send, read, wait = pause, log = () 
   for (let attempt = 1; attempt <= 2; attempt++) {
     send('hinge', '0');
     const closed = awaitDisplay(read, outer, attempt === 1 ? READS.first : READS.fold, wait);
-    if (closed) throw refuse('outer', outer, missed ? [...missed, '| again:', ...closed] : closed);
+    if (closed && missed) {
+      throw new Error(`${posture.name} wants the ${posture.screen} screen (display ${want}) on, and devicectl never read `
+        + `it three times in a row (it read ${missed.join(', ')}); folding it closed again, the outer screen (display `
+        + `${outer}) never came on either (it read ${closed.join(', ')}).`);
+    }
+    if (closed) throw refuse('outer', outer, closed);
     if (posture.screen === 'outer') {
       send('orientation', posture.orientation);
       wait(2000);
@@ -188,8 +194,18 @@ export function fold(posture, { outer, want, send, read, wait = pause, log = () 
         wait(3000);
       }
     }
-    const reads = awaitDisplay(read, want, READS.fold, wait);
+    let reads = awaitDisplay(read, want, READS.fold, wait);
     if (!reads) return want;
+    // A screen that has not come on gets one more wait of the same length before the phone is folded again: the
+    // simulator can show a fold twenty reads late, and a re-fold sent then closed the phone while the inner screen
+    // was still coming on, so the closing read the inner screen and the posture was refused for the outer one (one
+    // store run, 2026-11-05: open "1 ×20 | again: 1, 1, 3, 3, …", half-book "1 ×19, 3 | again: 3, 3, 3, …").
+    const late = awaitDisplay(read, want, READS.fold, wait);
+    if (!late) {
+      log(`  ${posture.name}: the ${posture.screen} screen (display ${want}) came on late (devicectl read ${reads.join(', ')})`);
+      return want;
+    }
+    reads = [...reads, ...late];
     if (missed) throw refuse(posture.screen, want, [...missed, '| again:', ...reads]);
     missed = reads;
     log(`  ${posture.name}: the ${posture.screen} screen (display ${want}) did not come on (devicectl read ${reads.join(', ')}); folding once more from closed`);
