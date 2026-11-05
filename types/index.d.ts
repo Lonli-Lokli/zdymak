@@ -840,6 +840,8 @@ export interface ResolvedConfig {
   devices: ResolvedDevice[];
   /** Caption tables with every JSON path already read. */
   captions?: Record<string, CaptionTable>;
+  /** The base set's language (`sourceLocale`, `'en'` when unset). */
+  sourceLocale: string;
   music?: Music;
   targets: Array<VideoTargetId | (string & {})>;
   sceneDur: number;

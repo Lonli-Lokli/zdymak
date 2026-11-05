@@ -239,6 +239,7 @@ export async function loadConfig(configPath) {
     scenes,
     devices,
     captions: raw.captions ? loadCaptions(raw.captions, baseDir) : undefined,
+    sourceLocale, // the base set's language: `screenshots --locale` accepts it as "the base set only"
     music,
     // `?? ` not `?.length ?` — an explicit `targets: []` means "no top-level videos" (a devices-only
     // config renders each device's own), whereas omitting the key entirely still gets the sane default.

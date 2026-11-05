@@ -17,7 +17,7 @@ import { buildVideo } from './video.mjs';
 import { buildReel } from './reel.mjs';
 import { buildPremium } from './premium.mjs';
 import { buildMontage } from './montage.mjs';
-import { buildDeviceScreenshots, localizeScenes, localizeBrand, untranslatedScenes } from './screenshots.mjs';
+import { buildDeviceScreenshots, localizeScenes, localizeBrand, untranslatedScenes, localesFor } from './screenshots.mjs';
 import { VIDEO_TARGETS, IMAGE_TARGETS, videoTarget } from './specs.mjs';
 import { runCapture } from './capture/index.mjs';
 import { resolveVideo, resolveReel, paletteAt } from './destinations.mjs';
@@ -176,25 +176,6 @@ async function cmdReel(flags) {
     warnAudio({ videoCount: 1, hasMusic: !!reel.music, label: `the ${base} reel`, silentByDesign: !!destination?.muted });
   }
   console.log('Done.');
-}
-
-/**
- * Which locales to render, from `captions` + an optional `--locale de,fr` filter. An unknown locale is an
- * error, not a silent no-op — a typo'd locale would otherwise look like a successful run that shipped
- * nothing.
- */
-function localesFor(cfg, flags) {
-  const configured = Object.keys(cfg.captions || {});
-  if (!flags.locale) return configured;
-  const wanted = String(flags.locale).split(',').map((s) => s.trim()).filter(Boolean);
-  const unknown = wanted.filter((l) => !configured.includes(l));
-  if (unknown.length) {
-    throw new Error(
-      `--locale: no captions configured for ${unknown.join(', ')}. ` +
-        (configured.length ? `Configured: ${configured.join(', ')}.` : 'The config has no `captions` block.'),
-    );
-  }
-  return wanted;
 }
 
 /**

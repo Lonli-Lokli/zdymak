@@ -55,3 +55,20 @@ test('captionOf naming no shared scene fails at load, listing the ids there are'
     /captionOf "frsh" names no top-level scene \(have: fresh, midgame\)/,
   );
 });
+
+test('--locale names caption locales, and the source locale means the base set alone', async () => {
+  const { localesFor } = await import('../src/screenshots.mjs');
+  const cfg = await configWith({
+    scenes: shared,
+    captions: { de: { fresh: { title: 'Ein Feld.' } }, fr: { fresh: { title: 'Un champ.' } } },
+  });
+  assert.equal(cfg.sourceLocale, 'en');
+  assert.deepEqual(localesFor(cfg, {}), ['de', 'fr']);
+  assert.deepEqual(localesFor(cfg, { locale: 'fr' }), ['fr']);
+  assert.deepEqual(localesFor(cfg, { locale: 'en' }), []);
+  assert.deepEqual(localesFor(cfg, { locale: 'en,de' }), ['de']);
+  assert.throws(() => localesFor(cfg, { locale: 'uk' }), /no captions configured for uk.*en, the base set/);
+  const fr = await configWith({ sourceLocale: 'fr', scenes: shared, captions: { de: {} } });
+  assert.deepEqual(localesFor(fr, { locale: 'fr' }), []);
+  assert.throws(() => localesFor(fr, { locale: 'en' }), /no captions configured for en/);
+});

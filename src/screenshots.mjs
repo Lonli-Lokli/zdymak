@@ -116,6 +116,28 @@ export function localizeScenes(scenes, table) {
   });
 }
 
+/**
+ * Which caption locales to render, from `captions` + an optional `--locale de,fr` filter. An unknown locale is
+ * an error, not a silent no-op: a typo'd locale would otherwise look like a successful run that shipped nothing.
+ * The source locale (`sourceLocale`, English by default) is the base set every run composes, so naming it is
+ * accepted and adds no caption locale: `--locale en` composes the base set alone, `--locale en,de` the base set
+ * and German.
+ */
+export function localesFor(cfg, flags) {
+  const configured = Object.keys(cfg.captions || {});
+  if (!flags.locale) return configured;
+  const source = cfg.sourceLocale ?? 'en';
+  const wanted = String(flags.locale).split(',').map((s) => s.trim()).filter(Boolean);
+  const unknown = wanted.filter((l) => l !== source && !configured.includes(l));
+  if (unknown.length) {
+    throw new Error(
+      `--locale: no captions configured for ${unknown.join(', ')}. ` +
+        (configured.length ? `Configured: ${configured.join(', ')} (and ${source}, the base set).` : `The config has no \`captions\` block; ${source} is the base set.`),
+    );
+  }
+  return wanted.filter((l) => l !== source || configured.includes(l));
+}
+
 /** Scene ids in `scenes` that this locale's table doesn't translate (used for the fallback report). */
 export function untranslatedScenes(scenes, table) {
   if (!table) return [];
