@@ -14,8 +14,11 @@ import { duoAspect } from '../src/frames.mjs';
 import { pngInfo } from '../src/validate.mjs';
 import { FOLD_DEFAULTS, resolveFold, foldGeometry, fitFold, foldHomography, pointOn, drawFoldedDuo } from '../src/fold3d.mjs';
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'zdymak-fold3d-'));
-test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+// ZDYMAK_TEST_KEEP=<folder> keeps the shots there, for CI to upload when a test fails; otherwise they go.
+const keep = process.env.ZDYMAK_TEST_KEEP;
+if (keep) fs.mkdirSync(keep, { recursive: true });
+const tmp = fs.mkdtempSync(path.join(keep || os.tmpdir(), 'zdymak-fold3d-'));
+if (!keep) test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 // A small capture of the inner display, upright (half open like a laptop) or wide (like a book), in the
 // display's own shape. Its colour changes smoothly with position, so a pixel can be checked against the point

@@ -1,0 +1,37 @@
+# Run the whole check on every push to the default branch and on demand, on the same runner the publish job uses,
+# so a test that fails only on Linux is seen before a Release is published. When a check fails, the images the
+# tests wrote are uploaded as the run's artifact `test-output`.
+name: verify
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+
+      - run: npm ci
+
+      - name: Fonts the canvas can find
+        run: fc-list : family file | sort | head -40 || true
+
+      - run: npm run verify
+        env:
+          ZDYMAK_TEST_KEEP: ${{ runner.temp }}/test-output
+
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: ${{ runner.temp }}/test-output
+          retention-days: 7
