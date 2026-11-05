@@ -287,6 +287,12 @@ iOS 27.1:
 - **It photographs the screen that is on** (`simctl io screenshot --display`, the active display read
   from devicectl). Without `--display` simctl takes the outer screen even while it is off — a black
   image — and with the display of a screen that is off it waits forever, so the shot has a timeout.
+  Every screenshot of a posture names its display, the probe that waits for a screen to settle included:
+  on a phone with two displays simctl refuses to pick one.
+- **It waits for the screen in reads, not seconds**: three reads in a row of the wanted display, a second
+  apart, out of 60 just after the boot, 20 after a fold and 10 before a shot. A devicectl read can itself
+  take many seconds on a simulator just booted, and a clock budget failed postures that had taken. When the
+  wanted screen never comes on, it folds the phone once more from closed before it refuses.
 - **The shot must have the posture's shape.** An iPhone app turns only when its Info.plist lists the
   landscape orientations *and* it allows them on a phone that folds; one that does not stays upright,
   and that is an error rather than a portrait set filed as landscape.
@@ -1095,6 +1101,7 @@ captions: {
 ```sh
 zdymak screenshots                 # base set + every configured locale
 zdymak screenshots --locale de,fr  # just those two (an unconfigured locale is an error, not a no-op)
+zdymak screenshots --locale en     # the base set alone (the source locale names the base set, no caption locale)
 ```
 
 The base (source-language) set stays where it always was; each locale lands in `<out>/<locale>/<target>/`,

@@ -28,7 +28,7 @@ import { iosBuildArgs } from './xcode.mjs';
 import {
   DEMO_TIME, MOTION_GAP_MS, androidFacts, checkSet, checkShot, describeRefusals, iosFacts, motionAllowance, writeFacts,
 } from '../checker.mjs';
-import { displays, enterPosture, leavePosture, postureDisplay, postureOf, shootPosture } from './fold.mjs';
+import { SHOT_TIMEOUT_MS, displays, enterPosture, leavePosture, postureDisplay, postureOf, screenshotArgs, shootPosture } from './fold.mjs';
 import { androidPostureOf, enterAndroidPosture, leaveAndroidPosture, pngFromScreencap, shapeMatches, turnAndroid } from './android-fold.mjs';
 
 /** Flatten over black and rewrite as a NO-ALPHA RGB PNG (App Store & Play reject alpha on screenshots). */
@@ -42,8 +42,8 @@ async function stripAlpha(file) {
   fs.writeFileSync(file, rgbPngBuffer(c)); // colour-type-2 PNG, no alpha channel
 }
 
-function sh(cmd, args) {
-  const r = spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+function sh(cmd, args, opts = {}) {
+  const r = spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, ...opts });
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} failed: ${(r.stderr || r.stdout || '').trim()}`);
   return r.stdout;
 }
@@ -172,13 +172,14 @@ async function awaitSimulatorWindow() {
  * framebuffers is better than any fixed sleep here: it is as fast as the device is, and it does not
  * silently become too short on a slower machine or a heavier screen.
  */
-async function settleFrame(udid, outDir, maxMs = 9000) {
+async function settleFrame(udid, outDir, { maxMs = 9000, display = null } = {}) {
   const probe = path.join(outDir, '.settle-probe.png');
   const t0 = Date.now();
   let last = null;
   try {
     while (Date.now() - t0 < maxMs) {
-      sh('xcrun', ['simctl', 'io', udid, 'screenshot', probe]);
+      // A phone that folds has two displays and simctl will not pick one, so the probe names the posture's.
+      sh('xcrun', screenshotArgs(udid, probe, display), display ? { timeout: SHOT_TIMEOUT_MS } : {});
       const now = fs.readFileSync(probe);
       if (last && last.equals(now)) return;
       last = now;
@@ -601,8 +602,10 @@ async function captureIos(flags) {
       spawnSync('xcrun', ['simctl', 'status_bar', udid, 'override', '--time', '9:41',
         '--batteryState', 'discharging', '--batteryLevel', '100', '--cellularBars', '4', '--wifiBars', '3'], { stdio: 'ignore' });
     pinStatusBar();
+    // The display the posture shows, which every screenshot of it names (null: a phone with one screen).
+    let on = null;
     if (posture) {
-      const on = enterPosture(udid, posture);
+      on = enterPosture(udid, posture);
       console.log(`▸ posture ${posture.name}: hinge ${posture.hinge}°, ${posture.orientation}, the ${posture.screen} screen (display ${on})`);
     }
 
@@ -657,7 +660,7 @@ async function captureIos(flags) {
         if (drawn.waited > 0) {
           // It drew only now: let it come to rest, then take the shot again.
           console.log(`   … ${st} drew ${(drawn.waited / 1000).toFixed(1)} s after the settle`);
-          await settleFrame(udid, outDir);
+          await settleFrame(udid, outDir, { display: on });
           pinStatusBar();
           await sleep(500);
           shoot(out);

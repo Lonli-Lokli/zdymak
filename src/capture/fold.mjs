@@ -114,30 +114,87 @@ export function postureDisplay(list, posture) {
 /** The id of the screen that is on, or null. */
 export const activeDisplay = (udid) => displays(udid).find((d) => d.active)?.id ?? null;
 
+/** How long a screenshot of one display may take: with the display of a screen that is off, simctl waits forever. */
+export const SHOT_TIMEOUT_MS = 15000;
+
+/**
+ * `simctl io screenshot` for one display, or for the only screen when `display` is null. A phone that folds has two
+ * displays and simctl refuses to choose ("Cannot choose between 2 displays"), so every shot of a posture, the settle
+ * probe's included, names the display.
+ */
+export function screenshotArgs(udid, file, display = null) {
+  return ['simctl', 'io', udid, 'screenshot', ...(display ? [`--display=${display}`] : []), file];
+}
+
+/** How many reads each wait makes: the first, just after a boot, the longest; before a shot, the shortest. */
+export const READS = { first: 60, fold: 20, shot: 10 };
+
 /**
  * Wait until display `id` is the one that is on, three reads in a row a second apart (a fold hands the picture from
  * one screen to the other over a second or more, longer on a simulator just booted, and a lone read can flicker).
  * Returns every read it made when it never got there, for the error; null when it did. Just after a boot devicectl
  * can go 20 s without three agreeing reads (the Duo's half-laptop, 2026-10-13), so the first wait is longer.
+ *
+ * The budget is a number of READS, not of seconds: a read of devicectl can itself take many seconds on a simulator
+ * busy just after its boot, and a clock budget then ran out after one or two reads of the right screen and failed a
+ * posture that had taken (one store run, 2026-11-05, read "1, 1", "3" and "1"). `read` and `wait` are the devicectl
+ * read and the pause, passed in so the counting can be tested without a simulator.
  */
-function awaitDisplay(udid, id, maxMs = 20000) {
-  const t0 = Date.now();
-  const reads = [];
+export function awaitDisplay(read, id, reads = READS.fold, wait = pause) {
+  const seen = [];
   let streak = 0;
-  while (Date.now() - t0 < maxMs) {
-    const now = activeDisplay(udid);
-    reads.push(now ?? 'none');
+  while (seen.length < reads) {
+    const now = read();
+    seen.push(now ?? 'none');
     streak = now === id ? streak + 1 : 0;
     if (streak >= 3) return null;
-    pause(1000);
+    wait(1000);
   }
-  return reads;
+  return seen;
 }
 
 /** Send the helper one command inside the simulator. */
 function helper(udid, bin, ...args) {
   const r = run('xcrun', ['simctl', 'spawn', udid, bin, ...args]);
   if (r.status !== 0) throw new Error(`the Duo helper refused "${args.join(' ')}": ${(r.stderr || r.stdout || '').trim()}`);
+}
+
+/**
+ * The fold itself, with the simulator passed in (`send` a helper command, `read` the screen that is on, `wait` a
+ * pause) so its order and its one retry can be tested without one. Closes the phone and waits for the outer screen,
+ * then opens flat and folds back for the inner one (see the file comment). When the wanted screen does not come on,
+ * it folds the phone again ONCE from closed: a fold sent to a simulator just booted can be lost (one store run,
+ * 2026-11-05: half open like a book, the inner screen never lit in twenty reads). A second miss refuses, naming
+ * the reads of both tries.
+ */
+export function fold(posture, { outer, want, send, read, wait = pause, log = () => {} }) {
+  const refuse = (screen, id, reads) => new Error(`${posture.name} wants the ${screen} screen (display ${id}) on, and `
+    + `devicectl never read it three times in a row (it read ${reads.join(', ')}).`);
+  let missed = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    send('hinge', '0');
+    const closed = awaitDisplay(read, outer, attempt === 1 ? READS.first : READS.fold, wait);
+    if (closed) throw refuse('outer', outer, missed ? [...missed, '| again:', ...closed] : closed);
+    if (posture.screen === 'outer') {
+      send('orientation', posture.orientation);
+      wait(2000);
+    } else {
+      send('hinge-sweep', '0', '180', '0.6');
+      wait(2000);
+      send('orientation', posture.orientation);
+      wait(2000);
+      if (posture.hinge !== 180) {
+        send('hinge-sweep', '180', String(posture.hinge), '0.8');
+        wait(3000);
+      }
+    }
+    const reads = awaitDisplay(read, want, READS.fold, wait);
+    if (!reads) return want;
+    if (missed) throw refuse(posture.screen, want, [...missed, '| again:', ...reads]);
+    missed = reads;
+    log(`  ${posture.name}: the ${posture.screen} screen (display ${want}) did not come on (devicectl read ${reads.join(', ')}); folding once more from closed`);
+  }
+  return want; // not reached
 }
 
 /**
@@ -149,29 +206,13 @@ export function enterPosture(udid, posture) {
   const bin = helperPath();
   const list = displays(udid);
   if (list.length < 2) throw new Error('--posture needs a phone that folds (the iPhone Duo simulator, Xcode 27.1+); this simulator has one screen.');
-  const outer = postureDisplay(list, { screen: 'outer' });
-  const want = postureDisplay(list, posture);
-  const refuse = (screen, id, reads) => new Error(`${posture.name} wants the ${screen} screen (display ${id}) on, and `
-    + `devicectl never read it three times in a row (it read ${reads.join(', ')}).`);
-  helper(udid, bin, 'hinge', '0');
-  let reads = awaitDisplay(udid, outer, 60000);
-  if (reads) throw refuse('outer', outer, reads);
-  if (posture.screen === 'outer') {
-    helper(udid, bin, 'orientation', posture.orientation);
-    pause(2000);
-  } else {
-    helper(udid, bin, 'hinge-sweep', '0', '180', '0.6');
-    pause(2000);
-    helper(udid, bin, 'orientation', posture.orientation);
-    pause(2000);
-    if (posture.hinge !== 180) {
-      helper(udid, bin, 'hinge-sweep', '180', String(posture.hinge), '0.8');
-      pause(3000);
-    }
-  }
-  reads = awaitDisplay(udid, want);
-  if (reads) throw refuse(posture.screen, want, reads);
-  return want;
+  return fold(posture, {
+    outer: postureDisplay(list, { screen: 'outer' }),
+    want: postureDisplay(list, posture),
+    send: (...args) => helper(udid, bin, ...args),
+    read: () => activeDisplay(udid),
+    log: (line) => console.log(line),
+  });
 }
 
 /** Hand the simulator back closed and upright, the way it boots. Never throws: this is teardown. */
@@ -196,9 +237,9 @@ function pngSize(file) {
  */
 export function shootPosture(udid, posture, file) {
   const display = postureDisplay(displays(udid), posture);
-  const reads = awaitDisplay(udid, display, 10000);
+  const reads = awaitDisplay(() => activeDisplay(udid), display, READS.shot);
   if (reads) throw new Error(`the ${posture.screen} screen (display ${display}) is not on to photograph (devicectl read ${reads.join(', ')}).`);
-  const r = run('xcrun', ['simctl', 'io', udid, 'screenshot', `--display=${display}`, file], { timeout: 15000 });
+  const r = run('xcrun', screenshotArgs(udid, file, display), { timeout: SHOT_TIMEOUT_MS });
   if (r.status !== 0 || !fs.existsSync(file)) {
     throw new Error(`simctl could not photograph display ${display}${r.signal ? ' (it timed out: that screen is off)' : ''}: ${(r.stderr || '').trim()}`);
   }
