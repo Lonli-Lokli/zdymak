@@ -1417,7 +1417,7 @@ set against the source one). Write down the numbers and how they were measured b
 can set its own pair, for a device whose noise differs from the rest:
 
 ```js
-compare: { pixel: 0, layout: 0, targets: { 'play-tablet': { pixel: 0.41, layout: 0.1 } } }
+compare: { pixel: 0, layout: 0, targets: { 'play-tablet': { pixel: 0.00003, layout: 0 } } }
 ```
 
 **Measured, 2026-11-03.** One app's five scenes, captured twice from one build, compared with `--measure`:
@@ -1426,14 +1426,18 @@ compare: { pixel: 0, layout: 0, targets: { 'play-tablet': { pixel: 0.41, layout:
 |---|---|---|---|
 | iPad Pro 13-inch (M5) simulator | English twice | 0 | 0 |
 | iPad Pro 13-inch (M5) simulator | Arabic twice | 0 | 0 |
-| Android API 36 emulator, store set at 1080x1920 | English twice | 0.4070 | 0.0972 |
+| Android API 36 emulator, store set at 1080x1920, motion running (first measure) | English twice | 0.4070 | 0.0972 |
+| Android API 36 emulator, 10-inch tablet, capture made still | English twice | 0.0000286 | 0 |
 | iPad simulator, for scale | English against Arabic mirrored (a real translation) | 0.5798 | 0.5086 |
 
 The simulator repeats a picture exactly, so its thresholds are 0: every measured pair passes (a share equal to its
-threshold passes) and any changed pixel or moved cell waits for review. The emulator did not: its two runs caught the
-app's moving parts at different frames and a bottom panel some 16 pixels apart, which is a capture that has not come to
-rest rather than noise. Thresholds just above it (0.41 and 0.10) let a large change through unseen; make such a capture
-still (stop the motion in the capture build, wait for the insets to settle) and measure again before trusting them.
+threshold passes) and any changed pixel or moved cell waits for review. The emulator's first measure did not repeat:
+its two runs caught the app's moving parts at different frames and a bottom panel some 16 pixels apart, a capture that
+had not come to rest, and thresholds set above it (0.41 and 0.10) would have let a large change through unseen. With
+the motion stopped in the capture build and the insets settled, five scenes captured twice differ by 0.0000146 to
+0.0000286 of their pixels and by no layout cell at all, so the emulator's thresholds are the measured maximum rounded
+up (`pixel: 0.00003`, `layout: 0`). Measure each emulator target you set this way; a target not measured yet keeps the
+strict default.
 
 `compare` records every shot it passes, by its content's sha256, in `approvals.json` under `passed` (a shot it sends to
 review loses its pass). An uploader can then refuse any file that is not an approved reference, an approved translated
