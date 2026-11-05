@@ -3,7 +3,10 @@
 // exercised by a capture, not here.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { HALF_OPEN, POSTURES, READS, awaitDisplay, fold, parseDisplays, postureDisplay, postureOf, screenshotArgs } from '../src/capture/fold.mjs';
+import {
+  HALF_OPEN, POSTURES, READS, awaitDisplay, fold, iosLaunchReady, launchApp, logStart, parseDisplays, postureDisplay, postureOf, screenshotArgs,
+  shotFailure,
+} from '../src/capture/fold.mjs';
 
 test('every posture names a hinge, an orientation, a screen and a shape', () => {
   for (const [name, p] of Object.entries(POSTURES)) {
@@ -145,6 +148,53 @@ test('every shot of a phone that folds names its display; a phone with one scree
 test('the settle probe takes the posture\'s display', async () => {
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../src/capture/index.mjs', import.meta.url), 'utf8');
-  assert.match(src, /screenshotArgs\(udid, probe, display\)/);
+  assert.match(src, /shootDisplay\(udid, display, probe\)/);
   assert.match(src, /settleFrame\(udid, outDir, \{ display: on \}\)/);
 });
+
+test('a display shot that fails says whether the screen was still on, and how long the earlier shots took', () => {
+  const on = shotFailure({ display: '1', timedOut: true, stderr: 'Detected file type from extension: PNG', after: ['1', '1', '1'], times: [800, 2400], load: '9.1 8.0 7.2', logFile: '/x/.shot-failed.log' });
+  assert.match(on, /within 15 s/);
+  assert.match(on, /still on, so simctl was slow, not the screen off/);
+  assert.match(on, /2 display shot\(s\) before it took up to 2\.4 s/);
+  assert.match(on, /\/x\/\.shot-failed\.log/);
+  assert.doesNotMatch(on, /that screen is off/);
+  const off = shotFailure({ display: '1', timedOut: true, stderr: '', after: ['3', 'none', '3'], times: [], load: '1.0', logFile: null });
+  assert.match(off, /that screen was not on/);
+  assert.match(off, /no earlier shot/);
+});
+
+test('the simulator log starts at the posture, in the local time log show reads', () => {
+  assert.equal(logStart(new Date(2026, 10, 5, 9, 4, 7)), '2026-11-05 09:04:07');
+});
+
+test('a simulator is ready to launch again when the app holds no process and SpringBoard does', () => {
+  const head = 'PID\tStatus\tLabel\n';
+  const board = '88\t0\tcom.apple.SpringBoard\n';
+  assert.equal(iosLaunchReady(`${head}${board}-\t0\tUIKitApplication:com.example.app[a1b2][rb-legacy]\n`, 'com.example.app'), true);
+  assert.equal(iosLaunchReady(`${head}${board}`, 'com.example.app'), true, 'the app not listed at all');
+  assert.equal(iosLaunchReady(`${head}${board}4242\t0\tUIKitApplication:com.example.app[a1b2]\n`, 'com.example.app'), false, 'the old process still up');
+  assert.equal(iosLaunchReady(`${head}-\t0\tcom.apple.SpringBoard\n`, 'com.example.app'), false, 'SpringBoard not up');
+  assert.equal(iosLaunchReady('', 'com.example.app'), false, 'launchctl said nothing');
+});
+
+test('a launch that gets no process is tried once more, after the simulator reads ready', () => {
+  const noProcess = { status: 1, stderr: 'Simulator device failed to launch com.example.app.\nNo such process' };
+  const results = [noProcess, { status: 0 }];
+  const readies = [false, true, true, true];
+  const waits = [];
+  const got = launchApp({ launch: () => results.shift(), ready: () => readies.shift(), wait: (ms) => waits.push(ms) });
+  assert.deepEqual(got, { retried: true, reads: null });
+  assert.equal(results.length, 0, 'launched twice');
+  assert.equal(waits.length, 3, 'a second between reads until three agree');
+});
+
+test('a launch is retried only for "No such process", and only once', () => {
+  assert.deepEqual(launchApp({ launch: () => ({ status: 0 }), ready: () => assert.fail('no wait without a failure') }), { retried: false });
+  assert.throws(() => launchApp({ launch: () => ({ status: 1, stderr: 'Unable to find bundle' }), ready: () => true, wait: () => {} }), /launch failed: Unable to find bundle/);
+  let launches = 0;
+  const twice = () => launchApp({ launch: () => { launches++; return { status: 1, stderr: 'No such process' }; }, ready: () => false, wait: () => {} });
+  assert.throws(twice, new RegExp(`failed twice, the second time after ${READS.fold} reads that never read ready`));
+  assert.equal(launches, 2);
+});
+

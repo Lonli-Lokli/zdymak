@@ -28,7 +28,9 @@ import { iosBuildArgs } from './xcode.mjs';
 import {
   DEMO_TIME, MOTION_GAP_MS, androidFacts, checkSet, checkShot, describeRefusals, iosFacts, motionAllowance, writeFacts,
 } from '../checker.mjs';
-import { SHOT_TIMEOUT_MS, displays, enterPosture, leavePosture, postureDisplay, postureOf, screenshotArgs, shootPosture } from './fold.mjs';
+import {
+  displays, enterPosture, iosLaunchReady, launchApp, leavePosture, postureDisplay, postureOf, screenshotArgs, shootDisplay, shootPosture, shotTimes,
+} from './fold.mjs';
 import { androidPostureOf, enterAndroidPosture, leaveAndroidPosture, pngFromScreencap, shapeMatches, turnAndroid } from './android-fold.mjs';
 
 /** Flatten over black and rewrite as a NO-ALPHA RGB PNG (App Store & Play reject alpha on screenshots). */
@@ -179,7 +181,8 @@ async function settleFrame(udid, outDir, { maxMs = 9000, display = null } = {}) 
   try {
     while (Date.now() - t0 < maxMs) {
       // A phone that folds has two displays and simctl will not pick one, so the probe names the posture's.
-      sh('xcrun', screenshotArgs(udid, probe, display), display ? { timeout: SHOT_TIMEOUT_MS } : {});
+      if (display) shootDisplay(udid, display, probe);
+      else sh('xcrun', screenshotArgs(udid, probe));
       const now = fs.readFileSync(probe);
       if (last && last.equals(now)) return;
       last = now;
@@ -628,7 +631,12 @@ async function captureIos(flags) {
       spawnSync('xcrun', ['simctl', 'terminate', udid, flags.bundle], { stdio: 'ignore' });
       const launch = ['simctl', 'launch', udid, flags.bundle, ...langArgs, flags.arg, st];
       if (recording) launch.push(reelArg, 'YES'); // tell the harness to auto-animate this screen
-      sh('xcrun', launch);
+      // Once more when launchd gave the app no process (seen right after a posture was reached; see launchApp).
+      launchApp({
+        launch: () => spawnSync('xcrun', launch, { encoding: 'utf8' }),
+        ready: () => iosLaunchReady(out2('xcrun', ['simctl', 'spawn', udid, 'launchctl', 'list']), flags.bundle),
+        log: (l) => console.log(l),
+      });
       // What the screen shows as the app starts: its launch screen. The still below must differ from it.
       const launchFrame = recording ? null : path.join(outDir, `.launch-${st}.png`);
       if (launchFrame) { await sleep(400); shoot(launchFrame); }
@@ -675,6 +683,10 @@ async function captureIos(flags) {
         const facts = iosFacts({ udid, bundle: flags.bundle, language: flags.language, time: DEMO_TIME });
         shot.push({ out, facts: { ...facts, state: st, launchLook: LAUNCH_LOOK, motion, motionAllowed: motionAllowance(flags.motion, st) } });
       }
+    }
+    // How long a display's shots took, so the shot timeout can be read against a run that worked.
+    if (posture && shotTimes.length) {
+      console.log(`▸ ${shotTimes.length} shots of display ${on}, the slowest ${(Math.max(...shotTimes) / 1000).toFixed(1)} s`);
     }
     // The launch check is the run's, once every state is shot: what the launch screen looks like is learnt from them.
     const differences = await launchDifferences(launches, readyWait * 1000).catch((e) => {
@@ -731,6 +743,26 @@ function androidDemo(on, flags) {
   b('-e', 'command', 'network', '-e', 'wifi', wifi, '-e', 'level', '4', '-e', 'fully', 'true');
   b('-e', 'command', 'network', '-e', 'mobile', 'show', '-e', 'datatype', 'none', '-e', 'level', '4', '-e', 'fully', 'true');
   b('-e', 'command', 'notifications', '-e', 'visible', 'false');
+}
+
+/**
+ * Android's compatibility UI off: the window manager shell draws a letterbox education dialog ("See and do more"),
+ * reachability hints and an aspect-ratio button over an app it letterboxes, the first time it does. On a large screen
+ * that can be any app at one of its sizes, and the dialog is not a window (see checker-device.mjs
+ * parseAndroidOverlays), so nothing short of turning it off keeps it out of a shot. Each flag is its own call:
+ * `wm set-letterbox-style` reads its options in one loop and stops at the first one a release does not know.
+ * Source: AOSP frameworks/base services/core/java/com/android/server/wm/WindowManagerShellCommand.java
+ * (runSetLetterboxStyle; its help: "--isEducationEnabled … Whether education is allowed for letterboxed fullscreen
+ * apps", "--isHorizontalReachabilityEnabled", "--isVerticalReachabilityEnabled",
+ * "--isUserAppAspectRatioSettingsEnabled"). The values live in the window manager's memory (AppCompatConfiguration),
+ * so a reboot, or `adb shell wm reset-letterbox-style`, gives them back; like demo mode's permission, they are left
+ * set after the run, because a caller may launch the app again between captures. A release without the command
+ * (before Android 12) refuses it, and that is ignored: it has no such UI either.
+ */
+function androidQuietCompat() {
+  for (const option of ['--isEducationEnabled', '--isHorizontalReachabilityEnabled', '--isVerticalReachabilityEnabled', '--isUserAppAspectRatioSettingsEnabled']) {
+    spawnSync('adb', ['shell', 'wm', 'set-letterbox-style', option, 'false'], { stdio: 'ignore' });
+  }
 }
 
 async function captureAndroid(flags) {
@@ -811,6 +843,7 @@ async function captureAndroid(flags) {
   };
   const display = androidDisplay(flags);
   androidDemo(true, flags); // clean marketing status bar (Google convention)
+  androidQuietCompat(); // no letterbox education dialog over the app
   const language = androidLanguage(flags); // per-app locale override; reset in the finally below
   try {
     // Full workflow: drive the app through screens via an intent-extra HANDLE (--component + --arg).

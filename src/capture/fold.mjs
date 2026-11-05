@@ -126,6 +126,62 @@ export function screenshotArgs(udid, file, display = null) {
   return ['simctl', 'io', udid, 'screenshot', ...(display ? [`--display=${display}`] : []), file];
 }
 
+/** Every display shot this run took, in milliseconds: the timeout above is read against them when a shot fails. */
+export const shotTimes = [];
+
+/** When the posture was entered: a failed shot keeps the simulator's display log from then on. */
+let postureSince = null;
+
+/** `log show --start` takes local time as `YYYY-MM-DD HH:MM:SS`. */
+export function logStart(date) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())} ${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}`;
+}
+
+/**
+ * Why a display shot failed, in the facts that tell a screen that went off from a simulator that was slow: what
+ * devicectl read just after the shot (the display still on means simctl, not the screen), how long the run's earlier
+ * shots of a display took, and the host's load. zdymak used to say "that screen is off" on every timeout, which no
+ * read had shown (one store run, 2026-11-05: devicectl read the outer screen on three times in a row, then the shot
+ * of it timed out).
+ */
+export function shotFailure({ display, timedOut, stderr, after, times, load, logFile }) {
+  const slowest = times.length ? `${(Math.max(...times) / 1000).toFixed(1)} s` : 'no earlier shot';
+  const stillOn = after.length > 0 && after.every((d) => d === display);
+  return `simctl could not photograph display ${display}${timedOut ? ` within ${SHOT_TIMEOUT_MS / 1000} s` : ''}: ${(stderr || '').trim()}\n`
+    + `  devicectl read after it: ${after.join(', ') || 'nothing'} (${stillOn ? 'that screen was still on, so simctl was slow, not the screen off' : 'that screen was not on'})\n`
+    + `  the ${times.length} display shot(s) before it took up to ${slowest}; the host's load average was ${load}`
+    + (logFile ? `\n  the simulator's display log since the posture: ${logFile}` : '');
+}
+
+/**
+ * One screenshot of one display, timed, with a timeout: with the display of a screen that is off simctl waits forever.
+ * A failure reads the display again and keeps the simulator's backlight and display log beside the shot, so a run
+ * says which it was (see shotFailure).
+ */
+export function shootDisplay(udid, display, file) {
+  const t0 = Date.now();
+  const r = run('xcrun', screenshotArgs(udid, file, display), { timeout: SHOT_TIMEOUT_MS });
+  if (r.status === 0 && fs.existsSync(file)) { shotTimes.push(Date.now() - t0); return; }
+  // Three reads a second apart, as awaitDisplay counts a screen on.
+  const after = [];
+  for (let i = 0; i < 3; i++) { after.push(activeDisplay(udid) ?? 'none'); pause(1000); }
+  let logFile = null;
+  if (postureSince) {
+    // backboardd owns the displays and their backlight, SpringBoard asks it to blank one; bounded by the longest wait
+    // this file allows a busy simulator (READS.first, one read a second).
+    const log = run('xcrun', ['simctl', 'spawn', udid, 'log', 'show', '--style', 'compact', '--start', logStart(postureSince),
+      '--predicate', 'process == "backboardd" OR process == "SpringBoard"'], { timeout: READS.first * 1000, maxBuffer: 256 * 1024 * 1024 });
+    if (log.stdout) {
+      logFile = path.join(path.dirname(file), '.shot-failed.log');
+      fs.writeFileSync(logFile, log.stdout);
+    }
+  }
+  throw new Error(shotFailure({
+    display, timedOut: Boolean(r.signal), stderr: r.stderr, after, times: shotTimes, load: os.loadavg().map((n) => n.toFixed(1)).join(' '), logFile,
+  }));
+}
+
 /** How many reads each wait makes: the first, just after a boot, the longest; before a shot, the shortest. */
 export const READS = { first: 60, fold: 20, shot: 10 };
 
@@ -222,6 +278,7 @@ export function enterPosture(udid, posture) {
   const bin = helperPath();
   const list = displays(udid);
   if (list.length < 2) throw new Error('--posture needs a phone that folds (the iPhone Duo simulator, Xcode 27.1+); this simulator has one screen.');
+  postureSince = new Date();
   return fold(posture, {
     outer: postureDisplay(list, { screen: 'outer' }),
     want: postureDisplay(list, posture),
@@ -255,10 +312,7 @@ export function shootPosture(udid, posture, file) {
   const display = postureDisplay(displays(udid), posture);
   const reads = awaitDisplay(() => activeDisplay(udid), display, READS.shot);
   if (reads) throw new Error(`the ${posture.screen} screen (display ${display}) is not on to photograph (devicectl read ${reads.join(', ')}).`);
-  const r = run('xcrun', screenshotArgs(udid, file, display), { timeout: SHOT_TIMEOUT_MS });
-  if (r.status !== 0 || !fs.existsSync(file)) {
-    throw new Error(`simctl could not photograph display ${display}${r.signal ? ' (it timed out: that screen is off)' : ''}: ${(r.stderr || '').trim()}`);
-  }
+  shootDisplay(udid, display, file);
   const { w, h } = pngSize(file);
   if ((w > h) !== posture.wide) {
     throw new Error(
@@ -267,4 +321,41 @@ export function shootPosture(udid, posture, file) {
       + '  phone that folds (supportedInterfaceOrientations, or UIRequiresFullScreen off).',
     );
   }
+}
+
+// ---------------------------------------------------------------- launching on a simulator
+
+/** What `simctl launch` says when launchd gave the app no process: ESRCH, "No such process". */
+export const NO_PROCESS = /No such process/;
+
+/**
+ * Whether a simulator is ready to launch `bundle` again, from `simctl spawn <udid> launchctl list` ("PID Status
+ * Label"): the app's own job holds no process (the one just terminated has gone), and SpringBoard's, when listed, does.
+ */
+export function iosLaunchReady(list, bundle) {
+  const lines = String(list || '').split('\n');
+  if (!lines.some((l) => l.trim())) return false;
+  const app = lines.find((l) => l.includes(`UIKitApplication:${bundle}[`));
+  if (app && /^\s*\d+\s/.test(app)) return false;
+  const board = lines.find((l) => /\scom\.apple\.SpringBoard\s*$/.test(l));
+  return !board || /^\s*\d+\s/.test(board);
+}
+
+/**
+ * Launch an app, and once more when launchd gave it no process. One store run (2026-11-05) had `simctl launch` fail
+ * with "No such process" right after a posture was reached, on the first state. The second launch waits for the
+ * simulator to read ready (iosLaunchReady) the way a posture's display is waited for: three agreeing reads a second
+ * apart, within READS.fold reads, the budget measured after a fold. `launch` runs simctl and returns its result;
+ * `ready` reads launchctl; both are passed in so the retry is tested without a simulator.
+ */
+export function launchApp({ launch, ready, log = () => {}, wait = pause }) {
+  const said = (r) => (r.stderr || r.stdout || '').trim();
+  const first = launch();
+  if (first.status === 0) return { retried: false };
+  if (!NO_PROCESS.test(said(first))) throw new Error(`simctl launch failed: ${said(first)}`);
+  const reads = awaitDisplay(() => (ready() ? 'ready' : 'busy'), 'ready', READS.fold, wait);
+  log(`  the launch got no process; ${reads ? `the simulator never read ready (${reads.join(', ')})` : 'the simulator read ready'}, launching once more`);
+  const second = launch();
+  if (second.status !== 0) throw new Error(`simctl launch failed twice, the second time after ${reads ? `${reads.length} reads that never read ready` : 'the simulator read ready'}: ${said(second)}`);
+  return { retried: true, reads };
 }
