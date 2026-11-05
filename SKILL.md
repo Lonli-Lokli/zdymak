@@ -67,6 +67,15 @@ Capture TEARS DOWN what it set up (status-bar override cleared, a sim it booted 
 created deleted, Android demo mode switched off, display override reset) — `--keep` skips that for
 debugging. A simulator the user already had booted is never touched.
 
+**Build once for a set (iOS).** The first capture builds with `--build … --app-out <file>` (the built app's path
+goes to the file, and every build prints `▸ app: <path>`); the others pass `--app "$(cat <file>)"`, which installs
+that app with no build (bundle id read from its Info.plist, so `--bundle` may be left out; a mismatching
+`--bundle` is an error; `--app` is never with `--build` and needs `--states`). The iPhone build installs on an iPad
+too. For a script that drives the app itself, `openIosSim({ udid|device, app })` / `closeIosSim(sim)` from the
+package boot only a sim that is not running, install, and shut down only what they booted. Do not chain
+captures with `--keep`: boot the device once before the set (or under whatever keeps a device up between jobs);
+each capture then leaves it running. Never write a script's own `simctl boot`/`install`/`shutdown` around zdymak.
+
 **Live footage, not Ken Burns.** `--record` with `--states` records a CLIP per state instead of a still —
 on both iOS and Android. This is what you want when the app animates itself (an autoplay demo, an
 auto-scroll): the store video then shows the real thing moving, not a dolly over a screenshot. Android
@@ -161,11 +170,15 @@ directory, give each its own `devices` entry, and pair them with `appstore-ipad-
 `play-tablet-portrait`. No new device drawing is involved: the frames take their body from the capture's
 aspect.
 
-- **iOS:** `--orientation landscape-left|landscape-right|portrait-upside-down`. It drives the Simulator's
-  Device ▸ Orientation menu, because `simctl` has no rotation command — so the terminal needs
-  **Accessibility** permission. simctl's screenshots also ignore rotation (a turned iPad arrives
-  portrait-shaped with the UI on its side); zdymak stands them back up. It **fails** rather than warns if
-  the device did not turn, since the alternative is a full set of good portrait shots filed as landscape.
+- **iOS:** `--orientation landscape-left|landscape-right|portrait-upside-down`. `simctl` has no rotation
+  command: on Xcode 27 zdymak turns the device with `devicectl device orientation set --device <udid>`
+  (no window, no permission); on Xcode 26 and before it drives the Simulator's Device ▸ Orientation menu,
+  raising the device's own window first (that menu acts on the window in front, which matters with a
+  second simulator booted), so the terminal needs **Accessibility** permission. A device already running,
+  even already turned, is fine: the turn starts from portrait. simctl's screenshots also ignore rotation (a turned iPad arrives
+  portrait-shaped with the UI on its side); zdymak stands them back up. An unturned device is asked once
+  more (a turn right after boot can be dropped); then it **fails** rather than warns, naming any other
+  booted simulator, since the alternative is a full set of good portrait shots filed as landscape.
   The usual cause is the app: iOS refuses an orientation the plist omits, and iPad reads
   `UISupportedInterfaceOrientations~ipad`.
 - **Android:** no flag — use `--size 1600x2560`, which relayouts the app to a real upright tablet
