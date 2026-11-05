@@ -54,6 +54,31 @@ export function parseAppLocales(out) {
   return m ? m[1].split(',').map((s) => s.trim()).filter(Boolean) : [];
 }
 
+/**
+ * The compatibility UI Android's window manager shell draws over a letterboxed app: the letterbox education dialog
+ * ("See and do more"), the restart dialog ("Restart for a better view?"), the reachability hints, the aspect-ratio and
+ * restart buttons. None of it is a window: each is a windowless view (`CompatUIWindowManagerAbstract`, a
+ * `WindowlessWindowManager` that is never focusable), so `dumpsys window` keeps naming the app as the focus while the
+ * dialog covers it. Its surface is a layer named after the class that draws it plus "Leash" (`getParentSurface`), and
+ * `release()` removes it, so `dumpsys SurfaceFlinger --list` names one exactly while it is up. Source: AOSP
+ * frameworks/base libs/WindowManager/Shell/src/com/android/wm/shell/compatui/CompatUIWindowManagerAbstract.java.
+ * Returns the names found, such as `LetterboxEduWindowManager`; [] when there are none.
+ */
+export function parseAndroidOverlays(layers) {
+  const names = [...String(layers || '').matchAll(/\b((?:LetterboxEdu|RestartDialog|ReachabilityEdu|UserAspectRatioSettings|CompatUI)WindowManager)Leash\b/g)]
+    .map((m) => m[1]);
+  return [...new Set(names)];
+}
+
+/** What each compatibility overlay is, for a refusal a reader understands. */
+const OVERLAY_NAMES = {
+  LetterboxEduWindowManager: 'the letterbox education dialog ("See and do more")',
+  RestartDialogWindowManager: 'the restart dialog ("Restart for a better view?")',
+  ReachabilityEduWindowManager: 'the reachability hints ("double-tap to move the app")',
+  UserAspectRatioSettingsWindowManager: 'the aspect-ratio settings button',
+  CompatUIWindowManager: 'the size compatibility restart button',
+};
+
 /** Read an Android device at the moment of a shot. `pkg` is the app the shot is of. */
 export function androidFacts({ pkg, language, time }) {
   const focus = parseAndroidFocus(adb('dumpsys', 'window'));
@@ -64,6 +89,7 @@ export function androidFacts({ pkg, language, time }) {
     language: language || null,
     time: time || DEMO_TIME,
     focus,
+    overlays: parseAndroidOverlays(adb('dumpsys', 'SurfaceFlinger', '--list')),
     keyboard: parseKeyboardShown(adb('dumpsys', 'input_method')),
     appLocales: locales,
     systemLocale: adb('getprop', 'persist.sys.locale').trim() || adb('getprop', 'ro.product.locale').trim() || null,
@@ -139,6 +165,10 @@ export function factRefusals(f) {
           reason: /launcher/i.test(pkg) ? `the device: the home screen is in front (${pkg}), not ${f.app}` : `the device: ${pkg} is in front, not ${f.app}`,
         });
       }
+    }
+    // Over the app whatever has the focus: Android's compatibility UI never takes it (see parseAndroidOverlays).
+    for (const o of f.overlays || []) {
+      out.push({ rule: 'dialog', reason: `the device: Android's ${OVERLAY_NAMES[o] || o} is drawn over the app (${o}Leash)` });
     }
     if (f.keyboard) out.push({ rule: 'keyboard', reason: 'the device: the input method says the on-screen keyboard is shown' });
     if (f.demoAllowed === false) out.push({ rule: 'status-bar', reason: 'the device: SystemUI demo mode is not allowed, so the status bar is the real one' });

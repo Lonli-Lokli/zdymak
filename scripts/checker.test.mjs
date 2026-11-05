@@ -6,8 +6,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  MOTION_STILL, checkSet, checkShot, factRefusals, letterboxOf, motionAllowance, parseAndroidFocus, parseAppLocales,
-  parseIosRunning, parseKeyboardShown, scriptOf, textRefusals,
+  MOTION_STILL, checkSet, checkShot, factRefusals, letterboxOf, motionAllowance, parseAndroidFocus, parseAndroidOverlays,
+  parseAppLocales, parseIosRunning, parseKeyboardShown, scriptOf, textRefusals,
 } from '../src/checker.mjs';
 
 const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
@@ -32,6 +32,29 @@ test('the keyboard, the app locales and an iOS app running are read from their d
   assert.equal(parseIosRunning(list, 'com.example.app'), true);
   assert.equal(parseIosRunning('-\t0\tUIKitApplication:com.example.app[a1b2]\n', 'com.example.app'), false);
   assert.equal(parseIosRunning('PID\tStatus\tLabel\n', 'com.example.app'), false);
+});
+
+test('Android\'s compatibility UI is read from the surface list, where a focus dump never shows it', () => {
+  // As `dumpsys SurfaceFlinger --list` names layers: the app's window keeps the focus while the dialog's leash is up.
+  const list = 'Display 0 name="Built-in Screen"#0\n'
+    + 'Task=12#81\n'
+    + 'com.example.app/com.example.app.Main#97\n'
+    + 'LetterboxEduWindowManagerLeash#131\n'
+    + 'LetterboxEduWindowManager12#132\n'
+    + 'StatusBar#40\n';
+  assert.deepEqual(parseAndroidOverlays(list), ['LetterboxEduWindowManager']);
+  assert.deepEqual(parseAndroidOverlays('RestartDialogWindowManagerLeash#5\nReachabilityEduWindowManagerLeash#6\n'), ['RestartDialogWindowManager', 'ReachabilityEduWindowManager']);
+  assert.deepEqual(parseAndroidOverlays('com.example.app/com.example.app.Main#97\nStatusBar#40\n'), []);
+  assert.deepEqual(parseAndroidOverlays(''), []);
+});
+
+test('the device refuses Android\'s letterbox education dialog while the app keeps the focus', () => {
+  // The facts one store run kept for a shot with the dialog over it: the app had the focus, so nothing was refused.
+  const got = factRefusals(android({ overlays: ['LetterboxEduWindowManager'] }));
+  assert.deepEqual(rules(got), ['dialog']);
+  assert.match(got[0].reason, /letterbox education dialog/);
+  assert.deepEqual(rules(factRefusals(android({ overlays: ['RestartDialogWindowManager'] }))), ['dialog']);
+  assert.deepEqual(factRefusals(android({ overlays: [] })), []);
 });
 
 test('a clean Android shot carries no refusal from the device', () => {
@@ -71,6 +94,10 @@ test('the picture: dialogs, a keyboard, a home screen, the real clock and batter
   assert.deepEqual(one([line('Example keeps stopping')]), ['dialog']);
   assert.deepEqual(one([line('Allow Example to send you notifications?'), line('Don’t allow', 0.6)]), ['dialog']);
   assert.deepEqual(one([line('“Example” Would Like to Send You Notifications')]), ['dialog']);
+  // Android's letterbox education and restart dialogs, in AOSP's words.
+  assert.deepEqual(one([line('See and do more', 0.4), line('Got it', 0.7)]), ['dialog']);
+  assert.deepEqual(one([line('Double-tap outside an app to reposition it')]), ['dialog']);
+  assert.deepEqual(one([line('Restart for a better view?')]), ['dialog']);
   assert.deepEqual(one([line('Q W E R T Y U I O P', 0.75)]), ['keyboard']);
   assert.deepEqual(one([line('Й Ц У К Е Н Г Ш Щ З Х', 0.75)]), ['keyboard']);
   assert.deepEqual(one([line('QWERTYUIOP', 0.2)]), [], 'a row of letters high on the screen is the app, not a keyboard');

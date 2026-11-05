@@ -28,7 +28,7 @@ import { readText } from './ocr.mjs';
 export { OCR_CONFIDENCE, readText } from './ocr.mjs';
 
 export {
-  DEMO_TIME, MOTION_GAP_MS, MOTION_STILL, androidFacts, factRefusals, factsPath, iosFacts, parseAndroidFocus, parseAppLocales, parseIosRunning,
+  DEMO_TIME, MOTION_GAP_MS, MOTION_STILL, androidFacts, factRefusals, factsPath, iosFacts, parseAndroidFocus, parseAndroidOverlays, parseAppLocales, parseIosRunning,
   parseKeyboardShown, readFacts, writeFacts,
 } from './checker-device.mjs';
 
@@ -54,6 +54,10 @@ const DIALOG_WORDS = [
   [/don[’'`]?t allow/i, 'a permission prompt or an iOS alert ("Don\'t Allow")'],
   [/would like to/i, 'an iOS alert ("Would Like to")'],
   [/app not to track/i, 'the tracking prompt'],
+  // Android's letterbox education and restart dialogs (AOSP libs/WindowManager/Shell/res/values/strings.xml:
+  // letterbox_education_dialog_title, _split_screen_text, _reposition_text, restart_dialog_title).
+  [/see and do more|drag in another app for split screen|double-tap outside an app to reposition it/i, 'Android\'s letterbox education dialog'],
+  [/restart for a better view/i, 'Android\'s restart dialog ("Restart for a better view?")'],
 ];
 
 /** Keyboard rows, spaces dropped and lower-cased: QWERTY, AZERTY, QWERTZ and the Russian and Ukrainian ЙЦУКЕН. */
