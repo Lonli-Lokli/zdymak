@@ -556,6 +556,8 @@ async function captureIos(flags) {
     const sim = resolveIosSim(flags); // booted after the build, below
     const udid = sim.udid;
     let started = false;
+    // A launch refusal keeps the launch frames, so the shares it judged can be measured from the files afterwards.
+    let launchRefused = false;
     const orientation = (flags.orientation || 'portrait').toLowerCase();
     if (!ORIENTATION_MENU[orientation]) {
       throw new Error(`--orientation must be one of: ${Object.keys(ORIENTATION_MENU).join(', ')} (got "${flags.orientation}").`);
@@ -675,7 +677,10 @@ async function captureIos(flags) {
       }
     }
     // The launch check is the run's, once every state is shot: what the launch screen looks like is learnt from them.
-    const differences = await launchDifferences(launches, readyWait * 1000);
+    const differences = await launchDifferences(launches, readyWait * 1000).catch((e) => {
+      launchRefused = true;
+      throw new Error(`${e.message}\n  The launch frames are kept beside the shots (.launch-<state>.png) to measure against them.`);
+    });
     for (const [k, s] of shot.entries()) checked.push(await checkCaptured(s.out, { ...s.facts, launchDifference: differences[k] }, flags));
     await refuseShots(checked, flags);
     console.log(`Done → ${outDir}`);
@@ -686,7 +691,7 @@ async function captureIos(flags) {
       if (started && orientation !== 'portrait') { try { await setSimOrientation(udid, 'portrait'); } catch { /* teardown */ } }
       if (started && posture) leavePosture(udid);
       teardownIosSim(sim, flags);
-      dropLaunchFrames(outDir);
+      if (!launchRefused) dropLaunchFrames(outDir);
     }
     return; // the workflow is DONE — falling through would try to snap a sim that was just torn down
   }
