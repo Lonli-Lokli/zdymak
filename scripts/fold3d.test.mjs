@@ -13,6 +13,9 @@ import { loadConfig } from '../src/config.mjs';
 import { duoAspect } from '../src/frames.mjs';
 import { pngInfo } from '../src/validate.mjs';
 import { FOLD_DEFAULTS, resolveFold, foldGeometry, fitFold, foldHomography, pointOn, drawFoldedDuo } from '../src/fold3d.mjs';
+import { registerFonts } from '../src/fonts.mjs';
+
+registerFonts(); // what the CLI does first: the captions are measured and drawn in the Brand face, on any host
 
 // ZDYMAK_TEST_KEEP=<folder> keeps the shots there, for CI to upload when a test fails; otherwise they go.
 const keep = process.env.ZDYMAK_TEST_KEEP;
