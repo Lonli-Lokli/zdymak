@@ -132,3 +132,31 @@ export function recordBuiltApp(app, flags, log = console.log) {
   fs.writeFileSync(target, `${app}\n`);
   log(`  (its path is in ${target}; pass it on with --app)`);
 }
+
+/**
+ * For a script that drives the app itself: find the simulator as `capture` does (`udid`, else `device`, else the
+ * booted one, else the default device, created if missing), boot it only when it is not running, and install `app`
+ * (an already-built .app; its bundle id is read from it and checked against `bundle`). Returns the teardown receipt
+ * `{ udid, booted, created, bundle }` for `closeIosSim`, which shuts down only a simulator this call booted.
+ */
+export function openIosSim({ udid, device, app, bundle } = {}) {
+  const built = app !== undefined ? prebuiltApp(app, bundle) : null; // refused before anything boots
+  const sim = resolveIosSim({ udid, device });
+  if (sim.booted) {
+    sh('xcrun', ['simctl', 'boot', sim.udid]);
+    sh('xcrun', ['simctl', 'bootstatus', sim.udid, '-b']);
+  }
+  if (built) sh('xcrun', ['simctl', 'install', sim.udid, built.app]);
+  return { ...sim, bundle: built?.bundle ?? bundle ?? null };
+}
+
+/**
+ * Undo `openIosSim`: shut down the simulator only if it booted it (and delete a device it created). One that was
+ * already running is left as it was; `keep` leaves this one up too. Returns whether it shut anything down.
+ */
+export function closeIosSim(sim, { keep = false } = {}) {
+  if (!sim?.udid || keep || !sim.booted) return false;
+  spawnSync('xcrun', ['simctl', 'shutdown', sim.udid], { stdio: 'ignore' });
+  if (sim.created) spawnSync('xcrun', ['simctl', 'delete', sim.udid], { stdio: 'ignore' });
+  return true;
+}

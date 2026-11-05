@@ -1,6 +1,7 @@
 // `zdymak capture` on iOS shuts down at teardown only a simulator it booted itself. A simulator found by --device that
 // was already booted (by the user, or by a tool that keeps one device up between runs) is left running.
-// It installs an app an earlier run built (--app, --app-out).
+// It installs an app an earlier run built (--app, --app-out), gives scripts the same boot and teardown (openIosSim,
+// closeIosSim).
 //   node --test scripts/simulator.test.mjs        (or: npm run check:simulator)
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -65,7 +66,7 @@ test('--udid and no --device behave as before', (t) => {
   assert.deepEqual(resolveIosSim({}), { udid: PAD, booted: false, created: false });
 });
 
-/* ── A prebuilt app (--app) and a build handed on (--app-out) ───────────────────────────────────────────────────── */
+/* ── A prebuilt app (--app), a build handed on (--app-out), and the library calls ─────────────────────────────── */
 
 /**
  * Stand-ins on PATH: an `xcrun` that answers the two device lists and LOGS every boot, bootstatus, install, shutdown
@@ -174,6 +175,41 @@ test('--app-out: the built app\'s path and a newline, in a folder made for it; t
   const quiet = [];
   sim.recordBuiltApp(app, { build: true }, (l) => quiet.push(l));
   assert.deepEqual(quiet, [`▸ app: ${app}`]);
+});
+
+test('openIosSim boots a shut-down simulator and installs the app; closeIosSim shuts down what it booted', (t) => {
+  const tools = fakeTools(t, '');
+  const app = tools.app('Sample', 'org.example.sample');
+  const s = sim.openIosSim({ device: 'iPhone 18 Pro Max', app });
+  assert.deepEqual(s, { udid: NEW, booted: true, created: false, bundle: 'org.example.sample' });
+  assert.deepEqual(tools.calls(), [`simctl boot ${NEW}`, `simctl bootstatus ${NEW} -b`, `simctl install ${NEW} ${app}`]);
+  assert.equal(sim.closeIosSim(s), true);
+  assert.deepEqual(tools.calls().slice(3), [`simctl shutdown ${NEW}`]);
+});
+
+test('openIosSim on a simulator that is already booted installs without booting; closeIosSim leaves it up', (t) => {
+  const tools = fakeTools(t, `    iPhone 18 Pro Max (${NEW}) (Booted)\n`);
+  const app = tools.app('Sample', 'org.example.sample');
+  const s = sim.openIosSim({ udid: NEW, app, bundle: 'org.example.sample' });
+  assert.deepEqual(s, { udid: NEW, booted: false, created: false, bundle: 'org.example.sample' });
+  assert.deepEqual(tools.calls(), [`simctl install ${NEW} ${app}`]);
+  assert.equal(sim.closeIosSim(s), false);
+  assert.deepEqual(tools.calls(), [`simctl install ${NEW} ${app}`]);
+});
+
+test('closeIosSim: keep leaves a simulator it booted up; a device it created is deleted', (t) => {
+  const tools = fakeTools(t, '');
+  assert.equal(sim.closeIosSim({ udid: NEW, booted: true, created: false }, { keep: true }), false);
+  assert.deepEqual(tools.calls(), []);
+  assert.equal(sim.closeIosSim({ udid: PAD, booted: true, created: true }), true);
+  assert.deepEqual(tools.calls(), [`simctl shutdown ${PAD}`, `simctl delete ${PAD}`]);
+});
+
+test('openIosSim refuses an app whose bundle id is not the one asked for, before it boots anything', (t) => {
+  const tools = fakeTools(t, '');
+  const app = tools.app('Sample', 'org.example.sample');
+  assert.throws(() => sim.openIosSim({ device: 'iPhone 18 Pro Max', app, bundle: 'org.example.other' }), /not org\.example\.other/);
+  assert.deepEqual(tools.calls(), []);
 });
 
 test('the CLI refuses --app with --build before it calls xcrun at all', (t) => {

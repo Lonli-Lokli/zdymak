@@ -18,6 +18,7 @@ export { buildPremium } from './premium.mjs';
 export { buildDeviceScreenshots, localizeScenes, untranslatedScenes, localizeBrand } from './screenshots.mjs';
 export { buildFeatureGraphic, buildCreativeGraphic, creativeLayout } from './graphic.mjs';
 export { renderStill } from './still.mjs';
+export { openIosSim, closeIosSim } from './capture/simulator.mjs';
 export { rgbPngBuffer } from './png.mjs';
 export { loadConfig } from './config.mjs';
 export { registerFonts } from './fonts.mjs';

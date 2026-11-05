@@ -160,6 +160,23 @@ export declare const IMAGE_TARGETS: Record<ImageTargetId, ImageTargetSpec>;
 /** Resolve a video target by id; throws with the list of valid ids. */
 export declare function videoTarget(id: VideoTargetId | (string & {})): VideoTargetSpec;
 
+/** What `openIosSim` changed, for `closeIosSim` to undo: `booted`/`created` say whether it booted or created the device. */
+export interface IosSim {
+  udid: string;
+  booted: boolean;
+  created: boolean;
+  /** The installed app's CFBundleIdentifier (read from its Info.plist), else the `bundle` passed, else null. */
+  bundle: string | null;
+}
+/**
+ * For a script that drives an iOS app itself: find the simulator as `zdymak capture` does (`udid`, else `device`, else
+ * the booted one, else the default device), boot it only when it is not running, and install `app`, an already-built
+ * `.app` whose bundle id must be `bundle` when that is given.
+ */
+export declare function openIosSim(opts?: { udid?: string; device?: string; app?: string; bundle?: string }): IosSim;
+/** Shut down the simulator only if `openIosSim` booted it (deleting a device it created); `keep` leaves it up. True when it shut one down. */
+export declare function closeIosSim(sim: IosSim, opts?: { keep?: boolean }): boolean;
+
 // ─── Config ─────────────────────────────────────────────────────────────────────────────────────
 
 /** Ken-Burns motion applied to a scene. Omit and zdymak rotates through a varied default sequence. */

@@ -357,6 +357,11 @@ a simulator this run booted is shut down, and a throwaway device it created is d
 simulator you already had running is left exactly as it was. On Android, SystemUI demo mode is switched
 back off. Pass **`--keep`** to skip teardown when you want to poke at the device afterwards.
 
+So a script that runs several captures on one device (every locale, both orientations) should boot that
+device itself before the first, or under whatever keeps a device up between jobs: each capture then finds
+it running and leaves it running, and the script shuts it down once at the end. `--keep` is for looking at
+the device, not for chaining captures: a simulator a run booted and kept has nobody left to shut it down.
+
 It does **not** build your app for Android or web — that's your toolchain; on iOS `--build` will do it.
 And a note on macOS: there is deliberately no `--platform macos` capture, because reading a specific
 native window's pixels needs a TCC grant (Screen Recording or Accessibility) and can't be a clean
@@ -893,6 +898,16 @@ zdymak capture --platform ios --arg -screen --states a,b,c --device 'iPhone 18 P
   --build --project App.xcodeproj --scheme App --app-out build/app-path.txt
 zdymak capture --platform ios --arg -screen --states a,b,c --device 'iPad Pro 13-inch (M5)' --out shots/ipad \
   --app "$(cat build/app-path.txt)"
+```
+
+A script that drives the app itself rather than through `--states` gets the same two halves from the package:
+`openIosSim({ udid?, device?, app?, bundle? })` finds the simulator as `capture` does, boots it only when it is not
+running and installs the app; `closeIosSim(sim, { keep? })` shuts it down only if `openIosSim` booted it.
+
+```js
+import { openIosSim, closeIosSim } from 'zdymak';
+const sim = openIosSim({ device: 'iPhone 18 Pro Max', app: 'build/Debug-iphonesimulator/App.app' });
+try { /* simctl launch sim.udid sim.bundle … */ } finally { closeIosSim(sim); }
 ```
 
 `zdymak specs` lists every image target and its exact dimensions. A device that only ships iPhone simply
