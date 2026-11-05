@@ -23,7 +23,8 @@ jobs:
       - run: npm ci
 
       - name: Fonts the canvas can find
-        run: fc-list : family file | sort | head -40 || true
+        run: |
+          fc-list : family file | sort | head -40 || true
 
       - run: npm run verify
         env:
