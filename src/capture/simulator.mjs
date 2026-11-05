@@ -1,6 +1,6 @@
 // Which iOS simulator a capture runs on, and whether the capture boots it (and so shuts it down at teardown); the app
-// it installs when that app was built by an earlier run (--app, --app-out). Kept apart from index.mjs so it can be
-// tested with a stand-in `xcrun` and `plutil` on PATH:
+// it installs when that app was built by an earlier run (--app, --app-out); and the proven turn of a simulator that was
+// already running. Kept apart from index.mjs so it can be tested with a stand-in `xcrun` and `plutil` on PATH:
 //   node --test scripts/simulator.test.mjs
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -159,4 +159,74 @@ export function closeIosSim(sim, { keep = false } = {}) {
   spawnSync('xcrun', ['simctl', 'shutdown', sim.udid], { stdio: 'ignore' });
   if (sim.created) spawnSync('xcrun', ['simctl', 'delete', sim.udid], { stdio: 'ignore' });
   return true;
+}
+
+/** `[{ name, udid }]` for every simulator `simctl list devices booted` prints. */
+export function bootedSims(list) {
+  const sims = [];
+  for (const line of list.split('\n')) {
+    const m = line.match(/^\s+(.+?) \(([0-9A-Fa-f-]{36})\) \(Booted\)/);
+    if (m) sims.push({ name: m[1], udid: m[2] });
+  }
+  return sims;
+}
+
+/**
+ * The Simulator app's window for the device named `name`, or null. The app titles a device window
+ * "<name> – <runtime>", so the name must be followed by the separator, not by more name: "iPhone 18 Pro" is a
+ * prefix of "iPhone 18 Pro Max".
+ */
+export function simulatorWindowFor(windows, name) {
+  return windows.find((w) => w === name || [' – ', ' - ', ' — '].some((sep) => w.startsWith(name + sep))) ?? null;
+}
+
+/**
+ * Raise the device's own window in the Simulator app (Xcode 26 and before), so its Device ▸ Orientation menu, which
+ * acts on the window in front, turns THIS simulator and not another one that is booted beside it. Best effort: when
+ * no window carries the device's name it does nothing and says so, and the proven turn catches a turn that went
+ * astray. Returns the window raised, or null.
+ */
+export function raiseSimulatorWindow(udid, log = console.log) {
+  const name = bootedSims(out2('xcrun', ['simctl', 'list', 'devices', 'booted'])).find((s) => s.udid === udid)?.name;
+  const r = spawnSync('osascript', ['-e', 'tell application "System Events" to tell process "Simulator" to get name of every window'],
+    { encoding: 'utf8' });
+  const windows = r.status === 0 ? r.stdout.trim().split(', ').filter(Boolean) : [];
+  const window = name ? simulatorWindowFor(windows, name) : null;
+  if (!window) {
+    if (windows.length > 1) log(`  (no Simulator window is named for ${name || udid}; the turn goes to the window in front)`);
+    return null;
+  }
+  const quoted = window.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  spawnSync('osascript', ['-e', `tell application "System Events" to tell process "Simulator" to perform action "AXRaise" of (first window whose name is "${quoted}")`],
+    { stdio: 'ignore' });
+  return window;
+}
+
+/** What a turn that did not happen is reported as. `others`: the names of the other simulators booted at the time. */
+export function notTurnedMessage(orientation, others = []) {
+  return `the simulator did not turn — still portrait after asking for ${orientation} twice.\n`
+    + '  The usual cause is the APP, not the tooling: iOS refuses an orientation the Info.plist does\n'
+    + '  not list, and on iPad the key it reads is UISupportedInterfaceOrientations~ipad.'
+    + (others.length
+      ? `\n  Also booted: ${others.join(', ')}. Through the Simulator app's menu (Xcode 26 and before) a turn goes to the`
+        + '\n  window in front; zdymak raises this device\'s window first, which needs a window titled with its name.'
+      : '');
+}
+
+/**
+ * Turn a simulator and PROVE it turned, asking twice before it fails. From portrait (`toPortrait`), a frame, the turn
+ * (`toTarget`), a frame: two orientations of a real screen never match byte for byte, so equal frames mean the device
+ * stayed where it was. A turn asked for while a simulator is still finishing its boot can be dropped, so an unchanged
+ * frame is asked for once more, from portrait again, before it is an error. `frame()` settles and returns the
+ * framebuffer; `others()` names the other booted simulators for the error. Returns the ask that took (1 or 2).
+ */
+export async function provenTurn({ orientation, toPortrait, toTarget, frame, log = console.log, others = () => [] }) {
+  for (let ask = 1; ask <= 2; ask++) {
+    await toPortrait();
+    const before = await frame();
+    await toTarget();
+    if (!before.equals(await frame())) return ask;
+    if (ask === 1) log(`  ↻ still portrait after asking for ${orientation}; asking once more`);
+  }
+  throw new Error(notTurnedMessage(orientation, others()));
 }

@@ -396,9 +396,10 @@ Usage:
                   # "screenshots --locale" only translates the CAPTION — without this the picture under
                   # it stays in whatever language the device was in. --applelocale overrides the derived
                   # formatting locale (default: the tag with "-" as "_").
-                  # --orientation turns the DEVICE (via the Simulator's own menu — simctl has no such
-                  # command) and stands the framebuffer back up, since simctl's ignores rotation. It
-                  # fails loudly if the device does not actually turn; the usual cause is the app's
+                  # --orientation turns the DEVICE (Xcode 27: devicectl, aimed at its udid; Xcode 26 and before:
+                  # the Simulator's own menu, on the device's own window — simctl has no such command) and
+                  # stands the framebuffer back up, since simctl's ignores rotation. A device that did not
+                  # turn is asked once more, then it fails loudly; the usual cause is the app's
                   # Info.plist, and on iPad the key read is UISupportedInterfaceOrientations~ipad.
                   # --posture folds and turns an iPhone Duo simulator (Xcode 27.1+) with the events Device Hub sends
                   # (vendored duoctl helper, compiled on first use) and photographs the screen that is on. A

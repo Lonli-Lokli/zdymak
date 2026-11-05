@@ -25,7 +25,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { rgbPngBuffer } from '../png.mjs';
 import { captureWeb } from './web.mjs';
 import { iosBuildArgs } from './xcode.mjs';
-import { recordBuiltApp, resolveIosSim, withPrebuiltApp } from './simulator.mjs';
+import { bootedSims, provenTurn, raiseSimulatorWindow, recordBuiltApp, resolveIosSim, withPrebuiltApp } from './simulator.mjs';
 import { displays, enterPosture, leavePosture, postureDisplay, postureOf, shootPosture } from './fold.mjs';
 
 /** Flatten over black and rewrite as a NO-ALPHA RGB PNG (App Store & Play reject alpha on screenshots). */
@@ -252,6 +252,8 @@ async function setSimOrientation(udid, orientation) {
     return;
   }
   await awaitSimulatorWindow();
+  // The menu acts on the window in front: with another simulator booted, that may not be this one.
+  raiseSimulatorWindow(udid);
   const r = spawnSync('osascript', [
     '-e', 'tell application "Simulator" to activate',
     '-e', 'delay 1',
@@ -275,26 +277,24 @@ async function setSimOrientation(udid, orientation) {
  * a complete set of perfectly valid PORTRAIT screenshots filed as landscape. That is this pipeline's
  * recurring failure shape: an asset wrong in a way nothing downstream can see. So the device is
  * driven to portrait first, then to the target, and the two framebuffers compared. Two orientations
- * of a real screen never match byte for byte.
+ * of a real screen never match byte for byte. An unmoved device is asked once more before it is an
+ * error (`provenTurn`): a turn asked for while a simulator finishes its boot can be dropped.
  */
 async function rotateSim(udid, orientation, outDir) {
   if (orientation === 'portrait') { await setSimOrientation(udid, 'portrait'); await settleFrame(udid, outDir); return; }
   const probe = path.join(outDir, '.orientation-probe.png');
   try {
-    await setSimOrientation(udid, 'portrait');
-    await settleFrame(udid, outDir);
-    sh('xcrun', ['simctl', 'io', udid, 'screenshot', probe]);
-    const before = fs.readFileSync(probe);
-    await setSimOrientation(udid, orientation);
-    await settleFrame(udid, outDir);
-    sh('xcrun', ['simctl', 'io', udid, 'screenshot', probe]);
-    if (before.equals(fs.readFileSync(probe))) {
-      throw new Error(
-        `the simulator did not turn — still portrait after asking for ${orientation}.\n`
-        + '  The usual cause is the APP, not the tooling: iOS refuses an orientation the Info.plist does\n'
-        + '  not list, and on iPad the key it reads is UISupportedInterfaceOrientations~ipad.',
-      );
-    }
+    await provenTurn({
+      orientation,
+      toPortrait: () => setSimOrientation(udid, 'portrait'),
+      toTarget: () => setSimOrientation(udid, orientation),
+      frame: async () => {
+        await settleFrame(udid, outDir);
+        sh('xcrun', ['simctl', 'io', udid, 'screenshot', probe]);
+        return fs.readFileSync(probe);
+      },
+      others: () => bootedSims(out2('xcrun', ['simctl', 'list', 'devices', 'booted'])).filter((s) => s.udid !== udid).map((s) => s.name),
+    });
   } finally {
     fs.rmSync(probe, { force: true });
   }

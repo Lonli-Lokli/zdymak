@@ -235,14 +235,23 @@ from the capture's own aspect, so a landscape screen already yields a landscape 
 
 Two things worth knowing, because both fail by producing a perfectly valid PNG:
 
-- **`simctl` cannot rotate**, and its screenshots ignore rotation. Orientation lives in the Simulator
-  *app*, so this drives its Device ▸ Orientation menu, which needs the terminal to have
-  **System Settings ▸ Privacy & Security ▸ Accessibility**. The framebuffer then comes back
-  portrait-shaped with the interface lying on its side; zdymak stands it back up.
+- **`simctl` cannot rotate**, and its screenshots ignore rotation. On Xcode 27 zdymak turns the device
+  with `xcrun devicectl device orientation set --device <udid>`, aimed at that simulator alone. On Xcode
+  26 and before orientation lives in the Simulator *app*, so it drives its Device ▸ Orientation menu,
+  which needs the terminal to have **System Settings ▸ Privacy & Security ▸ Accessibility**; that menu
+  acts on the window in front, so zdymak first raises the window titled with the device's name, which
+  matters when another simulator is booted beside it. The framebuffer then comes back portrait-shaped
+  with the interface lying on its side; zdymak stands it back up.
 - **iOS refuses an orientation the app does not declare**, and on iPad the key it reads is
   `UISupportedInterfaceOrientations~ipad`, not the plain one. Since every failure here leaves the
   device where it was — and would hand you a full set of good *portrait* screenshots filed as
   landscape — the turn is verified, and a device that did not move is an error, not a warning.
+  A turn asked for while a simulator is still finishing its boot can be dropped, so an unmoved device
+  is asked once more, from portrait, before the error; the error names any other simulator that was
+  booted at the time.
+
+A simulator that was already running, already turned, is fine: the turn starts from portrait, and the
+capture puts it back to portrait at the end, `--keep` or not.
 
 On **Android** there is no flag, because `--size` already does it better: relayouting to `1600x2560`
 gives the app a real upright tablet (800×1280dp at density 320), while rotating a 16:9 landscape

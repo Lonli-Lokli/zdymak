@@ -1,7 +1,7 @@
 // `zdymak capture` on iOS shuts down at teardown only a simulator it booted itself. A simulator found by --device that
 // was already booted (by the user, or by a tool that keeps one device up between runs) is left running.
 // It installs an app an earlier run built (--app, --app-out), gives scripts the same boot and teardown (openIosSim,
-// closeIosSim).
+// closeIosSim), and asks a turn twice before it calls the device unturned.
 //   node --test scripts/simulator.test.mjs        (or: npm run check:simulator)
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -225,4 +225,64 @@ test('the CLI refuses --app with --build before it calls xcrun at all', (t) => {
   assert.notEqual(r.status, 0);
   assert.match(r.stderr + r.stdout, /drop --build/);
   assert.equal(fs.existsSync(xcrunLog), false, 'xcrun was called');
+});
+
+/* ── Turning an inherited simulator ────────────────────────────────────────────────────────────────────────── */
+
+test('bootedSims reads names and udids from simctl list devices booted', () => {
+  const list = `== Devices ==\n-- iOS 27.2 --\n    iPhone 18 Pro Max (${NEW}) (Booted)\n    iPad Pro 13-inch (M5) (${PAD}) (Booted)\n`;
+  assert.deepEqual(sim.bootedSims(list), [
+    { name: 'iPhone 18 Pro Max', udid: NEW },
+    { name: 'iPad Pro 13-inch (M5)', udid: PAD },
+  ]);
+  assert.deepEqual(sim.bootedSims('== Devices ==\n'), []);
+});
+
+test('simulatorWindowFor picks the device\'s own window by its whole name', () => {
+  const windows = ['iPhone 18 Pro Max – iOS 26.5', 'iPhone 18 Pro – iOS 26.5', 'iPad Pro 13-inch (M5) – iOS 26.5'];
+  assert.equal(sim.simulatorWindowFor(windows, 'iPhone 18 Pro'), 'iPhone 18 Pro – iOS 26.5');
+  assert.equal(sim.simulatorWindowFor(windows, 'iPhone 18 Pro Max'), 'iPhone 18 Pro Max – iOS 26.5');
+  assert.equal(sim.simulatorWindowFor(windows, 'iPad Pro 13-inch (M5)'), 'iPad Pro 13-inch (M5) – iOS 26.5');
+  assert.equal(sim.simulatorWindowFor(['iPhone 18 Pro'], 'iPhone 18 Pro'), 'iPhone 18 Pro');
+  assert.equal(sim.simulatorWindowFor(windows, 'iPhone 17'), null);
+  assert.equal(sim.simulatorWindowFor([], 'iPhone 18 Pro'), null);
+});
+
+/** A device whose framebuffer changes only on the turns listed in [turnsThatTake] (1-based), logging each call. */
+function fakeTurns(turnsThatTake) {
+  const calls = [];
+  let turns = 0;
+  let landscape = false;
+  return {
+    calls,
+    toPortrait: async () => { calls.push('portrait'); landscape = false; },
+    toTarget: async () => { turns++; calls.push('turn'); landscape = turnsThatTake.includes(turns); },
+    frame: async () => { calls.push('frame'); return Buffer.from(landscape ? 'landscape' : 'portrait'); },
+  };
+}
+
+test('provenTurn: a turn that takes the first time is asked for once', async () => {
+  const d = fakeTurns([1]);
+  const log = [];
+  assert.equal(await sim.provenTurn({ orientation: 'landscape-left', ...d, log: (l) => log.push(l) }), 1);
+  assert.deepEqual(d.calls, ['portrait', 'frame', 'turn', 'frame']);
+  assert.deepEqual(log, []);
+});
+
+test('provenTurn: a turn missed just after boot is asked for once more, from portrait, and passes', async () => {
+  const d = fakeTurns([2]);
+  const log = [];
+  assert.equal(await sim.provenTurn({ orientation: 'landscape-left', ...d, log: (l) => log.push(l) }), 2);
+  assert.deepEqual(d.calls, ['portrait', 'frame', 'turn', 'frame', 'portrait', 'frame', 'turn', 'frame']);
+  assert.equal(log.length, 1);
+  assert.match(log[0], /once more/);
+});
+
+test('provenTurn: two missed turns fail, naming the app\'s orientations and any other booted simulator', async () => {
+  await assert.rejects(sim.provenTurn({ orientation: 'landscape-left', ...fakeTurns([]), log: () => {} }),
+    (e) => /did not turn/.test(e.message) && /UISupportedInterfaceOrientations~ipad/.test(e.message) && !/Also booted/.test(e.message));
+  await assert.rejects(
+    sim.provenTurn({ orientation: 'landscape-left', ...fakeTurns([]), log: () => {}, others: () => ['iPhone 18 Pro Max'] }),
+    /Also booted: iPhone 18 Pro Max/,
+  );
 });
