@@ -290,12 +290,42 @@ function detailShare(a, b) {
  * mark copied at its tablet pixels spans 43% of the shorter side and arrives at 4.6%: a launch mark that large on a
  * small screen could pass for a scene as it draws in.
  * The larger of the two shares is never under the colour share, so nothing the colour check let through is refused.
+ * Two frames each the other's size turned are compared on their middle squares ([middle]); any other two sizes throw.
  */
 export async function launchChange(fileA, fileB) {
   const [a, b] = await Promise.all([pixelsOf(fileA), pixelsOf(fileB)]);
-  if (a.width !== b.width || a.height !== b.height) return 1;
+  if (a.width === b.width && a.height === b.height) return changeOf(a, b);
+  if (a.width === b.height && a.height === b.width) {
+    const side = Math.min(a.width, a.height);
+    return changeOf(middle(a, side), middle(b, side));
+  }
+  throw new Error(
+    `the launch check cannot compare ${path.basename(fileA)} (${a.width}×${a.height}) with ${path.basename(fileB)} `
+    + `(${b.width}×${b.height}): they are neither one size nor one size turned, so the screen changed size between them.`,
+  );
+}
+
+function changeOf(a, b) {
   const byColour = colourShare(a, b);
   return byColour >= LAUNCH_LOOK ? byColour : Math.max(byColour, detailShare(a, b));
+}
+
+/**
+ * The square of `side` in the middle of a capture. A turned screen's launch frame is shot as the app starts, before
+ * the turn, and its shot after it; where the screenshot follows the device (Xcode 27's turn through devicectl), the
+ * two come back upright and each the other's size turned. A launch screen lays its mark out in the middle either way
+ * up, so the middle square of each is the same screen, and the status bar along the top is cut off the portrait one.
+ * Turning a frame instead would lay its mark on its side.
+ */
+function middle(img, side) {
+  const x0 = (img.width - side) >> 1;
+  const y0 = (img.height - side) >> 1;
+  const data = new Uint8ClampedArray(side * side * 4);
+  for (let y = 0; y < side; y++) {
+    const from = ((y + y0) * img.width + x0) * 4;
+    data.set(img.data.subarray(from, from + side * 4), y * side * 4);
+  }
+  return { width: side, height: side, data };
 }
 
 /** Under this share of changed pixels (and of changed detail, [launchChange]), a capture still shows what the screen showed at launch. */
