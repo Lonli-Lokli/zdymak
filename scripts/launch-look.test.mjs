@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createCanvas } from '@napi-rs/canvas';
 import { fileURLToPath } from 'node:url';
-import { LAUNCH_LOOK, launchDifferences, screenDifference } from '../src/capture/index.mjs';
+import { LAUNCH_LOOK, launchChange, launchDifferences, screenDifference } from '../src/capture/index.mjs';
 
 // Written by scripts/make-bad-shots.mjs.
 const frames = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'launch');
@@ -98,4 +98,95 @@ test('a frame taken for the scene is refused once the run learns it is the launc
 
 test('with no launch screen seen to give way, a shot that never changed is refused', async () => {
   await assert.rejects(launchDifferences([{ state: 'result', frame: card, moved: 0.03, atOnce: false }], 30000), /result: /);
+});
+
+// A dark result card over the dimmed scene, on a tablet: the scrim, the card and the scene under it all sit within 32
+// of the launch screen's dark ground in every channel, so only the card's words, its rim and its button differ by
+// colour, about 3% of the screen, under LAUNCH_LOOK. Measured so on a real tablet capture, it was refused twice
+// though the card was fully drawn. The launch screens of one run differ by 16 to 24 in their ground, which is why the
+// colour tolerance cannot simply come down.
+const W = 1032;
+const H = 1376;
+const GROUND = [3, 24, 11];
+const rgb = ([r, g, b], k = 0) => `rgb(${r + k},${g + k},${b + k})`;
+function frame(name, draw) {
+  const c = createCanvas(W, H);
+  const ctx = c.getContext('2d');
+  draw(ctx);
+  const file = path.join(dir, `${name}.png`);
+  fs.writeFileSync(file, c.toBuffer('image/png'));
+  return file;
+}
+/** A launch screen: flat ground (lifted by `lift` in every channel) and a small ring of dots in the middle. */
+const launchScreen = (name, { lift = 0, withMark = true } = {}) => frame(name, (ctx) => {
+  ctx.fillStyle = rgb(GROUND, lift);
+  ctx.fillRect(0, 0, W, H);
+  if (!withMark) return;
+  ctx.fillStyle = '#E8F4EC';
+  for (let a = 0; a < 24; a++) {
+    ctx.beginPath();
+    ctx.arc(W / 2 + 60 * Math.cos(a * Math.PI / 12), H / 2 + 42 * Math.sin(a * Math.PI / 12), 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+});
+/** The scene under a dark scrim (faint vines), and a dark card holding light words, a rim and one light button. */
+const dimmedCard = (name) => frame(name, (ctx) => {
+  ctx.fillStyle = rgb(GROUND, 6);
+  ctx.fillRect(0, 0, W, H);
+  let seed = 7;
+  const next = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  ctx.lineWidth = 3;
+  for (let v = 0; v < 400; v++) {
+    ctx.strokeStyle = rgb(GROUND, 8 + Math.floor(next() * 14));
+    ctx.beginPath();
+    ctx.moveTo(next() * W, next() * H);
+    ctx.lineTo(next() * W, next() * H);
+    ctx.stroke();
+  }
+  const x = 236;
+  const y = 380;
+  const w = 560;
+  const h = 560;
+  ctx.fillStyle = rgb(GROUND, 14);
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#3E8A5A';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, w, h);
+  ctx.fillStyle = '#DDEFE2';
+  for (let line = 0; line < 9; line++) {
+    for (let g = 0; g < 36; g++) if ((g * 7 + line) % 6) ctx.fillRect(x + 40 + g * 13, y + 50 + line * 40, 3, 16);
+  }
+  ctx.fillStyle = '#8FE6A8';
+  ctx.fillRect(x + 40, y + 440, w - 80, 36);
+});
+
+test('a dark result card over the dimmed scene is not the launch screen, though few of its pixels changed colour', async () => {
+  const launch = launchScreen('dark-launch');
+  const card = dimmedCard('dark-card');
+  const byColour = await screenDifference(launch, card);
+  assert.ok(byColour > 0.02 && byColour < LAUNCH_LOOK, `by colour the card is ${byColour} from the launch screen`);
+  const change = await launchChange(launch, card);
+  assert.ok(change >= LAUNCH_LOOK, `the card is ${change} from the launch screen`);
+  const d = await launchDifferences([
+    { state: 'home', frame: launchScreen('dark-launch-home', { lift: 20 }), moved: 0.6, atOnce: false },
+    { state: 'result', frame: launch, moved: change, atOnce: false },
+  ], 30000);
+  assert.ok(d[1] >= LAUNCH_LOOK);
+});
+
+test('two launch frames whose ground differs by 20 are one launch screen', async () => {
+  const change = await launchChange(launchScreen('dark-a'), launchScreen('dark-b', { lift: 20 }));
+  assert.ok(change < LAUNCH_LOOK, `the two launch frames are ${change} apart`);
+});
+
+test('a launch frame taken before its mark drew is still the launch screen', async () => {
+  const change = await launchChange(launchScreen('dark-bare', { withMark: false }), launchScreen('dark-marked', { lift: 20 }));
+  assert.ok(change < LAUNCH_LOOK, `the mark's arrival is ${change}`);
+});
+
+test('a dark launch screen that stayed is refused', async () => {
+  const launch = launchScreen('dark-stayed-launch');
+  const moved = await launchChange(launch, launchScreen('dark-stayed-shot'));
+  const home = { state: 'home', frame: launchScreen('dark-home-launch', { lift: 20 }), moved: 0.6, atOnce: false };
+  await assert.rejects(launchDifferences([home, { state: 'result', frame: launch, moved, atOnce: false }], 30000), /result: .*still looks as it did at launch/);
 });
