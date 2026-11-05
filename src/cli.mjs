@@ -385,7 +385,8 @@ Usage:
                   # of its own for CI, release gates and device tests. Exits 1 on a blank or unreadable file.
   zdymak specs
   zdymak capture  --platform ios --bundle <id> --arg <handle> --states <a,b,c> [--suffix -light]
-                  [--build --project <.xcodeproj> --scheme <name> [--configuration <name>] [--derived-data <dir>]] [--device <sim>] [--out <dir>] [--clean] [--keep]
+                  [--build --project <.xcodeproj> --scheme <name> [--configuration <name>] [--derived-data <dir>] [--app-out <file>]
+                   | --app <path.app>] [--device <sim>] [--out <dir>] [--clean] [--keep]
                   [--orientation portrait|landscape-left|landscape-right]
                   [--posture closed|closed-turned|closed-turned-right|open|open-upright|half-book|half-laptop [--hinge <deg>]]
                   [--language <tag> [--applelocale <id>]]
@@ -418,6 +419,9 @@ Defaults: --config ${DEFAULT_CONFIG}. Needs ffmpeg on PATH (or $FFMPEG).
 --build: iOS builds into Xcode's own DerivedData for the project (one per repo, shared with archives); pin another
 folder with --derived-data <dir>. --configuration <name> builds that Xcode configuration (default Debug;
 any configuration the scheme defines, such as --configuration Release). Older versions left a .dd build in every output folder: delete those.
+--app-out <file> (with --build) writes the built app's path to <file>; --app <path.app> installs that app instead of
+building, so a set of captures builds once (the bundle id is read from the app; --bundle, if given, must match).
+A simulator this run did not boot is left running; --keep also leaves one it booted.
 --clean: wipe the output folder first (capture clears stale PNGs and MOVs, never subfolders) — so the
 folder ends up holding ONLY this run's assets, never a stale screenshot from a removed target/scene.
 README.md documents the config (brand, scenes, targets, theme, music, devices, middleware); SKILL.md is for agents.

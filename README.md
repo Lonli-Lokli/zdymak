@@ -880,6 +880,21 @@ delete those.
 `--configuration <name>` (with `--build`) builds that Xcode configuration instead of `Debug`, for the build, the
 build-settings lookup and the install alike: any configuration the scheme defines works, such as `--configuration Release` or a Release-like one made for screenshots.
 
+**One build for a set of captures** (iOS `capture`): `--app-out <file>` (with `--build`) writes the built app's
+path and a newline to `<file>`, and every `--build` run prints it as `▸ app: <path>`. The other captures of the
+set install that app with **`--app <path.app>`** instead of building again: no xcodebuild, the simulator booted
+only if it is not running, the app installed over any older copy. `--bundle` may be left out with `--app`: the
+bundle id is read from the app's `Info.plist`, and a `--bundle` that names another app is an error. `--app` and
+`--build` are one or the other, and `--app` needs `--states`. A simulator build runs on any simulator of the same
+architecture, so the app built for an iPhone also installs on an iPad.
+
+```sh
+zdymak capture --platform ios --arg -screen --states a,b,c --device 'iPhone 18 Pro Max' --out shots/iphone \
+  --build --project App.xcodeproj --scheme App --app-out build/app-path.txt
+zdymak capture --platform ios --arg -screen --states a,b,c --device 'iPad Pro 13-inch (M5)' --out shots/ipad \
+  --app "$(cat build/app-path.txt)"
+```
+
 `zdymak specs` lists every image target and its exact dimensions. A device that only ships iPhone simply
 omits the others — that's the "use only part of it" contract.
 

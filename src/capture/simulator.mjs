@@ -1,7 +1,10 @@
-// Which iOS simulator a capture runs on, and whether the capture boots it (and so shuts it down at teardown).
-// Kept apart from index.mjs so it can be tested with a stand-in `xcrun` on PATH:
+// Which iOS simulator a capture runs on, and whether the capture boots it (and so shuts it down at teardown); the app
+// it installs when that app was built by an earlier run (--app, --app-out). Kept apart from index.mjs so it can be
+// tested with a stand-in `xcrun` and `plutil` on PATH:
 //   node --test scripts/simulator.test.mjs
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 
 function sh(cmd, args) {
   const r = spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
@@ -75,4 +78,57 @@ export function resolveIosSim(flags) {
   }
   const wasBooted = !created && out2('xcrun', ['simctl', 'list', 'devices', 'booted']).includes(udid);
   return { udid, booted: !wasBooted, created };
+}
+
+/**
+ * `{ app, bundle }` for an app that is already built: its absolute path and the CFBundleIdentifier its Info.plist
+ * names (read with plutil, which also reads the binary plist a build writes). `bundle`, when given, must be that id:
+ * installing one app and launching another would photograph the wrong one.
+ */
+export function prebuiltApp(appPath, bundle) {
+  if (typeof appPath !== 'string' || !appPath.trim()) {
+    throw new Error('--app needs the path of a built .app (for example --app build/Debug-iphonesimulator/Sample.app).');
+  }
+  const app = path.resolve(appPath);
+  const plist = path.join(app, 'Info.plist');
+  if (!fs.existsSync(plist)) throw new Error(`${app} is not a built .app: it has no Info.plist.`);
+  const r = spawnSync('plutil', ['-extract', 'CFBundleIdentifier', 'raw', '-o', '-', plist], { encoding: 'utf8' });
+  const id = r.status === 0 ? r.stdout.trim() : '';
+  if (!id) throw new Error(`could not read CFBundleIdentifier from ${plist}: ${(r.error?.message || r.stderr || '').trim()}`);
+  if (typeof bundle === 'string' && bundle && bundle !== id) {
+    throw new Error(`${app} is ${id}, not ${bundle}: installing one app and launching another would photograph the wrong one.`);
+  }
+  return { app, bundle: id };
+}
+
+/**
+ * The capture flags with `--app` checked and resolved, before anything builds or boots. `--app <path.app>` installs
+ * an app an earlier run built (`--build ... --app-out <file>` writes its path), so a set of captures builds once; its
+ * bundle id fills `--bundle` when that is left out. Refused with `--build` (one or the other) and outside `--states`
+ * (the other modes shoot what is already on the device). `--app-out` needs `--build` and a file. Flags with neither
+ * come back unchanged.
+ */
+export function withPrebuiltApp(flags) {
+  const out = flags['app-out'];
+  if (out !== undefined) {
+    if (flags.build === undefined) throw new Error('--app-out <file> writes where --build put the app, so it needs --build.');
+    if (typeof out !== 'string' || !out.trim()) throw new Error('--app-out needs a file (for example --app-out build/app-path.txt).');
+  }
+  if (flags.app === undefined) return flags;
+  if (flags.build !== undefined) {
+    throw new Error('--app installs an app that is already built: drop --build (or drop --app to build in this run).');
+  }
+  if (!flags.states) throw new Error('--app installs the app for a --states capture; the other modes shoot what is already on the device.');
+  return { ...flags, ...prebuiltApp(flags.app, flags.bundle) };
+}
+
+/** Print where `--build` put the app, and write that path and a newline to `--app-out <file>` when asked. */
+export function recordBuiltApp(app, flags, log = console.log) {
+  log(`▸ app: ${app}`);
+  const file = flags['app-out'];
+  if (typeof file !== 'string' || !file.trim()) return;
+  const target = path.resolve(file);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, `${app}\n`);
+  log(`  (its path is in ${target}; pass it on with --app)`);
 }

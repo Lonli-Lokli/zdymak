@@ -25,7 +25,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { rgbPngBuffer } from '../png.mjs';
 import { captureWeb } from './web.mjs';
 import { iosBuildArgs } from './xcode.mjs';
-import { resolveIosSim } from './simulator.mjs';
+import { recordBuiltApp, resolveIosSim, withPrebuiltApp } from './simulator.mjs';
 import { displays, enterPosture, leavePosture, postureDisplay, postureOf, shootPosture } from './fold.mjs';
 
 /** Flatten over black and rewrite as a NO-ALPHA RGB PNG (App Store & Play reject alpha on screenshots). */
@@ -426,7 +426,10 @@ async function captureIos(flags) {
       const built = settings.map((t) => t.buildSettings ?? {}).find((b) => b.WRAPPER_EXTENSION === 'app') ?? {};
       app = built.TARGET_BUILD_DIR && built.WRAPPER_NAME ? path.join(built.TARGET_BUILD_DIR, built.WRAPPER_NAME) : '';
       if (!app || !fs.existsSync(app)) throw new Error(`xcodebuild built ${flags.scheme} but reported no .app (looked for ${app || 'TARGET_BUILD_DIR/WRAPPER_NAME'})`);
+      recordBuiltApp(app, flags); // --app-out <file>: the next captures of the set install this build with --app
     }
+    // --app: an app an earlier run built, installed below like a fresh build (its bundle id was read in withPrebuiltApp).
+    if (flags.app) app = flags.app;
     // Only now, with the build's memory given back, does the simulator boot.
     startIosSim(sim);
     started = true;
@@ -796,7 +799,7 @@ async function recordAndroidStates(states, suffix, outDir, flags) {
  */
 export async function runCapture(flags) {
   const platform = flags.platform;
-  if (platform === 'ios') return captureIos(flags);
+  if (platform === 'ios') return captureIos(withPrebuiltApp(flags)); // --app / --app-out checked before anything runs
   if (platform === 'android') return captureAndroid(flags);
   if (platform === 'web') return captureWeb(flags, { stripAlpha, sleep });
   if (platform === 'macos' || platform === 'mac') {
