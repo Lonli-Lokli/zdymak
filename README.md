@@ -361,9 +361,11 @@ Android does three things here that you would otherwise rediscover the hard way:
 The app must actually move during the window, so drive it with a state handle that autoplays. The clips
 feed `zdymak reel`; a `--size`-matched clip is also directly shippable to the store slot.
 
-Also note `--wifi`: the Android status bar hides wifi by default, because `network wifi show` populates
-both the legacy and modern wifi slot on API 34 emulators and renders **two** icons. The mobile bars carry
-the "connected" read instead. On a real device the duplicate doesn't happen — pass `--wifi` there. Signal
+Also note `--wifi`: below API 36 the Android status bar hides wifi by default, because `network wifi show`
+populates both the legacy and modern wifi slot on API 34 emulators and renders **two** icons. The mobile bars
+carry the "connected" read instead. On a real device the duplicate doesn't happen — pass `--wifi` there. From
+API 36 wifi alone carries it: demo mode's mobile icon, entered over an app already in front, stays white on a
+light status bar (it takes no tint from the app's light-bar flag), while wifi is drawn once and tinted. Signal
 icons are always marked internet-validated, or SystemUI badges each one with a "!" that reads as a broken
 phone in a store asset.
 

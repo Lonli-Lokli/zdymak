@@ -827,6 +827,28 @@ async function captureIos(flags) {
   await refuseShots([await checkCaptured(out, { ...facts, motion, motionAllowed: motionAllowance(flags.motion, scene) }, flags)], flags);
 }
 
+/**
+ * Demo mode's network icons, as broadcast extras, for a device at API level `sdk` (NaN when unread).
+ * - `wifi show` populates BOTH the legacy and the modern wifi slot on API 34 emulators, so the bar renders TWO wifi
+ *   icons; there wifi stays hidden and the mobile bars carry the "connected" read. `--wifi` shows it anyway (fine on a
+ *   real device, where the duplicate does not happen).
+ * - From API 36 (measured on SystemUI 16) the demo MOBILE icon takes no tint from the window's light-status-bar flag
+ *   when demo mode is entered over an app already in front: it stays white on a light bar until the app's window is
+ *   shown again. A single `--name` shot is taken over an app the caller started, so it always hit this. Wifi is drawn
+ *   once and tinted there, so it carries the read and the mobile icon is hidden. A Wi-Fi icon alone is also what a
+ *   tablet, most of the large screens, truly shows.
+ * Every signal is `fully true`: internet-validated, without the "!" badge.
+ */
+export function androidDemoNetwork(sdk, flags = {}) {
+  const net = (slot, state, ...rest) => ['-e', 'command', 'network', '-e', slot, state, ...rest];
+  const full = ['-e', 'level', '4', '-e', 'fully', 'true'];
+  if (sdk >= 36) return [net('mobile', 'hide'), net('wifi', 'show', ...full)];
+  return [
+    net('wifi', flags.wifi !== undefined ? 'show' : 'hide', ...full),
+    net('mobile', 'show', '-e', 'datatype', 'none', ...full),
+  ];
+}
+
 /** Toggle Android SystemUI Demo Mode → a clean, Play-native status bar (Google's own convention):
  *  pinned clock, full battery UNPLUGGED (no charging), full signal, notifications hidden.
  *
@@ -834,10 +856,7 @@ async function captureIos(flags) {
  *  - `fully true` marks the connection INTERNET-VALIDATED. Without it SystemUI badges every
  *    signal icon with a "!" (connected, no internet) — which reads as a broken phone on a
  *    store screenshot, and is easy to miss until you zoom in.
- *  - `wifi show` populates BOTH the legacy and the modern wifi slot on API 34 emulators, so the
- *    bar renders TWO wifi icons. Until that is per-image detectable, wifi stays hidden and the
- *    mobile bars carry the "connected" read: one signal icon, no duplicate. Pass `--wifi` to
- *    show it anyway (fine on a real device, where the duplicate does not happen). */
+ *  - Which network icon carries the "connected" read depends on the release; see androidDemoNetwork. */
 function androidDemo(on, flags) {
   const b = (...args) => spawnSync('adb', ['shell', 'am', 'broadcast', '-a', 'com.android.systemui.demo', ...args], { stdio: 'ignore' });
   if (!on) return void b('-e', 'command', 'exit');
@@ -846,9 +865,8 @@ function androidDemo(on, flags) {
   b('-e', 'command', 'enter');
   b('-e', 'command', 'clock', '-e', 'hhmm', (flags.time || '09:41').replace(':', ''));
   b('-e', 'command', 'battery', '-e', 'level', '100', '-e', 'plugged', 'false'); // full, NOT charging
-  const wifi = flags.wifi !== undefined ? 'show' : 'hide';
-  b('-e', 'command', 'network', '-e', 'wifi', wifi, '-e', 'level', '4', '-e', 'fully', 'true');
-  b('-e', 'command', 'network', '-e', 'mobile', 'show', '-e', 'datatype', 'none', '-e', 'level', '4', '-e', 'fully', 'true');
+  const sdk = Number(String(spawnSync('adb', ['shell', 'getprop', 'ro.build.version.sdk'], { encoding: 'utf8' }).stdout || '').trim());
+  for (const args of androidDemoNetwork(sdk, flags)) b(...args);
   b('-e', 'command', 'notifications', '-e', 'visible', 'false');
 }
 
@@ -1000,9 +1018,10 @@ async function captureAndroid(flags) {
       console.log(`Done → ${outDir}`);
     } else {
       // The demo broadcasts above land ASYNCHRONOUSLY, and androidDemo re-enters demo mode from scratch (exit,
-      // enter, then the slots), so a screencap taken at once can catch SystemUI mid-redraw. Niva's Play phone set,
-      // one `--name` shot per state, came out with the network icon as the live "3G", white on a light bar, or
-      // missing, shot to shot (2026-10-12). Give the bar a moment, as the state loop's settle already does.
+      // enter, then the slots), so a screencap taken at once can catch SystemUI mid-redraw. A Play phone set, one
+      // `--name` shot per state, came out with the network icon as the live "3G" or missing, shot to shot
+      // (2026-10-12). Give the bar a moment, as the state loop's settle already does. (Its white-on-a-light-bar icon
+      // was a different fault, demo mode's untinted mobile icon: androidDemoNetwork.)
       await sleep(Number(flags['bar-settle'] ?? 1500));
       const out = path.join(outDir, `${flags.name || 'shot'}.png`);
       await grab(out);

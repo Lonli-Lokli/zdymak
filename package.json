@@ -40,7 +40,7 @@
     "check:xcode": "node --test scripts/xcode.test.mjs",
     "check:fold": "node --test scripts/fold.test.mjs scripts/android-fold.test.mjs",
     "check:fold3d": "node --test scripts/fold3d.test.mjs",
-    "check:captions": "node --test scripts/captions.test.mjs scripts/launch-look.test.mjs"
+    "check:captions": "node --test scripts/captions.test.mjs scripts/launch-look.test.mjs scripts/android-bar.test.mjs"
   },
   "engines": {
     "node": ">=18"

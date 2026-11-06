@@ -469,7 +469,7 @@ Usage:
                   # nothing is cropped. Feed the clips to "zdymak reel", or ship one directly.
   zdymak capture  --platform ios|android --name <screen>          # single snapshot of the booted device
                   # android bar: clock from --time, signal shown internet-validated (no "!" badge),
-                  # wifi hidden by default (API 34 emulators draw it twice) — --wifi shows it anyway
+                  # below API 36 wifi hidden by default (API 34 emulators draw it twice), --wifi shows it; from 36 wifi only
   zdymak help
 
 Defaults: --config ${DEFAULT_CONFIG}. Needs ffmpeg on PATH (or $FFMPEG).
