@@ -3,8 +3,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createCanvas } from '@napi-rs/canvas';
 import {
   MOTION_STILL, checkSet, checkShot, factRefusals, letterboxOf, motionAllowance, parseAndroidFocus, parseAndroidOverlays,
   parseAppLocales, parseIosRunning, parseKeyboardShown, scriptOf, textRefusals,
@@ -157,6 +159,55 @@ test('the picture: letterbox bars, and the layouts that are not', () => {
   assert.equal(letterboxOf(pixels(400, 300, (x, y) => (x < 130 ? [0, 0, 0] : x >= 270 ? [200, 0, 0] : busy(x, y)))), null);
   // Nothing at all is blank's to refuse, not a letterbox.
   assert.equal(letterboxOf(pixels(400, 300, () => [0, 0, 0])), null);
+});
+
+/** `px` written as a PNG in a fresh folder, for checkShot, which reads a file. */
+const pngOf = (px, name) => {
+  const c = createCanvas(px.width, px.height);
+  const g = c.getContext('2d');
+  const img = g.createImageData(px.width, px.height);
+  img.data.set(px.data);
+  g.putImageData(img, 0, 0);
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'zdymak-checker-')), `${name}.png`);
+  fs.writeFileSync(file, c.toBuffer('image/png'));
+  return file;
+};
+/**
+ * A shot with plain rows of `colour` above and below an app's busy content: `top` and `bottom` rows each, the status
+ * strip's own rows included, with the clock drawn in the strip.
+ */
+const margins = (width, height, top, bottom, colour) => pixels(width, height, (x, y) => {
+  if (y < 30 && x > 40 && x < 160) return busy(x, y); // the clock, inside the status strip
+  return y < top || y >= height - bottom ? colour : busy(x, y);
+});
+const iosFactsOn = (screen) => ({ platform: 'ios', app: 'com.example.app', language: 'en', time: '9:41', running: true, statusBar: 'Time: 09:41\n', motion: 0, ...(screen ? { screen } : {}) });
+
+test('a phone turned on its side is never letterboxed: its own margins and a scrim around a card are not bars', async () => {
+  // A folding iPhone closed and turned, 2034x1398 (1.455 wide), with the bars a store run measured on three of its
+  // shots: page margins above a stacked layout's header and below its tray, light and dark, and a dimmed scrim
+  // around a centred result card. The system never letterboxes an app on a phone, whatever the bars look like.
+  const shots = {
+    'margins-dark': margins(2034, 1398, 100, 138, [16, 19, 30]),
+    'margins-light': margins(2034, 1398, 100, 158, [246, 241, 243]),
+    'scrim-card': margins(2034, 1398, 88, 88, [11, 26, 15]),
+  };
+  for (const [name, px] of Object.entries(shots)) {
+    assert.ok(letterboxOf(px), `${name}: the picture alone reads as bars, so only the device can tell`);
+    const r = await checkShot(pngOf(px, name), { facts: iosFactsOn('phone'), text: false });
+    assert.deepEqual(rules(r.refusals), [], name);
+  }
+});
+
+test('a large screen keeps the letterbox check: an iPhone-only app on an iPad, and a shot whose screen is not known', async () => {
+  // An iPhone-only app turned on an iPad held landscape (4:3, here at half the 13in's 2752x2064): black bars above
+  // and below a 19.5:9 box.
+  const ipad = margins(1376, 1032, 198, 198, [0, 0, 0]);
+  const large = await checkShot(pngOf(ipad, 'ipad-landscape'), { facts: iosFactsOn('large'), text: false });
+  assert.deepEqual(rules(large.refusals), ['letterbox']);
+  // Facts kept before the device's screen was recorded: the picture's shape decides, as it always did.
+  const duo = margins(2034, 1398, 100, 138, [16, 19, 30]);
+  const unknown = await checkShot(pngOf(duo, 'unknown-screen'), { facts: iosFactsOn(null), text: false });
+  assert.deepEqual(rules(unknown.refusals), ['letterbox']);
 });
 
 test('the bad-shot fixtures: each is refused for its own rule, shot by shot, and nothing else', async () => {
