@@ -6,7 +6,7 @@
  *   zdymak screenshots [--config <path>] [--out <dir>] [--locale <ids>]  # per-device store screenshots
  *   zdymak specs                                          # print the store spec matrix
  *   zdymak capture --platform ios|android --name <screen> [--record] [--out <dir>]
- *   zdymak check   <png|dir>… [--language <tag>] [--json] [--force]   # may a store show each shot?
+ *   zdymak check   <png|dir>… [--language <tag>] [--screen phone|large] [--json] [--force]   # may a store show each shot?
  *   zdymak help
  */
 import path from 'node:path';
@@ -296,8 +296,9 @@ function pngsIn(paths) {
  * launch screen, a system dialog, the on-screen keyboard, the wrong app or the home screen, a status bar not in demo
  * mode, another language than the set's, letterbox bars, a screen still moving after the shot (from the facts kept at
  * capture), and two scenes of one folder at one size that are the same picture. What the device said at capture time is read from the facts kept beside each
- * shot; the picture is read again here. `--language <tag>` names the set's language when no facts carry it, `--time`
- * the pinned clock (9:41), `--no-text` skips reading the picture's words. Exits 1 on any refusal; `--force` reports
+ * shot; the picture is read again here. `--language <tag>` names the set's language when no facts carry it, `--screen`
+ * the device's screen (`phone` skips the letterbox check, which a phone never needs), `--time` the pinned clock (9:41),
+ * `--no-text` skips reading the picture's words. Exits 1 on any refusal; `--force` reports
  * but exits 0.
  */
 async function cmdCheck(flags, rest) {
@@ -308,6 +309,7 @@ async function cmdCheck(flags, rest) {
     results.push(await checkShot(file, {
       language: flags.language,
       time: flags.time,
+      screen: flags.screen,
       text: flags['no-text'] === undefined,
     }));
   }
@@ -421,7 +423,7 @@ Usage:
                   # LIVE-FOOTAGE montage from clips/images. "reel" may be an ARRAY — every entry
                   # is built (App Preview + Play promo from one config); --only picks by name.
   zdymak screenshots [--config <path>] [--out <dir>] [--clean] [--locale <ids>]
-  zdymak check    <png|dir>… [--language <tag>] [--time 9:41] [--no-text] [--json] [--force]
+  zdymak check    <png|dir>… [--language <tag>] [--screen phone|large] [--time 9:41] [--no-text] [--json] [--force]
                   # is there a screen in each capture? The measurement build/screenshots apply to their input (a
                   # capture with under 400 distinct colours AND over 95% one colour drew nothing), as a command
                   # of its own for CI, release gates and device tests. Exits 1 on a blank or unreadable file.

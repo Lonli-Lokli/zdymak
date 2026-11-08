@@ -5,6 +5,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { parseWmSize } from './capture/android-fold.mjs';
 
 /** The status bar time zdymak pins on both platforms (Apple's 9:41). */
 export const DEMO_TIME = '9:41';
@@ -79,12 +80,68 @@ const OVERLAY_NAMES = {
   CompatUIWindowManager: 'the size compatibility restart button',
 };
 
+// ---------------------------------------------------------------- the device's screen
+
+/**
+ * The kinds of screen a shot is taken on, as the letterbox check needs them: `phone`, where the system never draws an
+ * app in a smaller box (an iPhone, the outer screen of a folding phone, an Android phone), and `large`, where it does
+ * for an app that does not resize (an iPad, an Android tablet, a Chromebook or desktop window, a fold's inner screen).
+ */
+export const SCREENS = ['phone', 'large'];
+
+/**
+ * An Android screen is large from this smallest width, in dp: the line from which Android 16 lays out every app at
+ * the window's size, over its orientation, aspect ratio and resizability restrictions ("form factors with smallest
+ * width >= 600dp", developer.android.com/guide/practices/device-compatibility-mode, read 2026-11-08), and the
+ * `sw600dp` resource qualifier for a tablet.
+ */
+export const LARGE_SCREEN_DP = 600;
+
+/** `wm density` → the density in use: the override when there is one, else the physical one. */
+export function parseWmDensity(out) {
+  const s = String(out);
+  const m = /Override density:\s*(\d+)/.exec(s) || /Physical density:\s*(\d+)/.exec(s);
+  return m ? Number(m[1]) : null;
+}
+
+/** An Android screen's kind from `wm size` and `wm density`: `{ smallestWidthDp, screen }`, the kind null when either is unread. */
+export function androidScreen(size, density) {
+  if (!size || !density) return { smallestWidthDp: null, screen: null };
+  const smallestWidthDp = Math.round((Math.min(size.w, size.h) * 160) / density);
+  return { smallestWidthDp, screen: smallestWidthDp >= LARGE_SCREEN_DP ? 'large' : 'phone' };
+}
+
+/**
+ * The simulator's device type from `simctl list devices -j`, as `com.apple.CoreSimulator.SimDeviceType.<model>`, or
+ * null. `udid` may be `booted`, the first device booted.
+ */
+export function parseIosDeviceType(json, udid) {
+  let list;
+  try { list = JSON.parse(json); } catch { return null; }
+  const all = Object.values(list?.devices || {}).flat();
+  const d = all.find((x) => (udid === 'booted' ? x.state === 'Booted' : x.udid === udid));
+  return d?.deviceTypeIdentifier || null;
+}
+
+/**
+ * An iOS screen's kind from its device type and, on a folding iPhone, the screen its posture shows (fold.mjs). iOS
+ * draws an iPhone-only app in an iPhone-sized box on an iPad, and never draws one smaller on an iPhone; a folding
+ * iPhone's inner screen is tablet-sized, so it keeps the check. Null for a type that is neither.
+ */
+export function iosScreen(type, posture) {
+  const model = String(type || '').split('.').pop();
+  if (/^iPad/.test(model)) return 'large';
+  if (/^iPhone/.test(model)) return posture?.screen === 'inner' ? 'large' : 'phone';
+  return null;
+}
+
 /** Read an Android device at the moment of a shot. `pkg` is the app the shot is of. */
 export function androidFacts({ pkg, language, time }) {
   const focus = parseAndroidFocus(adb('dumpsys', 'window'));
   const locales = pkg ? parseAppLocales(adb('cmd', 'locale', 'get-app-locales', pkg)) : [];
   return {
     platform: 'android',
+    ...androidScreen(parseWmSize(adb('wm', 'size')), parseWmDensity(adb('wm', 'density'))),
     app: pkg || null,
     language: language || null,
     time: time || DEMO_TIME,
@@ -104,13 +161,16 @@ export function parseIosRunning(list, bundle) {
   return /^\s*\d+\s/.test(line);
 }
 
-/** Read an iOS simulator at the moment of a shot. */
-export function iosFacts({ udid, bundle, language, time }) {
+/** Read an iOS simulator at the moment of a shot. `posture` is a folding iPhone's (fold.mjs), when one was set. */
+export function iosFacts({ udid, bundle, language, time, posture }) {
   const run = (args) => spawnSync('xcrun', ['simctl', ...args], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
   const list = run(['spawn', udid, 'launchctl', 'list']);
   const bar = run(['status_bar', udid, 'list']);
+  const device = parseIosDeviceType(run(['list', 'devices', '-j']).stdout, udid);
   return {
     platform: 'ios',
+    device,
+    screen: iosScreen(device, posture),
     app: bundle || null,
     language: language || null,
     time: time || DEMO_TIME,

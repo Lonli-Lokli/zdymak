@@ -787,7 +787,7 @@ async function captureIos(flags) {
         if (!posture) await uprightCapture(out, orientation);
         await stripAlpha(out);
         console.log(`   ✓ ${st}${suffix}.png`);
-        const facts = iosFacts({ udid, bundle: flags.bundle, language: flags.language, time: DEMO_TIME });
+        const facts = iosFacts({ udid, bundle: flags.bundle, language: flags.language, time: DEMO_TIME, posture });
         shot.push({ out, facts: { ...facts, state: st, launchLook: LAUNCH_LOOK, motion, motionAllowed: motionAllowance(flags.motion, st) } });
       }
     }

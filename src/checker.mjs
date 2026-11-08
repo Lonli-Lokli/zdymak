@@ -22,14 +22,15 @@
 import path from 'node:path';
 import { loadImage, createCanvas } from '@napi-rs/canvas';
 import { captureBlankness, BLANK_COLOURS, BLANK_DOMINANCE } from './validate.mjs';
-import { DEMO_TIME, MOTION_STILL, factRefusals, primary, readFacts } from './checker-device.mjs';
+import { DEMO_TIME, MOTION_STILL, SCREENS, factRefusals, primary, readFacts } from './checker-device.mjs';
 import { readText } from './ocr.mjs';
 
 export { OCR_CONFIDENCE, readText } from './ocr.mjs';
 
 export {
-  DEMO_TIME, MOTION_GAP_MS, MOTION_STILL, androidFacts, factRefusals, factsPath, iosFacts, parseAndroidFocus, parseAndroidOverlays, parseAppLocales, parseIosRunning,
-  parseKeyboardShown, readFacts, writeFacts,
+  DEMO_TIME, LARGE_SCREEN_DP, MOTION_GAP_MS, MOTION_STILL, SCREENS, androidFacts, androidScreen, factRefusals, factsPath, iosFacts, iosScreen,
+  parseAndroidFocus, parseAndroidOverlays, parseAppLocales, parseIosDeviceType, parseIosRunning, parseKeyboardShown, parseWmDensity, readFacts,
+  writeFacts,
 } from './checker-device.mjs';
 
 /** The rules, in the order a report lists them. */
@@ -157,6 +158,9 @@ export function textRefusals(lines, { language, time = DEMO_TIME } = {}) {
 
 // ---------------------------------------------------------------- the picture's pixels
 
+// The three thresholds below are the check's first ones, kept: no source names a narrower system box or a bar colour
+// the systems keep to, and the bars that misled them were a phone's own (a folding iPhone turned, its margins dark
+// and light), which the device's screen now leaves out (checkShot).
 /** Each letterbox bar is at least this share of the side it stands on. */
 export const LETTERBOX_BAR = 0.05;
 /** The box between the bars is phone-shaped: its long side at least this many times its short side ... */
@@ -174,7 +178,9 @@ const near = (d, i, c) => Math.abs(d[i] - c[0]) <= BAR_TOLERANCE && Math.abs(d[i
  * whole columns (or rows) of one colour from the edge; the status and navigation strips (top and bottom
  * [STATUS_STRIP]) are left out, since the system draws them across the bars. Both bars must be wide, of one colour,
  * and leave a phone-shaped box in a shot that is not phone-shaped: a tablet layout that keeps a readable width
- * on a plain ground is wider than that, and a phone's own shot never qualifies.
+ * on a plain ground is wider than that, and a phone's upright shot never qualifies. A phone turned on its side
+ * can (2034x1398 is 1.455 wide), and an app's plain margins there read as bars, so the picture alone cannot tell:
+ * checkShot asks it only of a screen the system letterboxes on, or of one whose kind was not recorded.
  */
 export function letterboxOf({ data, width: w, height: h }) {
   const strip = Math.ceil(h * STATUS_STRIP);
@@ -280,9 +286,10 @@ export function motionAllowance(spec, state) {
 
 /**
  * Check one shot: `{ file, refusals: [{ rule, reason }], notes: [] }`. `facts` defaults to the sidecar beside it;
- * `language`/`time` default to the facts' own.
+ * `language`/`time`/`screen` default to the facts' own. `screen` ([SCREENS]) is the device's: on a `phone` the
+ * letterbox check is not asked, since the system never letterboxes an app there; unknown, the picture decides.
  */
-export async function checkShot(file, { facts, language, time, text = true } = {}) {
+export async function checkShot(file, { facts, language, time, screen, text = true } = {}) {
   const refusals = [];
   const notes = [];
   const m = await captureBlankness(file);
@@ -291,15 +298,18 @@ export async function checkShot(file, { facts, language, time, text = true } = {
   if (blank) {
     refusals.push({ rule: 'blank', reason: `${m.colours} distinct colours, ${(m.dominant * 100).toFixed(1)}% one colour: the app drew nothing` });
   }
-  const px = await pixelsOf(file);
+  const f = facts === undefined ? readFacts(file) : facts;
+  const kind = screen ?? f?.screen ?? null;
+  if (kind !== null && !SCREENS.includes(kind)) throw new Error(`screen must be one of: ${SCREENS.join(', ')} (got "${kind}")`);
+  const px = kind === 'phone' ? null : await pixelsOf(file);
   const lb = px && letterboxOf(px);
   if (lb) {
     refusals.push({
       rule: 'letterbox',
-      reason: `bars ${lb.bars.join(' and ')} px wide on the ${lb.sides}, the app drawn in a ${lb.box.join('x')} phone-shaped box: the app was letterboxed, not laid out for this screen`,
+      reason: `bars ${lb.bars.join(' and ')} px wide on the ${lb.sides}, the app drawn in a ${lb.box.join('x')} phone-shaped box: the app was letterboxed, not laid out for this screen`
+        + (kind ? '' : ' (the device\'s screen was not recorded; pass --screen phone if this is a phone\'s shot)'),
     });
   }
-  const f = facts === undefined ? readFacts(file) : facts;
   if (f) refusals.push(...factRefusals(f));
   else notes.push('no device facts beside it (captured before the checker, or by hand): the device was not asked');
   const lang = language ?? f?.language ?? null;

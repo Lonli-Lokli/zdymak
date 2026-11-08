@@ -1358,6 +1358,7 @@ one reads the same in the other.
 ```sh
 zdymak check shots/                    # files and folders, searched recursively
 zdymak check shots/fr-FR --language fr # the set's language, when the shots carry no device facts
+zdymak check shots/phone --screen phone # the device's screen, when the facts do not name it
 zdymak check a.png b.png --json
 ```
 
@@ -1374,7 +1375,7 @@ job or a release gate. It refuses, naming the shot and the reason:
 | `status-bar` | a status bar not in demo mode: the real clock, a battery not full | demo mode allowed (Android), the simulator's override (iOS), the clock and battery in the top strip |
 | `language` | the device or app in another language than the set's | the app's locale (Android), the script of the picture's words, English words on a non-English Latin set |
 | `motion` | a shot taken while the screen was still changing: over 1% of it changed in the second after the shot, or over the scene's own allowance (`--motion`) | the device, at capture |
-| `letterbox` | the app drawn at phone size inside a tablet or Chromebook window: bars of one colour on two opposite sides, each over 5% of the side, leaving a phone-shaped box (long side 1.6 times the short) in a shot that is not that shape | the picture |
+| `letterbox` | the app drawn at phone size inside a tablet or Chromebook window: bars of one colour on two opposite sides, each over 5% of the side, leaving a phone-shaped box (long side 1.6 times the short) in a shot that is not that shape; asked only on a screen the system letterboxes on (see below) | the picture, on the device's screen |
 | `duplicate` | two scenes of one set that are the same picture: under 0.5% of the sampled pixels differ, in one folder at one size; the later shot is refused, naming the earlier | the set |
 | `unreadable` | a file that is not a PNG this tool can decode | the picture |
 
@@ -1383,7 +1384,16 @@ that `check` and uploaders do not walk), so checking the folder later still know
 note, not a refusal. The picture's words are read with Apple's Vision on macOS (`src/ocr.swift`, compiled once into the
 temporary folder); elsewhere, or with `--no-text` or `ZDYMAK_NO_OCR=1`, the word rules are skipped with a note. Vision
 does not read Devanagari, so a set in Hindi gets no language verdict from the picture. `--time` names the pinned clock
-(9:41). It exits 1 on any refusal; `capture` fails its run after the last state with every refusal listed. `--force`
+(9:41).
+
+The letterbox rule is asked only where the system can letterbox an app: an iPad, an Android tablet, a Chromebook or
+desktop window and a folding phone's inner screen. The capture records the device's screen in its facts as `screen`:
+`large` for an iPad simulator, a folding iPhone's inner screen and an Android screen at least 600 dp across its
+smallest side (`LARGE_SCREEN_DP`), `phone` for any other iPhone or Android screen, where the system never draws an
+app in a smaller box and an app's own plain margins on a phone turned on its side would read as bars. A shot whose facts
+do not name a screen is judged by the picture's shape alone, as before; `--screen phone|large` names it.
+
+It exits 1 on any refusal; `capture` fails its run after the last state with every refusal listed. `--force`
 reports without failing. `--json` prints `{ file, refusals, notes, colours, dominant, blank }` per file. The checker is
 exported as `checkShot`, `factRefusals` and `textRefusals`; the blank measurement as `captureBlankness`, with the
 thresholds `BLANK_COLOURS` and `BLANK_DOMINANCE`.

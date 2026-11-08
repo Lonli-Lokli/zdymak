@@ -8,8 +8,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCanvas } from '@napi-rs/canvas';
 import {
-  MOTION_STILL, checkSet, checkShot, factRefusals, letterboxOf, motionAllowance, parseAndroidFocus, parseAndroidOverlays,
-  parseAppLocales, parseIosRunning, parseKeyboardShown, scriptOf, textRefusals,
+  MOTION_STILL, androidScreen, checkSet, checkShot, factRefusals, iosScreen, letterboxOf, motionAllowance, parseAndroidFocus,
+  parseAndroidOverlays, parseAppLocales, parseIosDeviceType, parseIosRunning, parseKeyboardShown, parseWmDensity, scriptOf, textRefusals,
 } from '../src/checker.mjs';
 
 const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
@@ -181,6 +181,36 @@ const margins = (width, height, top, bottom, colour) => pixels(width, height, (x
   return y < top || y >= height - bottom ? colour : busy(x, y);
 });
 const iosFactsOn = (screen) => ({ platform: 'ios', app: 'com.example.app', language: 'en', time: '9:41', running: true, statusBar: 'Time: 09:41\n', motion: 0, ...(screen ? { screen } : {}) });
+
+test('the device\'s screen: a phone, or a large screen the system letterboxes on', () => {
+  // `wm density` and `wm size`, as Android prints them, with and without an override.
+  assert.equal(parseWmDensity('Physical density: 420\n'), 420);
+  assert.equal(parseWmDensity('Physical density: 420\nOverride density: 160\n'), 160);
+  assert.equal(parseWmDensity(''), null);
+  assert.deepEqual(androidScreen({ w: 1080, h: 2400 }, 420), { smallestWidthDp: 411, screen: 'phone' });
+  assert.deepEqual(androidScreen({ w: 1024, h: 600 }, 160), { smallestWidthDp: 600, screen: 'large' }, 'a 7in tablet');
+  assert.deepEqual(androidScreen({ w: 1920, h: 1080 }, 160), { smallestWidthDp: 1080, screen: 'large' }, 'a Chromebook window');
+  assert.deepEqual(androidScreen({ w: 2208, h: 1840 }, 420), { smallestWidthDp: 701, screen: 'large' }, 'a book fold open');
+  assert.deepEqual(androidScreen({ w: 1080, h: 2092 }, 420), { smallestWidthDp: 411, screen: 'phone' }, 'a book fold closed');
+  assert.deepEqual(androidScreen(null, 420), { smallestWidthDp: null, screen: null });
+  // `simctl list devices -j`, cut to the fields read.
+  const list = JSON.stringify({ devices: {
+    'com.apple.CoreSimulator.SimRuntime.iOS-27-2': [
+      { udid: 'A1', state: 'Shutdown', deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro-Max' },
+      { udid: 'B2', state: 'Booted', deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5-12GB' },
+    ],
+  } });
+  assert.equal(parseIosDeviceType(list, 'A1'), 'com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro-Max');
+  assert.equal(parseIosDeviceType(list, 'booted'), 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5-12GB');
+  assert.equal(parseIosDeviceType(list, 'C3'), null);
+  assert.equal(parseIosDeviceType('not json', 'A1'), null);
+  const type = (model) => `com.apple.CoreSimulator.SimDeviceType.${model}`;
+  assert.equal(iosScreen(type('iPad-Pro-13-inch-M5-12GB')), 'large');
+  assert.equal(iosScreen(type('iPhone-18-Pro-Max')), 'phone');
+  assert.equal(iosScreen(type('iPhone-Duo'), { screen: 'outer' }), 'phone', 'a folding iPhone closed, upright or turned');
+  assert.equal(iosScreen(type('iPhone-Duo'), { screen: 'inner' }), 'large', 'a folding iPhone open');
+  assert.equal(iosScreen(null), null);
+});
 
 test('a phone turned on its side is never letterboxed: its own margins and a scrim around a card are not bars', async () => {
   // A folding iPhone closed and turned, 2034x1398 (1.455 wide), with the bars a store run measured on three of its

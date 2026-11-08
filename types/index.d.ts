@@ -776,7 +776,7 @@ export declare const DEMO_TIME: string;
  * Check one shot as every capture does: blankness and the picture's words, plus the device's facts kept beside it at
  * capture time (`.zdymak-check/<name>.json`). `language` is the set's; `text: false` skips reading the words.
  */
-export declare function checkShot(file: string, opts?: { facts?: Record<string, unknown> | null; language?: string; time?: string; text?: boolean }): Promise<CheckResult>;
+export declare function checkShot(file: string, opts?: { facts?: Record<string, unknown> | null; language?: string; time?: string; screen?: 'phone' | 'large'; text?: boolean }): Promise<CheckResult>;
 /** Adds the set's refusals (two scenes of one folder at one size that are the same picture) to `checkShot`'s results. */
 export declare function checkSet(results: CheckResult[]): Promise<CheckResult[]>;
 /** The letterbox bars in a picture's RGBA pixels, or null. */
@@ -791,6 +791,8 @@ export declare const LETTERBOX_BAR: number;
 export declare const LETTERBOX_BOX: number;
 /** A shot this long against its short side or longer is phone-shaped and has no letterbox. */
 export declare const LETTERBOX_SHOT: number;
+/** An Android screen this many dp across its smallest side or more is large, and the letterbox check is asked of it. */
+export declare const LARGE_SCREEN_DP: number;
 /** Under this share of sampled pixels differing, two scenes are the same picture. */
 export declare const DUPLICATE_LOOK: number;
 /** One line per refusal, naming the shot and the reason. */
