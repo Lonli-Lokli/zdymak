@@ -27,7 +27,7 @@ export { EFFECTS, EFFECT_IDS, effectFor } from './effects.mjs';
 export { run } from './cli.mjs';
 export { captureBlankness, validateCapture, BLANK_COLOURS, BLANK_DOMINANCE } from './validate.mjs';
 export {
-  CHECK_RULES, DEMO_TIME, DUPLICATE_LOOK, LARGE_SCREEN_DP, LETTERBOX_BAR, LETTERBOX_BOX, LETTERBOX_SHOT, MOTION_STILL, checkSet, checkShot,
+  CHECK_RULES, DEMO_TIME, DUPLICATE_LOOK, LARGE_SCREEN_DP, LETTERBOX_BAR, LETTERBOX_BOX, LETTERBOX_SHOT, MOTION_STILL, PHONE_SHORT_DP, checkSet, checkShot,
   describeRefusals, factRefusals, letterboxOf, motionAllowance, textRefusals, readText, readFacts,
 } from './checker.mjs';
 export { MiddlewareRefusal, normalizeMiddleware, runMiddleware } from './middleware.mjs';

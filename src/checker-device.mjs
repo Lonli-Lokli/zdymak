@@ -97,6 +97,23 @@ export const SCREENS = ['phone', 'large'];
  */
 export const LARGE_SCREEN_DP = 600;
 
+/**
+ * A phone's short side is under this many dp: Android's window size classes put a phone held sideways at Compact
+ * height, under 480dp (developer.android.com/develop/ui/compose/layouts/adaptive/use-window-size-classes). A box
+ * between bars at least this wide is wider than any phone, so it is a column the layout chose, not a phone-sized app.
+ */
+export const PHONE_SHORT_DP = 480;
+
+/**
+ * Pixels a dp in a shot, from its facts: the density recorded at capture (Android's `wm density`, 160 a dp), else the
+ * smallest width the facts kept, against the shot's own short side. Null where neither is known (iOS, old facts).
+ */
+export function pxPerDpOf(facts, { width, height }) {
+  if (facts?.density > 0) return facts.density / 160;
+  if (facts?.smallestWidthDp > 0) return Math.min(width, height) / facts.smallestWidthDp;
+  return null;
+}
+
 /** `wm density` → the density in use: the override when there is one, else the physical one. */
 export function parseWmDensity(out) {
   const s = String(out);
@@ -138,10 +155,12 @@ export function iosScreen(type, posture) {
 /** Read an Android device at the moment of a shot. `pkg` is the app the shot is of. */
 export function androidFacts({ pkg, language, time }) {
   const focus = parseAndroidFocus(adb('dumpsys', 'window'));
+  const density = parseWmDensity(adb('wm', 'density'));
   const locales = pkg ? parseAppLocales(adb('cmd', 'locale', 'get-app-locales', pkg)) : [];
   return {
     platform: 'android',
-    ...androidScreen(parseWmSize(adb('wm', 'size')), parseWmDensity(adb('wm', 'density'))),
+    ...androidScreen(parseWmSize(adb('wm', 'size')), density),
+    density,
     app: pkg || null,
     language: language || null,
     time: time || DEMO_TIME,

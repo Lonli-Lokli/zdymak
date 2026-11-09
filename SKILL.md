@@ -430,7 +430,7 @@ the target infers, i.e. a cluster of devices inside a phone bezel.
 
 `zdymak check <png|dir>… [--language <tag>] [--screen phone|large]` is the checker every `capture` runs on each shot: it refuses a blank screen,
 the launch screen, a system dialog, the on-screen keyboard, the home screen or another app, a status bar not in demo mode
-another language than the set's, letterbox bars (a phone-sized app inside a tablet or Chromebook window; asked only on a large screen, never on a phone's), a screen
+another language than the set's, letterbox bars (a phone-sized app inside a tablet or Chromebook window; asked only on a large screen, never on a phone's, and a box 480 dp or wider is the layout's own column where the density is known), a screen
 still changing a second after the shot (`--motion <state>=<share>` for a scene that moves by design) and two scenes of
 one set that are the same picture, naming the shot and the reason (exit 1; `--force` reports only; `--json` for
 machines). The device's facts at capture time are kept in `.zdymak-check/` beside the shots; the picture's words are read

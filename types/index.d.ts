@@ -781,8 +781,11 @@ export declare const DEMO_TIME: string;
 export declare function checkShot(file: string, opts?: { facts?: Record<string, unknown> | null; language?: string; time?: string; screen?: 'phone' | 'large'; text?: boolean }): Promise<CheckResult>;
 /** Adds the set's refusals (two scenes of one folder at one size that are the same picture) to `checkShot`'s results. */
 export declare function checkSet(results: CheckResult[]): Promise<CheckResult[]>;
-/** The letterbox bars in a picture's RGBA pixels, or null. */
-export declare function letterboxOf(pixels: { data: Uint8ClampedArray | Uint8Array; width: number; height: number }): { sides: string; bars: [number, number]; box: [number, number]; colour: number[] } | null;
+/**
+ * The letterbox bars in a picture's RGBA pixels, or null. `pxPerDp`, where the shot's density is known, lets a box at
+ * least `PHONE_SHORT_DP` wide through as the layout's own column.
+ */
+export declare function letterboxOf(pixels: { data: Uint8ClampedArray | Uint8Array; width: number; height: number }, opts?: { pxPerDp?: number | null }): { sides: string; bars: [number, number]; box: [number, number]; colour: number[] } | null;
 /** A scene's motion allowance from `--motion` ("0.05" or "clock=0.2,board=0.05"). */
 export declare function motionAllowance(spec: string | undefined, state: string): number;
 /** The share of the screen a scene with no allowance of its own may change in the second after its shot. */
@@ -795,6 +798,8 @@ export declare const LETTERBOX_BOX: number;
 export declare const LETTERBOX_SHOT: number;
 /** An Android screen this many dp across its smallest side or more is large, and the letterbox check is asked of it. */
 export declare const LARGE_SCREEN_DP: number;
+/** A phone's short side is under this many dp; a letterbox box at least this wide is a layout's column. */
+export declare const PHONE_SHORT_DP: number;
 /** Under this share of sampled pixels differing, two scenes are the same picture. */
 export declare const DUPLICATE_LOOK: number;
 /** One line per refusal, naming the shot and the reason. */

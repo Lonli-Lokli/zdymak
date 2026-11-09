@@ -1376,7 +1376,7 @@ job or a release gate. It refuses, naming the shot and the reason:
 | `status-bar` | a status bar not in demo mode: the real clock, a battery not full | demo mode allowed (Android), the simulator's override (iOS), the clock and battery in the top strip |
 | `language` | the device or app in another language than the set's | the app's locale (Android), the script of the picture's words, English words on a non-English Latin set |
 | `motion` | a shot taken while the screen was still changing: over 1% of it changed in the second after the shot, or over the scene's own allowance (`--motion`) | the device, at capture |
-| `letterbox` | the app drawn at phone size inside a tablet or Chromebook window: bars of one colour on two opposite sides, each over 5% of the side, leaving a phone-shaped box (long side 1.6 times the short) in a shot that is not that shape; asked only on a screen the system letterboxes on (see below) | the picture, on the device's screen |
+| `letterbox` | the app drawn at phone size inside a tablet or Chromebook window: bars of one colour on two opposite sides, each over 5% of the side, leaving a phone-shaped box (long side 1.6 times the short) in a shot that is not that shape and, where the shot's density is known, narrower than a phone (under 480 dp); asked only on a screen the system letterboxes on (see below) | the picture, on the device's screen |
 | `duplicate` | two scenes of one set that are the same picture: under 0.5% of the sampled pixels differ, in one folder at one size; the later shot is refused, naming the earlier | the set |
 | `unreadable` | a file that is not a PNG this tool can decode | the picture |
 
@@ -1394,6 +1394,13 @@ smallest side (`LARGE_SCREEN_DP`), `phone` for any other iPhone or Android scree
 app in a smaller box and an app's own plain margins on a phone turned on its side would read as bars. A shot whose facts
 do not name a screen is judged by the picture's shape alone, as before; `--screen phone|large` names it.
 
+The shape alone takes a layout's reading column on its own plain ground for a phone-sized app: a 560 dp column in a
+1600x900 dp Chromebook window is 1.61 tall. Where the facts carry the density (`density`, Android's `wm density`,
+recorded since this rule; older facts give it through `smallestWidthDp`), the box must also be under 480 dp wide
+(`PHONE_SHORT_DP`), since Android's window size classes put a phone held sideways at Compact height, under 480 dp: a
+box that wide or wider is the layout's column, not an app the system boxed. An iOS shot's facts carry no density, so
+an iPad's shot is still judged by the shape.
+
 It exits 1 on any refusal; `capture` fails its run after the last state with every refusal listed. `--force`
 reports without failing. `--json` prints `{ file, refusals, notes, colours, dominant, blank }` per file. The checker is
 exported as `checkShot`, `factRefusals` and `textRefusals`; the blank measurement as `captureBlankness`, with the
@@ -1402,7 +1409,7 @@ thresholds `BLANK_COLOURS` and `BLANK_DOMINANCE`.
 A scene that moves by design (a clock, a falling piece, a looping animation) is given its own allowance with
 `capture --motion <state>=<share>,…` (a bare share is the default for every scene, `0.01` unless set). The motion,
 the letterbox and the duplicate thresholds are exported as `MOTION_STILL`, `LETTERBOX_BAR`, `LETTERBOX_BOX`,
-`LETTERBOX_SHOT` and `DUPLICATE_LOOK`, the set check as `checkSet` and the bar finder as `letterboxOf`. The test
+`LETTERBOX_SHOT`, `PHONE_SHORT_DP` and `DUPLICATE_LOOK`, the set check as `checkSet` and the bar finder as `letterboxOf`. The test
 fixtures in `scripts/fixtures/bad-shots` hold one known-bad shot per rule, each refused for its own rule
 (`node scripts/make-bad-shots.mjs` draws them again).
 

@@ -22,15 +22,15 @@
 import path from 'node:path';
 import { loadImage, createCanvas } from '@napi-rs/canvas';
 import { captureBlankness, BLANK_COLOURS, BLANK_DOMINANCE } from './validate.mjs';
-import { DEMO_TIME, MOTION_STILL, SCREENS, factRefusals, primary, readFacts } from './checker-device.mjs';
+import { DEMO_TIME, MOTION_STILL, PHONE_SHORT_DP, SCREENS, factRefusals, primary, pxPerDpOf, readFacts } from './checker-device.mjs';
 import { readText } from './ocr.mjs';
 
 export { OCR_CONFIDENCE, readText } from './ocr.mjs';
 
 export {
-  DEMO_TIME, LARGE_SCREEN_DP, MOTION_GAP_MS, MOTION_STILL, SCREENS, androidFacts, androidScreen, factRefusals, factsPath, iosFacts, iosScreen,
-  parseAndroidFocus, parseAndroidOverlays, parseAppLocales, parseIosDeviceType, parseIosRunning, parseKeyboardShown, parseWmDensity, readFacts,
-  writeFacts,
+  DEMO_TIME, LARGE_SCREEN_DP, MOTION_GAP_MS, MOTION_STILL, PHONE_SHORT_DP, SCREENS, androidFacts, androidScreen, factRefusals, factsPath, iosFacts,
+  iosScreen, parseAndroidFocus, parseAndroidOverlays, parseAppLocales, parseIosDeviceType, parseIosRunning, parseKeyboardShown, parseWmDensity,
+  pxPerDpOf, readFacts, writeFacts,
 } from './checker-device.mjs';
 
 /** The rules, in the order a report lists them. */
@@ -163,7 +163,10 @@ export function textRefusals(lines, { language, time = DEMO_TIME } = {}) {
 // and light), which the device's screen now leaves out (checkShot).
 /** Each letterbox bar is at least this share of the side it stands on. */
 export const LETTERBOX_BAR = 0.05;
-/** The box between the bars is phone-shaped: its long side at least this many times its short side ... */
+/**
+ * The box between the bars is phone-shaped: its long side at least this many times its short side ... A shape is all
+ * the picture knows; where the shot's density is known the box must also be narrower than a phone ([PHONE_SHORT_DP]).
+ */
 export const LETTERBOX_BOX = 1.6;
 /** ... in a shot that is not itself that shape (a tablet, a Chromebook window, a phone turned the other way). */
 export const LETTERBOX_SHOT = 1.5;
@@ -181,8 +184,13 @@ const near = (d, i, c) => Math.abs(d[i] - c[0]) <= BAR_TOLERANCE && Math.abs(d[i
  * on a plain ground is wider than that, and a phone's upright shot never qualifies. A phone turned on its side
  * can (2034x1398 is 1.455 wide), and an app's plain margins there read as bars, so the picture alone cannot tell:
  * checkShot asks it only of a screen the system letterboxes on, or of one whose kind was not recorded.
+ *
+ * The shape alone also takes a layout's reading column on its own plain ground for a phone: a 560dp column in a
+ * 1600x900dp window is 1.61 tall. `pxPerDp` (pxPerDpOf, from the shot's facts) settles it where it is known: a box
+ * at least [PHONE_SHORT_DP] wide is wider than any phone, so it is the layout's column, and only a narrower one is
+ * a phone-sized app the system boxed.
  */
-export function letterboxOf({ data, width: w, height: h }) {
+export function letterboxOf({ data, width: w, height: h }, { pxPerDp = null } = {}) {
   const strip = Math.ceil(h * STATUS_STRIP);
   const colour = (x, y) => { const i = (y * w + x) * 4; return [data[i], data[i + 1], data[i + 2]]; };
   const column = (x, c) => { for (let y = strip; y < h - strip; y += 2) if (!near(data, (y * w + x) * 4, c)) return false; return true; };
@@ -194,12 +202,13 @@ export function letterboxOf({ data, width: w, height: h }) {
     return { n, c };
   };
   const same = (a, b) => a.every((v, k) => Math.abs(v - b[k]) <= BAR_TOLERANCE);
+  const phoneWide = (short) => !pxPerDp || short / pxPerDp < PHONE_SHORT_DP;
   // Bars on the left and right: a phone held upright inside a wider screen.
   const l = run(0, 1, w, column, (x) => colour(x, strip));
   const r = run(w - 1, -1, -1, column, (x) => colour(x, strip));
   if (l.n >= w * LETTERBOX_BAR && r.n >= w * LETTERBOX_BAR && same(l.c, r.c) && l.n + r.n < w) {
     const box = w - l.n - r.n;
-    if (h / box >= LETTERBOX_BOX && h / w < LETTERBOX_SHOT) return { sides: 'left and right', bars: [l.n, r.n], box: [box, h], colour: l.c };
+    if (h / box >= LETTERBOX_BOX && h / w < LETTERBOX_SHOT && phoneWide(box)) return { sides: 'left and right', bars: [l.n, r.n], box: [box, h], colour: l.c };
   }
   // Bars above and below: a phone on its side inside a taller screen. The strips count as part of the bars.
   const t = run(strip, 1, h, row, (y) => colour(0, y));
@@ -208,7 +217,7 @@ export function letterboxOf({ data, width: w, height: h }) {
   const bottom = b.n ? b.n + strip : 0;
   if (top >= h * LETTERBOX_BAR && bottom >= h * LETTERBOX_BAR && same(t.c, b.c) && top + bottom < h) {
     const box = h - top - bottom;
-    if (w / box >= LETTERBOX_BOX && w / h < LETTERBOX_SHOT) return { sides: 'top and bottom', bars: [top, bottom], box: [w, box], colour: t.c };
+    if (w / box >= LETTERBOX_BOX && w / h < LETTERBOX_SHOT && phoneWide(box)) return { sides: 'top and bottom', bars: [top, bottom], box: [w, box], colour: t.c };
   }
   return null;
 }
@@ -302,7 +311,7 @@ export async function checkShot(file, { facts, language, time, screen, text = tr
   const kind = screen ?? f?.screen ?? null;
   if (kind !== null && !SCREENS.includes(kind)) throw new Error(`screen must be one of: ${SCREENS.join(', ')} (got "${kind}")`);
   const px = kind === 'phone' ? null : await pixelsOf(file);
-  const lb = px && letterboxOf(px);
+  const lb = px && letterboxOf(px, { pxPerDp: pxPerDpOf(f, px) });
   if (lb) {
     refusals.push({
       rule: 'letterbox',
