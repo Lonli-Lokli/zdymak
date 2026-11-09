@@ -761,7 +761,7 @@ export declare function runMiddleware<T>(list: unknown, ctx: Record<string, unkn
  * How empty is this capture? `colours` is the distinct colour count (sampled every second pixel) and `dominant` the share
  * of the most common colour. null when the file cannot be decoded. The same measurement `zdymak check` applies.
  */
-export declare function captureBlankness(file: string): Promise<{ colours: number; dominant: number } | null>;
+export declare function captureBlankness(file: string): Promise<{ colours: number; dominant: number; width: number; height: number } | null>;
 /** A capture under this many distinct colours AND over `BLANK_DOMINANCE` of one colour drew nothing. */
 export declare const BLANK_COLOURS: number;
 export declare const BLANK_DOMINANCE: number;
@@ -806,8 +806,11 @@ export declare const DUPLICATE_LOOK: number;
 export declare function describeRefusals(results: CheckResult[], cwd?: string): string[];
 /** The refusals a device's facts carry. */
 export declare function factRefusals(facts: Record<string, unknown> | null): CheckRefusal[];
-/** The refusals a picture's words carry; `lines` as readText returns them. */
-export declare function textRefusals(lines: Array<{ text: string; conf: number; x: number; y: number; w: number; h: number }>, opts?: { language?: string; time?: string }): CheckRefusal[];
+/**
+ * The refusals a picture's words carry; `lines` as readText returns them. `strip` is the status bar's share of the
+ * picture's height, the strip the clock and battery are read in (0.06 when not given).
+ */
+export declare function textRefusals(lines: Array<{ text: string; conf: number; x: number; y: number; w: number; h: number }>, opts?: { language?: string; time?: string; strip?: number }): CheckRefusal[];
 /** The words in a picture (Vision, macOS), boxes in fractions from the top left, or `{ error }` where they cannot be read. */
 export declare function readText(file: string, language?: string): Array<{ text: string; conf: number; x: number; y: number; w: number; h: number }> | { error: string };
 /** The device's facts kept beside a shot at capture time, or null. */

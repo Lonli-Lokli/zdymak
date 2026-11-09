@@ -152,9 +152,24 @@ export function iosScreen(type, posture) {
   return null;
 }
 
+/**
+ * The status bar's inset in pixels from the top, from the insets sources `dumpsys window` prints for each display
+ * (`InsetsSource id=… type=statusBars frame=[0,0][1080,63]` from Android 14, `type=ITYPE_STATUS_BAR` on 12 and 13):
+ * the deepest bar that starts at the top, or null when none is printed.
+ */
+export function parseStatusInset(dump) {
+  let inset = null;
+  for (const m of String(dump).matchAll(/InsetsSource\b[^\n]*?\btype=(?:statusBars|ITYPE_STATUS_BAR)\s+frame=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/g)) {
+    const [top, bottom] = [Number(m[2]), Number(m[4])];
+    if (top === 0 && bottom > 0 && Number(m[3]) > Number(m[1])) inset = Math.max(inset ?? 0, bottom);
+  }
+  return inset;
+}
+
 /** Read an Android device at the moment of a shot. `pkg` is the app the shot is of. */
 export function androidFacts({ pkg, language, time }) {
-  const focus = parseAndroidFocus(adb('dumpsys', 'window'));
+  const windows = adb('dumpsys', 'window');
+  const focus = parseAndroidFocus(windows);
   const density = parseWmDensity(adb('wm', 'density'));
   const locales = pkg ? parseAppLocales(adb('cmd', 'locale', 'get-app-locales', pkg)) : [];
   return {
@@ -165,6 +180,7 @@ export function androidFacts({ pkg, language, time }) {
     language: language || null,
     time: time || DEMO_TIME,
     focus,
+    statusInset: parseStatusInset(windows),
     overlays: parseAndroidOverlays(adb('dumpsys', 'SurfaceFlinger', '--list')),
     keyboard: parseKeyboardShown(adb('dumpsys', 'input_method')),
     appLocales: locales,

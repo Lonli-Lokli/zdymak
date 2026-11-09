@@ -1373,7 +1373,7 @@ job or a release gate. It refuses, naming the shot and the reason:
 | `dialog` | "isn't responding", "System UI isn't responding", a crash dialog, a permission prompt, an iOS alert | the focused window (Android), the picture's words |
 | `keyboard` | the on-screen keyboard | the input method (Android), a keyboard row of letters in the lower half |
 | `wrong-app` | the home screen or another app in front | the focused window (Android), the app not running (iOS), home screen labels |
-| `status-bar` | a status bar not in demo mode: the real clock, a battery not full | demo mode allowed (Android), the simulator's override (iOS), the clock and battery in the top strip |
+| `status-bar` | a status bar not in demo mode: the real clock, a battery not full | demo mode allowed (Android), the simulator's override (iOS), the clock and battery in the status bar's strip (its inset where the facts carry it, else the top 6%) |
 | `language` | the device or app in another language than the set's | the app's locale (Android), the script of the picture's words, English words on a non-English Latin set |
 | `motion` | a shot taken while the screen was still changing: over 1% of it changed in the second after the shot, or over the scene's own allowance (`--motion`) | the device, at capture |
 | `letterbox` | the app drawn at phone size inside a tablet or Chromebook window: bars of one colour on two opposite sides, each over 5% of the side, leaving a phone-shaped box (long side 1.6 times the short) in a shot that is not that shape and, where the shot's density is known, narrower than a phone (under 480 dp); asked only on a screen the system letterboxes on (see below) | the picture, on the device's screen |
@@ -1385,7 +1385,9 @@ that `check` and uploaders do not walk), so checking the folder later still know
 note, not a refusal. The picture's words are read with Apple's Vision on macOS (`src/ocr.swift`, compiled once into the
 temporary folder); elsewhere, or with `--no-text` or `ZDYMAK_NO_OCR=1`, the word rules are skipped with a note. Vision
 does not read Devanagari, so a set in Hindi gets no language verdict from the picture. `--time` names the pinned clock
-(9:41).
+(9:41). The clock and battery are read only inside the status bar: on Android the capture keeps the bar's inset
+(`statusInset`, in pixels, from the insets `dumpsys window` prints), so a timer or a score the app draws just under
+the bar is the app's; where no inset is known (iOS, older facts) the top 6% of the picture stands in for the bar.
 
 The letterbox rule is asked only where the system can letterbox an app: an iPad, an Android tablet, a Chromebook or
 desktop window and a folding phone's inner screen. The capture records the device's screen in its facts as `screen`:

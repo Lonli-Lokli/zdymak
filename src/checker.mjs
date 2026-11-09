@@ -29,8 +29,8 @@ export { OCR_CONFIDENCE, readText } from './ocr.mjs';
 
 export {
   DEMO_TIME, LARGE_SCREEN_DP, MOTION_GAP_MS, MOTION_STILL, PHONE_SHORT_DP, SCREENS, androidFacts, androidScreen, factRefusals, factsPath, iosFacts,
-  iosScreen, parseAndroidFocus, parseAndroidOverlays, parseAppLocales, parseIosDeviceType, parseIosRunning, parseKeyboardShown, parseWmDensity,
-  pxPerDpOf, readFacts, writeFacts,
+  iosScreen, parseAndroidFocus, parseAndroidOverlays, parseAppLocales, parseIosDeviceType, parseIosRunning, parseKeyboardShown, parseStatusInset,
+  parseWmDensity, pxPerDpOf, readFacts, writeFacts,
 } from './checker-device.mjs';
 
 /** The rules, in the order a report lists them. */
@@ -40,8 +40,20 @@ export const CHECK_RULES = [
 
 // ---------------------------------------------------------------- the picture's words
 
-/** The top strip the status bar lives in, as a share of the picture's height. */
-export const STATUS_STRIP = 0.06;
+/**
+ * The top strip the status bar is taken to live in, as a share of the picture's height, where the facts do not give
+ * the bar's own inset ([statusStripOf]): a fallback, deep enough for any bar, and so deep that an app's timer or
+ * score just under the bar reads as the bar's clock or battery (a 63 px bar on a 2400 px phone, a 144 px strip).
+ */
+export const STATUS_STRIP_FALLBACK = 0.06;
+
+/**
+ * The top strip the clock and battery rules read, as a share of a picture `height` px tall: the status bar's inset
+ * from the facts (`statusInset`, read from Android's insets at capture), else [STATUS_STRIP_FALLBACK].
+ */
+export function statusStripOf(facts, height) {
+  return facts?.statusInset > 0 && height > 0 ? facts.statusInset / height : STATUS_STRIP_FALLBACK;
+}
 /** A language verdict needs at least this many letters read. */
 export const LANGUAGE_MIN_LETTERS = 20;
 /** And refuses only when the set's script is under this share of them. */
@@ -105,10 +117,11 @@ export function scriptOf(language) {
 const ENGLISH_WORDS = new Set(['the', 'and', 'your', 'you', 'with', 'tap', 'of', 'to', 'is', 'for', 'new', 'settings']);
 
 /**
- * The refusals the picture's words carry. `lines` is readText's result; `language` the set's; `time` the pinned clock.
- * Pure, so the bad fixtures can be tested without a text reader.
+ * The refusals the picture's words carry. `lines` is readText's result; `language` the set's; `time` the pinned clock;
+ * `strip` the status bar's share of the height ([statusStripOf]). Pure, so the bad fixtures can be tested without a
+ * text reader.
  */
-export function textRefusals(lines, { language, time = DEMO_TIME } = {}) {
+export function textRefusals(lines, { language, time = DEMO_TIME, strip: stripShare = STATUS_STRIP_FALLBACK } = {}) {
   const out = [];
   for (const [re, what] of DIALOG_WORDS) {
     const hit = lines.find((l) => re.test(l.text));
@@ -120,7 +133,7 @@ export function textRefusals(lines, { language, time = DEMO_TIME } = {}) {
   const labels = HOME_LABELS.filter((h) => lines.some((l) => l.text.trim().toLowerCase() === h));
   if (labels.length >= 3) out.push({ rule: 'wrong-app', reason: `the picture: home screen app labels (${labels.join(', ')})` });
 
-  const strip = lines.filter((l) => l.y + l.h / 2 < STATUS_STRIP);
+  const strip = lines.filter((l) => l.y + l.h / 2 < stripShare);
   const [wantH, wantM] = time.split(':').map(Number);
   for (const l of strip) {
     const clock = /\b(\d{1,2})[:.](\d{2})\b/.exec(l.text);
@@ -137,7 +150,7 @@ export function textRefusals(lines, { language, time = DEMO_TIME } = {}) {
 
   if (language) {
     const want = scriptOf(language);
-    const body = lines.filter((l) => l.y + l.h / 2 >= STATUS_STRIP).map((l) => l.text).join(' ');
+    const body = lines.filter((l) => l.y + l.h / 2 >= stripShare).map((l) => l.text).join(' ');
     const counts = {};
     let letters = 0;
     for (const ch of body) {
@@ -179,7 +192,7 @@ const near = (d, i, c) => Math.abs(d[i] - c[0]) <= BAR_TOLERANCE && Math.abs(d[i
  * The bars a phone-sized app leaves when the system draws it inside a larger screen or window (Android's letterbox,
  * an iPhone-only app on an iPad): `{ sides, bars: [a, b], box }` or null. Pure, on RGBA pixels. A bar is a run of
  * whole columns (or rows) of one colour from the edge; the status and navigation strips (top and bottom
- * [STATUS_STRIP]) are left out, since the system draws them across the bars. Both bars must be wide, of one colour,
+ * [STATUS_STRIP_FALLBACK], deep enough for either) are left out, since the system draws them across the bars. Both bars must be wide, of one colour,
  * and leave a phone-shaped box in a shot that is not phone-shaped: a tablet layout that keeps a readable width
  * on a plain ground is wider than that, and a phone's upright shot never qualifies. A phone turned on its side
  * can (2034x1398 is 1.455 wide), and an app's plain margins there read as bars, so the picture alone cannot tell:
@@ -191,7 +204,7 @@ const near = (d, i, c) => Math.abs(d[i] - c[0]) <= BAR_TOLERANCE && Math.abs(d[i
  * a phone-sized app the system boxed.
  */
 export function letterboxOf({ data, width: w, height: h }, { pxPerDp = null } = {}) {
-  const strip = Math.ceil(h * STATUS_STRIP);
+  const strip = Math.ceil(h * STATUS_STRIP_FALLBACK);
   const colour = (x, y) => { const i = (y * w + x) * 4; return [data[i], data[i + 1], data[i + 2]]; };
   const column = (x, c) => { for (let y = strip; y < h - strip; y += 2) if (!near(data, (y * w + x) * 4, c)) return false; return true; };
   const row = (y, c) => { for (let x = 0; x < w; x += 2) if (!near(data, (y * w + x) * 4, c)) return false; return true; };
@@ -328,7 +341,8 @@ export async function checkShot(file, { facts, language, time, screen, text = tr
     else {
       const seen = new Set(refusals.map((r) => r.rule));
       // The device's word on a rule comes first; the picture adds the rules the device did not refuse.
-      for (const r of textRefusals(lines, { language: lang, time: time ?? f?.time ?? DEMO_TIME })) if (!seen.has(r.rule)) refusals.push(r);
+      const strip = statusStripOf(f, m.height);
+      for (const r of textRefusals(lines, { language: lang, time: time ?? f?.time ?? DEMO_TIME, strip })) if (!seen.has(r.rule)) refusals.push(r);
     }
   }
   if (!lang) notes.push('no language for the set (pass --language): the language was not checked');

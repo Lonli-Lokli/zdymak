@@ -216,7 +216,7 @@ export async function captureBlankness(file) {
   }
   let top = 0;
   for (const c of counts.values()) if (c > top) top = c;
-  return { colours: counts.size, dominant: top / total };
+  return { colours: counts.size, dominant: top / total, width: img.width, height: img.height };
 }
 
 /** Under this many distinct colours AND over [BLANK_DOMINANCE] of one colour: nothing was drawn. */
