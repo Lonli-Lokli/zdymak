@@ -187,8 +187,10 @@ styled set (the upload set stays `bleed`, `caption: false`, as below).
   Chromebook window; the override is put back after the run.
 - **Foldables:** `--posture closed|half-open|open` folds a foldable EMULATOR (a book fold or a flip) through
   its console's hinge sensor (`adb emu sensor set hinge-angle0`) and waits for the device state it names
-  (`CLOSED`, `HALF_OPENED`, `OPENED`, read from `cmd device_state`, Android 14+). The ids differ between
-  profiles, so they are matched by name. `--hinge` sets the half-open angle (default 90). A real phone has
+  (`CLOSED`, `HALF_OPENED`, `OPENED`, read from `cmd device_state`, Android 14+), then for the display to
+  follow, since the state flips first: into or out of `CLOSED` until `wm size` differs from the size before,
+  and for every posture until three reads 400 ms apart agree; a display that never follows fails the posture
+  with the hinge put back. The ids differ between profiles, so they are matched by name. `--hinge` sets the half-open angle (default 90). A real phone has
   no console for its hinge, so the flag refuses it. Combine with `--orientation` for a book fold turned
   tabletop. Play has no foldable slot: an open book fold goes in a tablet set (`play-fold`, framed by
   `android-fold`), a flip open or a closed book fold in the phone set (`play-flip`, `android-flip`). A flip half open has no

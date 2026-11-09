@@ -99,11 +99,20 @@ function stateName(adb) {
   return id === null ? null : names.get(id) ?? `state ${id}`;
 }
 
+/** Reads of `wm size` that must agree, [SIZE_READ_MS] apart, before a display counts as settled. */
+export const SIZE_READS_STABLE = 3;
+/** The gap between two reads of the state or the size, in ms. */
+export const SIZE_READ_MS = 400;
+
 /**
- * Fold the emulator into `posture` and wait (up to `maxMs`) for the system to report its state.
- * Returns the angle it was at, for `leaveAndroidPosture`. Throws when there is no hinge to set or the
- * state never comes, naming what the device read instead. `adb` and `clock` are the device and the time it
- * waits on, given by a test.
+ * Fold the emulator into `posture` and wait (up to `maxMs`) for the system to report its state, then (up to `maxMs`
+ * again) for the display to follow it. The state flips before the display does: a book fold reports CLOSED while
+ * `wm size` still reads its inner screen, and a turn that read the size then would be chosen for the wrong screen.
+ * Into or out of CLOSED a book fold changes displays, so the size is waited for until it differs from the size
+ * before the hinge moved; then, for every posture, until [SIZE_READS_STABLE] reads agree.
+ * Returns the angle it was at, for `leaveAndroidPosture`, and the settled size. Throws, with the hinge put back,
+ * when there is no hinge to set, the state never comes or the display never follows or settles, naming what the
+ * device read instead. `adb` and `clock` are the device and the time it waits on, given by a test.
  */
 export function enterAndroidPosture(posture, { serial, maxMs = 10000, adb = adbRunner(serial), clock = WALL_CLOCK } = {}) {
   const previous = parseHinge(adb.emu('sensor', 'get', 'hinge-angle0').out);
@@ -111,17 +120,42 @@ export function enterAndroidPosture(posture, { serial, maxMs = 10000, adb = adbR
     throw new Error('--posture on Android needs a foldable EMULATOR: its console sets the hinge (adb emu sensor set hinge-angle0), '
       + 'and this device has no hinge sensor there. A real phone is folded by hand and shot with --name.');
   }
+  const stateBefore = stateName(adb);
+  const sizeBefore = sizeOf(adb);
   const set = adb.emu('sensor', 'set', 'hinge-angle0', String(posture.hinge));
   if (!set.ok) throw new Error(`the emulator console refused hinge-angle0 = ${posture.hinge}: ${set.out.trim()}`);
-  const until = clock.now() + maxMs;
+  const fail = (message) => {
+    adb.emu('sensor', 'set', 'hinge-angle0', String(previous));
+    throw new Error(message);
+  };
+  let until = clock.now() + maxMs;
   let read = null;
-  while (clock.now() < until) {
-    read = stateName(adb);
-    if (read === posture.state) return { previous };
-    clock.sleep(400);
+  while ((read = stateName(adb)) !== posture.state) {
+    if (clock.now() >= until) fail(`${posture.name} wants the device state ${posture.state} at a hinge of ${posture.hinge}°, and the device reports ${read ?? 'no device state (Android 14+ reports one)'}.`);
+    clock.sleep(SIZE_READ_MS);
   }
-  adb.emu('sensor', 'set', 'hinge-angle0', String(previous));
-  throw new Error(`${posture.name} wants the device state ${posture.state} at a hinge of ${posture.hinge}°, and the device reports ${read ?? 'no device state (Android 14+ reports one)'}.`);
+  until = clock.now() + maxMs;
+  const changesDisplay = stateBefore !== posture.state && (stateBefore === 'CLOSED' || posture.state === 'CLOSED');
+  let size = sizeOf(adb);
+  while (changesDisplay && size === sizeBefore) {
+    if (clock.now() >= until) fail(`${posture.name}: the device reports ${posture.state} and its display is still ${sizeBefore} after ${maxMs} ms.`);
+    clock.sleep(SIZE_READ_MS);
+    size = sizeOf(adb);
+  }
+  for (let agree = 1; agree < SIZE_READS_STABLE;) {
+    if (clock.now() >= until) fail(`${posture.name}: the display's size is still changing after ${maxMs} ms (last ${size}).`);
+    clock.sleep(SIZE_READ_MS);
+    const next = sizeOf(adb);
+    agree = next === size ? agree + 1 : 1;
+    size = next;
+  }
+  return { previous, size: parseWmSize(`Physical size: ${size}`) };
+}
+
+/** `wm size` as `WxH`, or null. */
+function sizeOf(adb) {
+  const s = parseWmSize(adb.shell('wm', 'size').out);
+  return s ? `${s.w}x${s.h}` : null;
 }
 
 /** Put the hinge back where `enterAndroidPosture` found it. */

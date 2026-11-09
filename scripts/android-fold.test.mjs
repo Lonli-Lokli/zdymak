@@ -117,8 +117,10 @@ function fakeFold({ hinge = 180, lag = 1200, sizes = { CLOSED: '1080x2092', HALF
 test('a posture is entered once the display has followed the device state, not the moment the state flips', () => {
   // Closing a book fold: CLOSED is reported at once and the outer screen's size 1.2 s later, as a capture saw it.
   const closing = fakeFold({ hinge: 180 });
-  assert.deepEqual(enterAndroidPosture(androidPostureOf('closed'), { adb: closing.adb, clock: closing.clock }), { previous: 180 });
+  const closed = enterAndroidPosture(androidPostureOf('closed'), { adb: closing.adb, clock: closing.clock });
+  assert.equal(closed.previous, 180);
   assert.equal(parseWmSize(closing.wmSize()).w, 1080, 'the cover screen\'s size, not the inner one\'s');
+  assert.deepEqual(closed.size, { w: 1080, h: 2092 });
   // Opening it again: the inner screen's size.
   const opening = fakeFold({ hinge: 0 });
   enterAndroidPosture(androidPostureOf('open'), { adb: opening.adb, clock: opening.clock });
