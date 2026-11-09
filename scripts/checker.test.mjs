@@ -240,6 +240,26 @@ test('a large screen keeps the letterbox check: an iPhone-only app on an iPad, a
   assert.deepEqual(rules(unknown.refusals), ['letterbox']);
 });
 
+test('a layout\'s reading column on a plain ground is not a letterbox where the density is known; a phone-sized box still is', async () => {
+  // A Chromebook window, 1600x900 at density 160 (1 px a dp), with a 560dp column (a dialog's widest) centred on the
+  // app's own plain ground: 900/560 is 1.61, phone-shaped by the picture's test alone, and 520 px of ground either side.
+  const ground = [244, 241, 234];
+  const column = pixels(1600, 900, (x, y) => (x >= 520 && x < 1080 ? busy(x, y) : ground));
+  assert.ok(letterboxOf(column), 'the picture alone reads the ground as bars');
+  assert.equal(letterboxOf(column, { pxPerDp: 1 }), null, 'a 560dp box is wider than any phone');
+  const chromebook = android({ screen: 'large', smallestWidthDp: 900, density: 160, motion: 0 });
+  assert.deepEqual(rules((await checkShot(pngOf(column, 'chromebook-column'), { facts: chromebook, text: false })).refusals), []);
+  // Facts kept before the density was recorded still carry the smallest width, from which the density follows.
+  const older = android({ screen: 'large', smallestWidthDp: 900, motion: 0 });
+  assert.deepEqual(rules((await checkShot(pngOf(column, 'chromebook-column-older'), { facts: older, text: false })).refusals), []);
+  // A phone-sized app boxed by the system on the same window: 411dp wide (a phone's width) between black bars.
+  const boxed = pixels(1600, 900, (x, y) => (x >= 594 && x < 1005 ? busy(x, y) : [0, 0, 0]));
+  assert.equal(letterboxOf(boxed, { pxPerDp: 1 })?.sides, 'left and right');
+  assert.deepEqual(rules((await checkShot(pngOf(boxed, 'chromebook-boxed'), { facts: chromebook, text: false })).refusals), ['letterbox']);
+  // The column's picture at density 320 (2 px a dp) is a 280dp box, phone-sized, so the density decides.
+  assert.equal(letterboxOf(column, { pxPerDp: 2 })?.sides, 'left and right');
+});
+
 test('the bad-shot fixtures: each is refused for its own rule, shot by shot, and nothing else', async () => {
   const dir = path.join(fixtures, 'bad-shots');
   const expected = JSON.parse(fs.readFileSync(path.join(dir, 'expected.json'), 'utf8'));
