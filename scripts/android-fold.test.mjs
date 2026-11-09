@@ -3,7 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ANDROID_POSTURES, androidPostureOf, parseCurrentState, parseDeviceStates, parseHinge, parseWmSize, rotationFor, shapeMatches,
+  ANDROID_POSTURES, androidPostureOf, enterAndroidPosture, parseCurrentState, parseDeviceStates, parseHinge, parseWmSize, rotationFor,
+  shapeMatches,
 } from '../src/capture/android-fold.mjs';
 
 // Verbatim from a book-fold and a flip emulator profile (API 36): the ids differ, the names do not.
@@ -71,4 +72,70 @@ test('a screencap with a warning ahead of the picture is cut at the PNG signatur
   assert.match(cut.note, /Multiple displays/);
   assert.equal(pngFromScreencap(png).note, null);
   assert.throws(() => pngFromScreencap(Buffer.from('error: device offline')), /no PNG: error: device offline/);
+});
+
+/**
+ * A book fold emulator over a fake adb, on a fake clock: the device state follows the hinge at once, as the system
+ * reports it, and the display follows `lag` ms later (never, with Infinity). `sizes` is each state's `wm size`, or a
+ * function of the read's number for a display that will not settle.
+ */
+function fakeFold({ hinge = 180, lag = 1200, sizes = { CLOSED: '1080x2092', HALF_OPENED: '2208x1840', OPENED: '2208x1840' } } = {}) {
+  let now = 0;
+  let reads = 0;
+  const clock = { now: () => now, sleep: (ms) => { now += ms; } };
+  const stateOf = (angle) => (angle === 0 ? 'CLOSED' : angle === 180 ? 'OPENED' : 'HALF_OPENED');
+  const ids = { CLOSED: 0, HALF_OPENED: 1, OPENED: 2 };
+  let shown = sizes[stateOf(hinge)];
+  let movedAt = -Infinity;
+  const size = () => {
+    reads++;
+    if (typeof sizes === 'function') return sizes(reads);
+    return now - movedAt >= lag ? sizes[stateOf(hinge)] : shown;
+  };
+  const sets = [];
+  const ok = (out) => ({ ok: true, out });
+  const adb = {
+    emu: (...args) => {
+      if (args[1] === 'get') return ok(`hinge-angle0 = ${hinge}\nOK\n`);
+      if (typeof sizes !== 'function') shown = now - movedAt >= lag ? sizes[stateOf(hinge)] : shown;
+      hinge = Number(args[3]);
+      movedAt = now;
+      sets.push(hinge);
+      return ok('OK\n');
+    },
+    shell: (...args) => {
+      if (args.join(' ') === 'cmd device_state print-states') return ok(BOOK);
+      if (args.join(' ') === 'cmd device_state print-state') return ok(`${ids[stateOf(hinge)]}\n`);
+      if (args.join(' ') === 'wm size') return ok(`Physical size: ${size()}\n`);
+      return ok('');
+    },
+  };
+  adb.run = (cmd, ...rest) => adb[cmd](...rest);
+  return { adb, clock, sets, now: () => now, wmSize: () => adb.shell('wm', 'size').out };
+}
+
+test('a posture is entered once the display has followed the device state, not the moment the state flips', () => {
+  // Closing a book fold: CLOSED is reported at once and the outer screen's size 1.2 s later, as a capture saw it.
+  const closing = fakeFold({ hinge: 180 });
+  assert.deepEqual(enterAndroidPosture(androidPostureOf('closed'), { adb: closing.adb, clock: closing.clock }), { previous: 180 });
+  assert.equal(parseWmSize(closing.wmSize()).w, 1080, 'the cover screen\'s size, not the inner one\'s');
+  // Opening it again: the inner screen's size.
+  const opening = fakeFold({ hinge: 0 });
+  enterAndroidPosture(androidPostureOf('open'), { adb: opening.adb, clock: opening.clock });
+  assert.equal(parseWmSize(opening.wmSize()).w, 2208);
+  // Half open from open keeps one display: three reads that agree are enough, nothing waits for a change.
+  const half = fakeFold({ hinge: 180 });
+  enterAndroidPosture(androidPostureOf('half-open'), { adb: half.adb, clock: half.clock });
+  assert.ok(half.now() < 2000, `settled in ${half.now()} ms`);
+});
+
+test('a display that never follows the posture, or never settles, fails the posture and puts the hinge back', () => {
+  const stuck = fakeFold({ hinge: 180, lag: Infinity });
+  assert.throws(() => enterAndroidPosture(androidPostureOf('closed'), { adb: stuck.adb, clock: stuck.clock, maxMs: 5000 }),
+    /CLOSED.*still 2208x1840/);
+  assert.deepEqual(stuck.sets, [0, 180], 'the hinge is put back where it was');
+  const restless = fakeFold({ hinge: 180, sizes: (n) => (n % 2 ? '2208x1840' : '2208x1841') });
+  assert.throws(() => enterAndroidPosture(androidPostureOf('half-open'), { adb: restless.adb, clock: restless.clock, maxMs: 5000 }),
+    /still changing/);
+  assert.deepEqual(restless.sets, [90, 180]);
 });

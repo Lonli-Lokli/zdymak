@@ -80,6 +80,8 @@ export function shapeMatches(orientation, w, h) {
 }
 
 const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+/** The wall clock and a blocking sleep: what the waits below run on, and a test replaces. */
+const WALL_CLOCK = { now: () => Date.now(), sleep: pause };
 
 function adbRunner(serial) {
   const pre = serial ? ['-s', serial] : [];
@@ -100,10 +102,10 @@ function stateName(adb) {
 /**
  * Fold the emulator into `posture` and wait (up to `maxMs`) for the system to report its state.
  * Returns the angle it was at, for `leaveAndroidPosture`. Throws when there is no hinge to set or the
- * state never comes, naming what the device read instead.
+ * state never comes, naming what the device read instead. `adb` and `clock` are the device and the time it
+ * waits on, given by a test.
  */
-export function enterAndroidPosture(posture, { serial, maxMs = 10000 } = {}) {
-  const adb = adbRunner(serial);
+export function enterAndroidPosture(posture, { serial, maxMs = 10000, adb = adbRunner(serial), clock = WALL_CLOCK } = {}) {
   const previous = parseHinge(adb.emu('sensor', 'get', 'hinge-angle0').out);
   if (previous === null) {
     throw new Error('--posture on Android needs a foldable EMULATOR: its console sets the hinge (adb emu sensor set hinge-angle0), '
@@ -111,12 +113,12 @@ export function enterAndroidPosture(posture, { serial, maxMs = 10000 } = {}) {
   }
   const set = adb.emu('sensor', 'set', 'hinge-angle0', String(posture.hinge));
   if (!set.ok) throw new Error(`the emulator console refused hinge-angle0 = ${posture.hinge}: ${set.out.trim()}`);
-  const until = Date.now() + maxMs;
+  const until = clock.now() + maxMs;
   let read = null;
-  while (Date.now() < until) {
+  while (clock.now() < until) {
     read = stateName(adb);
     if (read === posture.state) return { previous };
-    pause(400);
+    clock.sleep(400);
   }
   adb.emu('sensor', 'set', 'hinge-angle0', String(previous));
   throw new Error(`${posture.name} wants the device state ${posture.state} at a hinge of ${posture.hinge}°, and the device reports ${read ?? 'no device state (Android 14+ reports one)'}.`);
