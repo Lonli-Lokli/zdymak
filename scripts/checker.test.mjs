@@ -8,8 +8,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCanvas } from '@napi-rs/canvas';
 import {
-  MOTION_STILL, androidScreen, checkSet, checkShot, factRefusals, iosScreen, letterboxOf, motionAllowance, parseAndroidFocus,
-  parseAndroidOverlays, parseAppLocales, parseIosDeviceType, parseIosRunning, parseKeyboardShown, parseWmDensity, scriptOf, textRefusals,
+  MOTION_STILL, STATUS_STRIP_FALLBACK, androidScreen, checkSet, checkShot, factRefusals, iosScreen, letterboxOf, motionAllowance,
+  parseAndroidFocus, parseAndroidOverlays, parseAppLocales, parseIosDeviceType, parseIosRunning, parseKeyboardShown, parseStatusInset,
+  parseWmDensity, scriptOf, statusStripOf, textRefusals,
 } from '../src/checker.mjs';
 
 const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
@@ -109,6 +110,33 @@ test('the picture: dialogs, a keyboard, a home screen, the real clock and batter
   assert.deepEqual(one([line('9:41', 0.01), line('100%', 0.01)]), []);
   assert.deepEqual(one([line('09:41', 0.01)]), [], 'Android pins 09:41');
   assert.deepEqual(one([line('Score 14:07', 0.5)]), [], 'a time in the app is not the status bar');
+});
+
+test('the status strip is the status bar\'s own inset where the facts know it, so a timer or a score just under it is the app\'s', () => {
+  // A 1080x2400 phone whose status bar is 63 px tall, with a timer and a score drawn 47 to 77 px under it: inside the
+  // 6% fallback strip (144 px), where they read as a clock that is not 9:41 and a battery that is not full.
+  const px = (y, h = 30) => [y / 2400, h / 2400];
+  const hud = [line('1:23', ...px(110)), line('75%', ...px(120))];
+  assert.deepEqual(rules(textRefusals(hud)), ['status-bar'], 'with no inset known, the fallback strip takes them');
+  const strip = statusStripOf({ statusInset: 63 }, 2400);
+  assert.equal(strip, 63 / 2400);
+  assert.deepEqual(rules(textRefusals(hud, { strip })), [], 'under the bar, they are the app\'s');
+  assert.deepEqual(rules(textRefusals([line('14:07', ...px(18)), ...hud], { strip })), ['status-bar'], 'the real clock in the bar is still refused');
+  assert.equal(statusStripOf({}, 2400), STATUS_STRIP_FALLBACK);
+  assert.equal(statusStripOf(null, 2400), STATUS_STRIP_FALLBACK);
+  assert.equal(statusStripOf({ statusInset: 63 }, 0), STATUS_STRIP_FALLBACK, 'no height, no share');
+});
+
+test('the status bar\'s inset is read from dumpsys window, as Android prints its insets sources', () => {
+  // Android 14 and later name the type; 12 and 13 print its old constant. The largest of the displays' bars is kept.
+  const api34 = '    InsetsStateController\n      InsetsSource id=3b2e0005 type=statusBars frame=[0,0][1080,63] visible=true mFlags=[] mSideHint=TOP\n'
+    + '      InsetsSource id=3b2e0001 type=navigationBars frame=[0,2337][1080,2400] visible=true mFlags=[] mSideHint=BOTTOM\n';
+  assert.equal(parseStatusInset(api34), 63);
+  assert.equal(parseStatusInset('        InsetsSource type=ITYPE_STATUS_BAR frame=[0,0][1080,136] visible=true\n'), 136);
+  assert.equal(parseStatusInset(`${api34}      InsetsSource id=7 type=statusBars frame=[0,0][2208,118] visible=true\n`), 118);
+  assert.equal(parseStatusInset('      InsetsSource id=3b2e0005 type=statusBars frame=[0,0][0,0] visible=false\n'), null);
+  assert.equal(parseStatusInset('      InsetsSource id=3b2e0001 type=navigationBars frame=[0,2337][1080,2400] visible=true\n'), null);
+  assert.equal(parseStatusInset(''), null);
 });
 
 test('the picture: words in another script than the set, and English on a Latin set', () => {
