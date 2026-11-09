@@ -519,7 +519,7 @@ export function inferFrame(target) {
   if (/^play-chromebook/.test(target)) return 'chromebook';
   if (/^play-tablet-7/.test(target)) return 'android-tablet';
   if (/^play-fold/.test(target)) return 'android-fold';
-  if (/^play-flip/.test(target)) return 'android-flip';
+  if (/^(play-)?flip/.test(target)) return 'android-flip'; // the open flip's Play target and the half-open flip's own
   if (/^play/.test(target) || /android/.test(target)) return 'android';
   // Before the iPhone test: `appstore-iphone-duo-outer` contains "iphone", and a Duo screenshot in an
   // iPhone body would carry a Dynamic Island the Duo is not documented to have. Inner before outer,

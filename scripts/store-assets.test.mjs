@@ -599,3 +599,21 @@ test('the 7-inch, Chromebook and foldable targets render framed at their exact s
     assert.equal(info.colourType, 2, `${target} must be RGB, no alpha`);
   }
 });
+
+test('a flip half open is a website set at the display\'s own size, framed as the flip, with no store slot', async () => {
+  const t = IMAGE_TARGETS['flip-half-open'];
+  assert.ok(t);
+  assert.deepEqual([t.w, t.h, t.alpha], [1080, 2636, false]);
+  assert.notEqual(t.store, 'Google Play', 'Play\'s phone slot stops at 2:1; a half-open flip is taller');
+  assert.ok(t.h / t.w > 2);
+  assert.equal(inferFrame('flip-half-open'), 'android-flip');
+  assert.equal(hingeAxis('flip', t.w, t.h), 'horizontal', 'the hinge splits the height');
+  const dir = path.join(tmp, 'flip-half-open');
+  capture(path.join(dir, 'half.png'), 1080, 2636); // the flip's whole display, as the emulator shows it half open
+  const out = path.join(tmp, 'out-flip-half-open');
+  const written = await buildDeviceScreenshots({ device: device('flip-half-open', dir, ['half'], [{ target: 'flip-half-open' }]), brand, outDir: out });
+  assert.equal(written.length, 1);
+  const info = pngInfo(written[0].file);
+  assert.deepEqual([info.w, info.h], [1080, 2636]);
+  assert.equal(info.colourType, 2, 'RGB, no alpha');
+});

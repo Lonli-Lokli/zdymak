@@ -191,8 +191,10 @@ styled set (the upload set stays `bleed`, `caption: false`, as below).
   profiles, so they are matched by name. `--hinge` sets the half-open angle (default 90). A real phone has
   no console for its hinge, so the flag refuses it. Combine with `--orientation` for a book fold turned
   tabletop. Play has no foldable slot: an open book fold goes in a tablet set (`play-fold`, framed by
-  `android-fold`), a flip open or a closed book fold in the phone set (`play-flip`, `android-flip`). The
-  frames mark the hinge on the bezel only, never over the screen.
+  `android-fold`), a flip open or a closed book fold in the phone set (`play-flip`, `android-flip`). A flip half open has no
+  slot: `flip-half-open` (1080×2636, `android-flip`) is a website or styled set, shot at the display's own size
+  with no `--size`, since a half-open flip's window is never 16:9. The frames mark the hinge on the bezel only,
+  never over the screen.
 
 ## Play's rules differ by device (Apple wants styled)
 Google's preview-asset guidance (support.google.com/googleplay/android-developer/answer/9866151) differs by

@@ -254,6 +254,14 @@ export const IMAGE_TARGETS = {
    */
   'play-fold': { store: 'Google Play', w: 2560, h: 1440, alpha: false, format: 'png', label: 'Play book foldable OPEN (16:9, the tablet slots; framed by android-fold)' },
   'play-flip': { store: 'Google Play', w: 1080, h: 1920, alpha: false, format: 'png', label: 'Play flip foldable OPEN (9:16, the phone slot; framed by android-flip)' },
+  /**
+   * A flip HALF OPEN has no store slot at all: its window is never 16:9 (a flip half open gives the app its whole
+   * display, the hinge across the middle, about 360x879dp at 480dpi), and Play's phone slot stops at 2:1. So it is a
+   * website or styled set only, shot at the display's own size (`capture --platform android --posture half-open`,
+   * no `--size`), so the app lays out the two halves a user holds. Framed by `android-flip`, the hinge marked on the
+   * bezel across the middle.
+   */
+  'flip-half-open': { store: 'Web / Social', w: 1080, h: 2636, alpha: false, format: 'png', label: 'Flip foldable HALF OPEN (1080×2636 at 480dpi, the display\'s own size, hinge at the middle; a website or styled set, no store slot; framed by android-flip)' },
   'play-wear': { store: 'Google Play', w: 1080, h: 1080, alpha: false, format: 'png', label: 'Play Wear OS (1:1 square, 384–3840px, no alpha)' },
   'play-feature-graphic': { store: 'Google Play', w: 1024, h: 500, alpha: false, format: 'png', graphic: true, label: 'Play feature graphic (1024×500, no alpha) — brand banner, not a per-scene shot' },
   'play-icon': { store: 'Google Play', w: 512, h: 512, alpha: true, format: 'png', graphic: true, icon: true, maxBytes: 1024 * 1024, label: 'Play app icon (512×512, 32-bit PNG — the one asset where alpha is allowed; ≤1MB). Built from brand.logo.' },

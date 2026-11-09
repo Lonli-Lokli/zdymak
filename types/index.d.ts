@@ -80,6 +80,8 @@ export type ImageTargetId =
   | 'play-fold'
   /** A flip foldable open, for the phone slot or a website set: 1080×1920. Framed by `android-flip`. */
   | 'play-flip'
+  /** A flip foldable HALF OPEN at the display's own size, 1080×2636, the hinge at the middle: a website or styled set, no store slot. Framed by `android-flip`. */
+  | 'flip-half-open'
   | 'play-wear'
   | 'play-feature-graphic'
   | 'play-icon'

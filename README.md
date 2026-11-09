@@ -703,6 +703,7 @@ specifications* and Google's *Add preview assets* pages.
 | `play-chromebook` | 1920×1080 | Play Chromebook, a set of its own (at least 4) | Capture a resizable emulator with `--size 1920x1080 --density 160`; framed by `chromebook` |
 | `play-fold` | 2560×1440 | a book foldable open, for a tablet slot or a website set | Framed by `android-fold`; capture with `--posture open` |
 | `play-flip` | 1080×1920 | a flip open, for the phone slot or a website set | Framed by `android-flip`; capture with `--posture open` |
+| `flip-half-open` | 1080×2636 | a flip half open, a website or styled set only (no store has a slot for it) | Framed by `android-flip`; capture with `--posture half-open` at the display's own size, no `--size` |
 | `play-wear` | 1080×1080 | Play Wear OS (1:1) | **Required** for Wear OS listings, min 384×384 |
 | `play-feature-graphic` | 1024×500 | Play feature graphic | **Required** even without a video; it's also the promo-video thumbnail, so keep the centre clear |
 | `play-icon` | 512×512 | Play app icon | The only target where alpha is allowed |
