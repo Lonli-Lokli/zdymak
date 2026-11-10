@@ -214,7 +214,14 @@ export function iosFacts({ udid, bundle, language, time, posture }) {
   };
 }
 
-export const primary = (tag) => String(tag || '').split(/[-_]/)[0].toLowerCase();
+/** The language codes Java's Locale kept for three languages, which some Android versions still report. */
+const LEGACY_LANGUAGES = { iw: 'he', in: 'id', ji: 'yi' };
+
+/** A language tag's language, lower case, its legacy code read as today's (`iw-IL` is `he`). */
+export const primary = (tag) => {
+  const p = String(tag || '').split(/[-_]/)[0].toLowerCase();
+  return LEGACY_LANGUAGES[p] || p;
+};
 
 /**
  * A scene with no allowance of its own may change this share of the screen between its shot and a second shot taken

@@ -153,6 +153,27 @@ test('the picture: words in another script than the set, and English on a Latin 
   assert.deepEqual(rules(textRefusals([line('OK')], { language: 'ru' })), [], 'too few letters for a verdict');
 });
 
+test('the language rule reads a script subtag and Android\'s legacy language codes', () => {
+  assert.equal(scriptOf('sr'), 'Cyrillic');
+  assert.equal(scriptOf('sr-Latn'), 'Latin');
+  assert.equal(scriptOf('sr-Latn-RS'), 'Latin');
+  assert.equal(scriptOf('be-Latn'), 'Latin');
+  assert.equal(scriptOf('uz-Cyrl'), 'Cyrillic');
+  assert.equal(scriptOf('zh-Hant'), 'Han');
+  assert.equal(scriptOf('zh-Hans-CN'), 'Han');
+  assert.equal(scriptOf('sr_RS_#Latn'), 'Latin', 'Java\'s Locale.toString form');
+  assert.equal(scriptOf('iw'), 'Hebrew');
+  assert.equal(scriptOf('ji'), 'Hebrew');
+  assert.equal(scriptOf('en-US'), 'Latin', 'a region is not a script');
+  const latinSerbian = [line('Dodirnite polje da ga otvorite i obeležite mine drugim prstom')];
+  assert.deepEqual(rules(textRefusals(latinSerbian, { language: 'sr-Latn' })), []);
+  assert.deepEqual(rules(textRefusals(latinSerbian, { language: 'sr' })), ['language']);
+  for (const [device, set] of [['iw-IL', 'he'], ['in', 'id-ID'], ['ji', 'yi'], ['he', 'iw']]) {
+    assert.deepEqual(factRefusals(android({ language: set, appLocales: [device] })), [], `${device} is ${set}`);
+  }
+  assert.deepEqual(rules(factRefusals(android({ language: 'he', appLocales: ['in'] }))), ['language']);
+});
+
 test('the device: a screen still changing past the scene\'s allowance', () => {
   assert.deepEqual(factRefusals(android({ motion: MOTION_STILL / 2 })), []);
   assert.deepEqual(rules(factRefusals(android({ motion: 0.05 }))), ['motion']);

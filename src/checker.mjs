@@ -88,7 +88,7 @@ const SCRIPTS = {
   Han: ['zh'],
   Hangul: ['ko'],
   Greek: ['el'],
-  Hebrew: ['he', 'iw'],
+  Hebrew: ['he', 'yi'],
   Thai: ['th'],
 };
 const SCRIPT_RE = {
@@ -106,8 +106,21 @@ const SCRIPT_RE = {
 /** The scripts Vision reads; a set in another one gets no picture verdict on its language. */
 const READABLE_SCRIPTS = new Set(['Latin', 'Cyrillic', 'Arabic', 'Japanese', 'Han', 'Hangul', 'Thai']);
 
-/** The script a language is written in. */
+/** ISO 15924 script subtags, as a language tag names them (`sr-Latn`, `zh-Hant`), and the script each is read as. */
+const SCRIPT_SUBTAGS = {
+  latn: 'Latin', cyrl: 'Cyrillic', arab: 'Arabic', deva: 'Devanagari', jpan: 'Japanese', hani: 'Han', hans: 'Han', hant: 'Han',
+  hang: 'Hangul', kore: 'Hangul', grek: 'Greek', hebr: 'Hebrew', thai: 'Thai',
+};
+
+/**
+ * The script a language is written in: the tag's own script subtag where it names one (`sr-Latn` is Latin though
+ * Serbian is listed as Cyrillic; Java's `sr_RS_#Latn` form too), else the language's usual script.
+ */
 export function scriptOf(language) {
+  for (const sub of String(language || '').split(/[-_]/).slice(1)) {
+    const m = /^#?([a-z]{4})$/i.exec(sub);
+    if (m && SCRIPT_SUBTAGS[m[1].toLowerCase()]) return SCRIPT_SUBTAGS[m[1].toLowerCase()];
+  }
   const p = primary(language);
   for (const [script, langs] of Object.entries(SCRIPTS)) if (langs.includes(p)) return script;
   return 'Latin';
