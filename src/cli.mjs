@@ -342,8 +342,8 @@ async function rawConfig(flags) {
  * `zdymak compare <png|dir>… --target <id>` — is each shot the picture already approved for that store target? A
  * source-language shot against its reference by pixels, a translated one against the source-language reference by
  * layout, text masked and mirrored for a right-to-left language, each against the config's `compare.pixel` and
- * `compare.layout`. What needs the owner is written to a review folder (`--review`, default `<references>/review`)
- * with a page for the phone; exits 1 while anything waits. `--measure <first> <second>` prints the pixel and layout
+ * `compare.layout`. What needs the owner is added to a review folder (`--review`, default `<references>/review`),
+ * beside what earlier calls left waiting there, with a page for the phone; exits 1 while anything waits. `--measure <first> <second>` prints the pixel and layout
  * noise between two captures as TSV instead (`--mirror` mirrors the first).
  */
 async function cmdCompare(flags, rest) {

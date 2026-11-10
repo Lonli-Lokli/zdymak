@@ -1479,7 +1479,9 @@ A shot beyond its threshold, a new source-language scene with no reference, or a
 `references/review/` (or `--review <dir>`) receives the approved shot, the new one and the difference (changed pixels,
 or moved cells with the masked text hatched) for each, `review.json`, and `index.html`, one self-contained page you can
 send to a phone. Its Approve and Reject buttons gather the answers into the `zdymak approve` and `zdymak reject` lines
-to paste back. An approved source-language shot becomes the reference; an approved translated shot is remembered by its
+to paste back. One folder gathers every `compare` call into it, one per store target: an item stays until it is
+answered, its shot passes, or its new shot leaves the folder, and a newer shot of the same target, language and scene
+replaces it. An approved source-language shot becomes the reference; an approved translated shot is remembered by its
 content so the same picture is not asked about again. A translated shot whose scene has no reference yet is refused
 until the source-language one is approved. `compare` exits 1 while anything waits.
 

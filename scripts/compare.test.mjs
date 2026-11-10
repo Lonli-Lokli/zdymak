@@ -132,6 +132,64 @@ test('a new English scene goes to review, an approved one is the reference, a ch
   assert.equal(JSON.parse(fs.readFileSync(path.join(review, 'decisions.json'), 'utf8'))['tablet--en--home'].verdict, 'reject');
 });
 
+test('two store targets compared into one review folder are both on its page and both answerable', async () => {
+  const d = tmp();
+  const refs = path.join(d, 'references');
+  const review = path.join(d, 'review');
+  const run = (target) => compareShots([screen(path.join(d, target, 'home.png'))], { target, refs, thresholds: THRESHOLDS, language: 'en', textOf });
+
+  await writeReview(await run('phone'), review, { refs });
+  const page = await writeReview(await run('tablet'), review, { refs });
+  const ids = JSON.parse(fs.readFileSync(path.join(review, 'review.json'), 'utf8')).items.map((i) => i.id);
+  assert.deepEqual(ids, ['phone--en--home', 'tablet--en--home']);
+  const html = fs.readFileSync(page, 'utf8');
+  for (const id of ids) assert.match(html, new RegExp(`data-id="${id}"`));
+  assert.match(html, /2 shot\(s\) differ/);
+
+  decide(review, ['phone--en--home'], 'approve');
+  assert.ok(fs.existsSync(path.join(refs, 'phone', 'home.png')));
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(review, 'review.json'), 'utf8')).items.map((i) => i.id), ['tablet--en--home'],
+    'an answered item leaves the review');
+  assert.throws(() => decide(review, ['phone--en--home'], 'reject'), /no item phone--en--home.*answered already/);
+});
+
+test('a review folder keeps what still waits: a newer shot replaces its item, one now passing or gone leaves', async () => {
+  const d = tmp();
+  const refs = path.join(d, 'references');
+  const review = path.join(d, 'review');
+  const run = (target, scenes, opts = {}) => compareShots(
+    scenes.map((s) => screen(path.join(d, `${target}-${opts.button ?? 0}`, `${s}.png`), opts)),
+    { target, refs, thresholds: THRESHOLDS, language: 'en', textOf },
+  );
+  const idsIn = () => JSON.parse(fs.readFileSync(path.join(review, 'review.json'), 'utf8')).items.map((i) => i.id);
+
+  await writeReview(await run('phone', ['home', 'result', 'menu']), review, { refs });
+  await writeReview(await run('tablet', ['home']), review, { refs });
+  assert.deepEqual(idsIn(), ['phone--en--home', 'phone--en--result', 'phone--en--menu', 'tablet--en--home']);
+
+  // The tablet's home approved, then a changed one waits again with its difference; the phone's items stay.
+  decide(review, ['tablet--en--home'], 'approve');
+  const [changed] = await run('tablet', ['home'], { button: 24 });
+  assert.equal(changed.kind, 'pixel');
+  await writeReview([changed], review, { refs });
+  assert.deepEqual(idsIn(), ['phone--en--home', 'phone--en--result', 'phone--en--menu', 'tablet--en--home']);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(review, 'review.json'), 'utf8')).items[3].kind, 'pixel');
+  assert.ok(fs.existsSync(path.join(review, 'tablet--en--home.diff.png')));
+
+  // The phone's home is the reference now, so the next compare passes it; its menu shot is gone from the folder.
+  fs.mkdirSync(path.join(refs, 'phone'), { recursive: true });
+  fs.copyFileSync(path.join(d, 'phone-0', 'home.png'), path.join(refs, 'phone', 'home.png'));
+  const [passing] = await run('phone', ['home']);
+  assert.equal(passing.review, false);
+  fs.rmSync(path.join(review, 'phone--en--menu.new.png'));
+  const page = await writeReview([passing], review, { refs });
+  assert.deepEqual(idsIn(), ['phone--en--result', 'tablet--en--home']);
+  const html = fs.readFileSync(page, 'utf8');
+  assert.equal(html.match(/<section data-id=/g).length, 2);
+  assert.doesNotMatch(html, /data-id="phone--en--(home|menu)"/);
+  assert.match(html, /2 shot\(s\) differ/);
+});
+
 test('Arabic is held against the English mirrored, with its text masked; an approved translation is not asked twice', async () => {
   const d = tmp();
   const refs = path.join(d, 'references');

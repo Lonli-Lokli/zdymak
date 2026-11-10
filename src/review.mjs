@@ -53,28 +53,50 @@ async function preview(file, maxWidth = 720) {
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
+/** A review item's files in the folder: its new shot, and the approved one and the difference where it has them. */
+const filesOf = (it) => Object.values(it.files || { new: `${it.id}.new.png` });
+
 /**
  * Write the review folder for the items that need the owner: each item's old shot, new shot and difference as PNGs,
  * `review.json`, and `index.html`, one self-contained page (previews inline) to read on a phone. Its buttons gather
  * the answers into the `zdymak approve` and `zdymak reject` lines to paste back. Returns the page's path.
+ *
+ * One folder gathers several calls, one per store target: the items already in its `review.json` are kept while their
+ * new shot is still in the folder, an item with the same id is replaced by this call's, and one that passes now leaves
+ * with its files. The page shows every item kept. A folder written for other references starts over.
  */
 export async function writeReview(items, dir, { refs }) {
-  const pending = items.filter((i) => i.review);
   fs.mkdirSync(dir, { recursive: true });
+  const references = path.resolve(refs);
+  const recordFile = path.join(dir, 'review.json');
+  const before = fs.existsSync(recordFile) ? JSON.parse(fs.readFileSync(recordFile, 'utf8')) : null;
+  const now = new Map(items.map((i) => [i.id, i]));
+  const order = [];
+  for (const old of before?.references === references ? before.items : []) {
+    const newer = now.get(old.id);
+    if (newer) {
+      for (const f of filesOf(old)) fs.rmSync(path.join(dir, f), { force: true });
+      if (newer.review) order.push(newer);
+    } else if (fs.existsSync(path.join(dir, old.files?.new ?? `${old.id}.new.png`))) order.push(old);
+  }
+  for (const it of items) if (it.review && !order.includes(it)) order.push(it);
   const cards = [];
-  for (const it of pending) {
-    const files = { new: `${it.id}.new.png` };
-    fs.copyFileSync(it.file, path.join(dir, files.new));
-    if (fs.existsSync(it.reference)) { files.old = `${it.id}.old.png`; fs.copyFileSync(it.reference, path.join(dir, files.old)); }
-    if (it.diff) { files.diff = `${it.id}.diff.png`; fs.writeFileSync(path.join(dir, files.diff), rgbPngBuffer(diffCanvas(it))); }
-    it.files = files;
-    const pics = [['Approved', files.old], ['New', files.new], ['Difference', files.diff]].filter(([, f]) => f);
+  for (const it of order) {
+    if (now.get(it.id) === it) {
+      const files = { new: `${it.id}.new.png` };
+      fs.copyFileSync(it.file, path.join(dir, files.new));
+      if (fs.existsSync(it.reference)) { files.old = `${it.id}.old.png`; fs.copyFileSync(it.reference, path.join(dir, files.old)); }
+      if (it.diff) { files.diff = `${it.id}.diff.png`; fs.writeFileSync(path.join(dir, files.diff), rgbPngBuffer(diffCanvas(it))); }
+      it.files = files;
+    }
+    const { files } = it;
+    const pics = [['Approved', files.old], ['New', files.new], ['Difference', files.diff]].filter(([, f]) => f && fs.existsSync(path.join(dir, f)));
     const figs = await Promise.all(pics.map(async ([label, f]) => `<figure><img src="${await preview(path.join(dir, f))}" alt="${label} shot of ${esc(it.scene)}"><figcaption>${label}</figcaption></figure>`));
     cards.push(`<section data-id="${esc(it.id)}"><h2>${esc(it.target)} · ${esc(it.language)} · ${esc(it.scene)}</h2><p>${esc(it.reason)}</p>`
       + `<div class="pics">${figs.join('')}</div><div class="act"><button data-v="approve">Approve</button><button data-v="reject">Reject</button></div></section>`);
   }
-  const record = pending.map(({ diff, ...rest }) => rest);
-  fs.writeFileSync(path.join(dir, 'review.json'), `${JSON.stringify({ references: path.resolve(refs), items: record }, null, 2)}\n`);
+  const pending = order.map(({ diff, ...rest }) => rest);
+  fs.writeFileSync(recordFile, `${JSON.stringify({ references, items: pending }, null, 2)}\n`);
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Screenshots to review</title><style>
 :root{color-scheme:light dark;font:16px/1.5 system-ui,sans-serif}body{margin:0 auto;max-width:72rem;padding:1rem}
@@ -100,19 +122,25 @@ document.getElementById('copy').onclick=()=>navigator.clipboard&&navigator.clipb
 
 /**
  * Answer review items: `approve` makes a source-language shot its scene's reference and remembers a translated shot
- * by its content; `reject` changes no reference. Both are written to the review's `decisions.json`. `ids` empty with
- * `all` answers every item. Returns the items answered.
+ * by its content; `reject` changes no reference. Both are written to the review's `decisions.json`, and the items
+ * answered leave its `review.json`, so the next page does not ask again. `ids` empty with `all` answers every item.
+ * Returns the items answered.
  */
 export function decide(dir, ids, verdict, { all = false, now = new Date() } = {}) {
   if (!['approve', 'reject'].includes(verdict)) throw new Error(`decide: ${verdict} is neither approve nor reject`);
-  const review = JSON.parse(fs.readFileSync(path.join(dir, 'review.json'), 'utf8'));
-  const chosen = all ? review.items : ids.map((id) => review.items.find((i) => i.id === id) || (() => { throw new Error(`${verdict}: no item ${id} in ${dir}`); })());
+  const recordFile = path.join(dir, 'review.json');
+  const review = JSON.parse(fs.readFileSync(recordFile, 'utf8'));
+  const decisionsFile = path.join(dir, 'decisions.json');
+  const decisions = fs.existsSync(decisionsFile) ? JSON.parse(fs.readFileSync(decisionsFile, 'utf8')) : {};
+  const unknown = (id) => {
+    const was = decisions[id];
+    throw new Error(`${verdict}: no item ${id} in ${dir}${was ? ` (answered already: ${was.verdict} at ${was.when})` : ''}`);
+  };
+  const chosen = all ? review.items : ids.map((id) => review.items.find((i) => i.id === id) || unknown(id));
   const refs = review.references;
   const approvals = readApprovals(refs);
   approvals.references ??= {};
   approvals.accepted ??= {};
-  const decisionsFile = path.join(dir, 'decisions.json');
-  const decisions = fs.existsSync(decisionsFile) ? JSON.parse(fs.readFileSync(decisionsFile, 'utf8')) : {};
   const when = now.toISOString();
   for (const it of chosen) {
     const shot = path.join(dir, it.files.new);
@@ -130,5 +158,7 @@ export function decide(dir, ids, verdict, { all = false, now = new Date() } = {}
   }
   if (verdict === 'approve') writeApprovals(refs, approvals);
   fs.writeFileSync(decisionsFile, `${JSON.stringify(decisions, null, 2)}\n`);
+  const left = review.items.filter((i) => !chosen.includes(i));
+  fs.writeFileSync(recordFile, `${JSON.stringify({ ...review, items: left }, null, 2)}\n`);
   return chosen;
 }
