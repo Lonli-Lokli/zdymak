@@ -278,7 +278,9 @@ export function sampleDifference(a, b) {
 
 /**
  * The checks across a set: two scenes of one set that are the same picture. A set is the shots of one folder at one
- * size (one device, one language, one posture); the later of two refuses, naming the earlier. Adds the refusals to
+ * size and one posture (one device, one language): a flip's open and half-open shots share a size, and a screen that
+ * does not move for the fold is the same picture in both, which the set wants. The posture is the one the facts
+ * beside the shot name (checkShot's `posture`). The later of two refuses, naming the earlier. Adds the refusals to
  * `results` (checkShot's) in place and returns them.
  */
 export async function checkSet(results) {
@@ -287,7 +289,7 @@ export async function checkSet(results) {
     if (r.unreadable) continue;
     const px = await pixelsOf(r.file);
     if (!px) continue;
-    const key = `${path.dirname(r.file)}|${px.width}x${px.height}`;
+    const key = `${path.dirname(r.file)}|${px.width}x${px.height}|${r.posture ?? ''}`;
     const sample = sampleOf(px);
     const seen = sets.get(key) || [];
     const twin = seen.find((s) => sampleDifference(s.sample, sample) < DUPLICATE_LOOK);
@@ -360,7 +362,7 @@ export async function checkShot(file, { facts, language, time, screen, text = tr
   }
   if (!lang) notes.push('no language for the set (pass --language): the language was not checked');
   refusals.sort((a, b) => CHECK_RULES.indexOf(a.rule) - CHECK_RULES.indexOf(b.rule));
-  return { file, refusals, notes, colours: m.colours, dominant: m.dominant, blank };
+  return { file, refusals, notes, colours: m.colours, dominant: m.dominant, blank, posture: f?.posture ?? null };
 }
 
 /** One line per refusal, naming the shot: what `capture` throws and `check` prints. */

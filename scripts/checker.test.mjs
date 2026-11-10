@@ -324,6 +324,27 @@ test('the bad-shot fixtures: each is refused for its own rule, shot by shot, and
   }
 });
 
+test('two postures of one size in one folder are not duplicates; two shots of one posture still are', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zdymak-postures-'));
+  try {
+    const src = path.join(fixtures, 'good-shots', 'scene-1.png');
+    const facts = JSON.parse(fs.readFileSync(path.join(fixtures, 'bad-shots', '.zdymak-check', 'duplicate-1.json'), 'utf8'));
+    const shots = [['title-open', 'open'], ['title-half-open', 'half-open'], ['title-open-again', 'open']];
+    fs.mkdirSync(path.join(dir, '.zdymak-check'));
+    for (const [name, posture] of shots) {
+      fs.copyFileSync(src, path.join(dir, `${name}.png`));
+      fs.writeFileSync(path.join(dir, '.zdymak-check', `${name}.json`), JSON.stringify({ ...facts, posture }));
+    }
+    const results = [];
+    for (const [name] of shots) results.push(await checkShot(path.join(dir, `${name}.png`), { text: false }));
+    await checkSet(results);
+    assert.deepEqual(results.map((r) => rules(r.refusals)), [[], [], ['duplicate']]);
+    assert.match(results[2].refusals[0].reason, /title-open\.png/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('the good-shot fixtures: no rule refuses them', async () => {
   const dir = path.join(fixtures, 'good-shots');
   const results = [];

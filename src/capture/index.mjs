@@ -932,7 +932,6 @@ async function captureAndroid(flags) {
   };
   const pkg = flags.package || (flags.component ? String(flags.component).split('/')[0] : null);
   const time = flags.time || DEMO_TIME;
-  const facts = () => androidFacts({ pkg, language: flags.language, time });
 
   // The display override goes on FIRST, demo mode second — and even that is not enough on its own.
   //
@@ -949,6 +948,7 @@ async function captureAndroid(flags) {
   // A foldable's posture first (it can change the screen: a closed book fold shows its outer one), then the turn,
   // read against the screen the posture left on, then the display override. Torn down in reverse.
   const posture = flags.posture !== undefined ? androidPostureOf(flags.posture, flags.hinge) : null;
+  const facts = () => androidFacts({ pkg, language: flags.language, time, posture: posture?.name });
   const orientation = flags.orientation !== undefined ? String(flags.orientation).toLowerCase() : null;
   if (orientation && flags.size) throw new Error('--orientation turns the screen and --size sets its shape; use one.');
   const folded = posture ? enterAndroidPosture(posture) : null;

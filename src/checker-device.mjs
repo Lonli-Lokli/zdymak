@@ -166,14 +166,15 @@ export function parseStatusInset(dump) {
   return inset;
 }
 
-/** Read an Android device at the moment of a shot. `pkg` is the app the shot is of. */
-export function androidFacts({ pkg, language, time }) {
+/** Read an Android device at the moment of a shot. `pkg` is the app the shot is of, `posture` a foldable's name for it, when one was set. */
+export function androidFacts({ pkg, language, time, posture }) {
   const windows = adb('dumpsys', 'window');
   const focus = parseAndroidFocus(windows);
   const density = parseWmDensity(adb('wm', 'density'));
   const locales = pkg ? parseAppLocales(adb('cmd', 'locale', 'get-app-locales', pkg)) : [];
   return {
     platform: 'android',
+    posture: posture || null,
     ...androidScreen(parseWmSize(adb('wm', 'size')), density),
     density,
     app: pkg || null,
@@ -205,6 +206,7 @@ export function iosFacts({ udid, bundle, language, time, posture }) {
   return {
     platform: 'ios',
     device,
+    posture: posture?.name || null,
     screen: iosScreen(device, posture),
     app: bundle || null,
     language: language || null,

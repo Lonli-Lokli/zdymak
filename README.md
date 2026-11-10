@@ -1377,7 +1377,7 @@ job or a release gate. It refuses, naming the shot and the reason:
 | `language` | the device or app in another language than the set's | the app's locale (Android), the script of the picture's words, English words on a non-English Latin set |
 | `motion` | a shot taken while the screen was still changing: over 1% of it changed in the second after the shot, or over the scene's own allowance (`--motion`) | the device, at capture |
 | `letterbox` | the app drawn at phone size inside a tablet or Chromebook window: bars of one colour on two opposite sides, each over 5% of the side, leaving a phone-shaped box (long side 1.6 times the short) in a shot that is not that shape and, where the shot's density is known, narrower than a phone (under 480 dp); asked only on a screen the system letterboxes on (see below) | the picture, on the device's screen |
-| `duplicate` | two scenes of one set that are the same picture: under 0.5% of the sampled pixels differ, in one folder at one size; the later shot is refused, naming the earlier | the set |
+| `duplicate` | two scenes of one set that are the same picture: under 0.5% of the sampled pixels differ, in one folder at one size and one posture (the one the shot's facts name, so a flip's open and half-open shots of a still screen are both kept); the later shot is refused, naming the earlier | the set |
 | `unreadable` | a file that is not a PNG this tool can decode | the picture |
 
 What the device says is read at capture time and kept beside the shot in `.zdymak-check/<name>.json` (a hidden folder
