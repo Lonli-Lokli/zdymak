@@ -1376,8 +1376,8 @@ job or a release gate. It refuses, naming the shot and the reason:
 | `status-bar` | a status bar not in demo mode: the real clock, a battery not full | demo mode allowed (Android), the simulator's override (iOS), the clock and battery in the status bar's strip (its inset where the facts carry it, else the top 6%) |
 | `language` | the device or app in another language than the set's | the app's locale (Android), the script of the picture's words, English words on a non-English Latin set |
 | `motion` | a shot taken while the screen was still changing: over 1% of it changed in the second after the shot, or over the scene's own allowance (`--motion`) | the device, at capture |
-| `letterbox` | the app drawn at phone size inside a tablet or Chromebook window: bars of one colour on two opposite sides, each over 5% of the side, leaving a phone-shaped box (long side 1.6 times the short) in a shot that is not that shape and, where the shot's density is known, narrower than a phone (under 480 dp); asked only on a screen the system letterboxes on (see below) | the picture, on the device's screen |
-| `duplicate` | two scenes of one set that are the same picture: under 0.5% of the sampled pixels differ, in one folder at one size and one posture (the one the shot's facts name, so a flip's open and half-open shots of a still screen are both kept); the later shot is refused, naming the earlier | the set |
+| `letterbox` | the app drawn at phone size inside a tablet or Chromebook window: bars of one colour on two opposite sides, each over 5% of the side, leaving a phone-shaped box (long side 1.6 times the short) and, where the shot's density is known, narrower than a phone (under 480 dp); asked only on a screen the system letterboxes on (see below) | the picture, on the device's screen |
+| `duplicate` | two scenes of one set that are the same picture: under 1% of the sampled pixels differ, in one folder at one size and one posture (the one the shot's facts name, so a flip's open and half-open shots of a still screen are both kept); the later shot is refused, naming the earlier | the set |
 | `unreadable` | a file that is not a PNG this tool can decode | the picture |
 
 What the device says is read at capture time and kept beside the shot in `.zdymak-check/<name>.json` (a hidden folder
@@ -1411,9 +1411,33 @@ thresholds `BLANK_COLOURS` and `BLANK_DOMINANCE`.
 A scene that moves by design (a clock, a falling piece, a looping animation) is given its own allowance with
 `capture --motion <state>=<share>,…` (a bare share is the default for every scene, `0.01` unless set). The motion,
 the letterbox and the duplicate thresholds are exported as `MOTION_STILL`, `LETTERBOX_BAR`, `LETTERBOX_BOX`,
-`LETTERBOX_SHOT`, `PHONE_SHORT_DP` and `DUPLICATE_LOOK`, the set check as `checkSet` and the bar finder as `letterboxOf`. The test
+`PHONE_SHORT_DP` and `DUPLICATE_LOOK`, the set check as `checkSet` and the bar finder as `letterboxOf`. The test
 fixtures in `scripts/fixtures/bad-shots` hold one known-bad shot per rule, each refused for its own rule
 (`node scripts/make-bad-shots.mjs` draws them again).
+
+How the motion, duplicate and letterbox numbers were measured: on a real 80-shot store run on iOS and Android,
+2026-11-10 (16 store targets, phones, folds, flips, tablets, a Chromebook window, iPads, 5 scenes each), read from
+the facts beside each capture and from the captures and finished shots themselves. Motion and duplicate are one
+measure (the share of every 4th pixel, every 4th row, that moved by more than 32 on a channel):
+
+| Measured | Value | Where |
+|---|---|---|
+| a still scene, a second after its shot (`motion`) | 0 in 79 shots, at most 0.0000028 (one sampled pixel) | a folding iPhone half open, its home screen |
+| the nearest two different scenes of one set, captures | 0.292 | a folding iPhone half open as a laptop |
+| the same, finished shots (shared frame and caption ground) | 0.096 | a book fold open |
+| the duplicate fixtures; the nearest two other fixtures | 0; 0.192 | `scripts/fixtures/bad-shots` |
+| the motion fixture; the still fixtures (stated in their facts) | 0.12; 0.004 | `scripts/fixtures` |
+
+- **`MOTION_STILL` 0.01**, kept: thousands of times over the still scenes, twelve times under the moving fixture
+  (the run had no moving scene), so a change over a hundredth of the screen in that second is refused.
+- **`DUPLICATE_LOOK` 0.01**, raised from 0.005: about ten times under the nearest finished pair, and equal to
+  `MOTION_STILL`, so a screen the motion rule calls still is the same picture to the duplicate rule.
+- **The shot's own shape is no longer asked** (it was: a shot 1.5 times as long as wide had no letterbox). The device's
+  screen and the box's width in dp do its work, and it let a phone-sized app on a 16:10 tablet held upright through.
+  On all 160 pictures `letterboxOf` gives the same verdict with that test and without it, with the density and without.
+
+Each margin is a judgement, not a measurement: the run bounds a threshold from one side or both, and the number sits
+well inside.
 
 On Android a state capture now force-stops the app before each state, as iOS terminates it, so each state starts cold
 and is compared with its own launch frame.

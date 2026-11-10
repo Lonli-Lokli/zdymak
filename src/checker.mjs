@@ -184,18 +184,24 @@ export function textRefusals(lines, { language, time = DEMO_TIME, strip: stripSh
 
 // ---------------------------------------------------------------- the picture's pixels
 
-// The three thresholds below are the check's first ones, kept: no source names a narrower system box or a bar colour
+// The two thresholds below are the check's first ones, kept: no source names a narrower system box or a bar colour
 // the systems keep to, and the bars that misled them were a phone's own (a folding iPhone turned, its margins dark
 // and light), which the device's screen now leaves out (checkShot).
+//
+// A third, a shot at least 1.5 times as long as wide had no letterbox, is gone: the device's screen (a phone is never
+// asked) and the box's width in dp ([PHONE_SHORT_DP]) took over its work, and it let a phone-sized app on a 16:10
+// tablet held upright (1.6) through unseen. Measured on a real 80-shot store run on iOS and Android, 2026-11-10 (16
+// store targets, phones, folds, flips, tablets, a Chromebook window, iPads, 5 scenes each, the 80 captures with their
+// facts and the 80 finished shots without them): letterboxOf gives the same verdict on all 160 with that test and
+// without it, with the density and without it. One picture reads as bars either way, a folding iPhone closed and
+// turned (a phone, so not asked).
 /** Each letterbox bar is at least this share of the side it stands on. */
 export const LETTERBOX_BAR = 0.05;
 /**
- * The box between the bars is phone-shaped: its long side at least this many times its short side ... A shape is all
+ * The box between the bars is phone-shaped: its long side at least this many times its short side. A shape is all
  * the picture knows; where the shot's density is known the box must also be narrower than a phone ([PHONE_SHORT_DP]).
  */
 export const LETTERBOX_BOX = 1.6;
-/** ... in a shot that is not itself that shape (a tablet, a Chromebook window, a phone turned the other way). */
-export const LETTERBOX_SHOT = 1.5;
 /** How far a bar's pixels may stray from its colour, per channel (compression, dithering). */
 const BAR_TOLERANCE = 8;
 
@@ -206,10 +212,9 @@ const near = (d, i, c) => Math.abs(d[i] - c[0]) <= BAR_TOLERANCE && Math.abs(d[i
  * an iPhone-only app on an iPad): `{ sides, bars: [a, b], box }` or null. Pure, on RGBA pixels. A bar is a run of
  * whole columns (or rows) of one colour from the edge; the status and navigation strips (top and bottom
  * [STATUS_STRIP_FALLBACK], deep enough for either) are left out, since the system draws them across the bars. Both bars must be wide, of one colour,
- * and leave a phone-shaped box in a shot that is not phone-shaped: a tablet layout that keeps a readable width
- * on a plain ground is wider than that, and a phone's upright shot never qualifies. A phone turned on its side
- * can (2034x1398 is 1.455 wide), and an app's plain margins there read as bars, so the picture alone cannot tell:
- * checkShot asks it only of a screen the system letterboxes on, or of one whose kind was not recorded.
+ * and leave a phone-shaped box: a tablet layout that keeps a readable width on a plain ground is wider than that. A
+ * phone's own shot with plain margins can qualify, upright or on its side (2034x1398), so the picture alone cannot
+ * tell: checkShot asks it only of a screen the system letterboxes on, or of one whose kind was not recorded.
  *
  * The shape alone also takes a layout's reading column on its own plain ground for a phone: a 560dp column in a
  * 1600x900dp window is 1.61 tall. `pxPerDp` (pxPerDpOf, from the shot's facts) settles it where it is known: a box
@@ -234,7 +239,7 @@ export function letterboxOf({ data, width: w, height: h }, { pxPerDp = null } = 
   const r = run(w - 1, -1, -1, column, (x) => colour(x, strip));
   if (l.n >= w * LETTERBOX_BAR && r.n >= w * LETTERBOX_BAR && same(l.c, r.c) && l.n + r.n < w) {
     const box = w - l.n - r.n;
-    if (h / box >= LETTERBOX_BOX && h / w < LETTERBOX_SHOT && phoneWide(box)) return { sides: 'left and right', bars: [l.n, r.n], box: [box, h], colour: l.c };
+    if (h / box >= LETTERBOX_BOX && phoneWide(box)) return { sides: 'left and right', bars: [l.n, r.n], box: [box, h], colour: l.c };
   }
   // Bars above and below: a phone on its side inside a taller screen. The strips count as part of the bars.
   const t = run(strip, 1, h, row, (y) => colour(0, y));
@@ -243,7 +248,7 @@ export function letterboxOf({ data, width: w, height: h }, { pxPerDp = null } = 
   const bottom = b.n ? b.n + strip : 0;
   if (top >= h * LETTERBOX_BAR && bottom >= h * LETTERBOX_BAR && same(t.c, b.c) && top + bottom < h) {
     const box = h - top - bottom;
-    if (w / box >= LETTERBOX_BOX && w / h < LETTERBOX_SHOT && phoneWide(box)) return { sides: 'top and bottom', bars: [top, bottom], box: [w, box], colour: t.c };
+    if (w / box >= LETTERBOX_BOX && phoneWide(box)) return { sides: 'top and bottom', bars: [top, bottom], box: [w, box], colour: t.c };
   }
   return null;
 }
@@ -257,8 +262,18 @@ export async function pixelsOf(file) {
   return { width: img.width, height: img.height, data: ctx.getImageData(0, 0, img.width, img.height).data };
 }
 
-/** Under this share of changed pixels (sampled as the launch check does), two scenes are the same picture. */
-export const DUPLICATE_LOOK = 0.005;
+/**
+ * Under this share of changed pixels (sampled as the launch check does), two scenes are the same picture.
+ *
+ * Measured with [sampleDifference] on a real 80-shot store run on iOS and Android, 2026-11-10 (16 store targets, 5
+ * scenes each): one screen against itself a second later (the capture's `motion`, the same measure) is 0 in 79 shots
+ * and at most 0.0000028, one sampled pixel; the two nearest different scenes of one set are 0.292 apart in the
+ * captures (a folding iPhone half open as a laptop) and 0.096 in the finished shots, where the frame and the caption
+ * ground are shared (a book fold open, the same two scenes). The duplicate fixtures measure 0, the nearest two other
+ * fixtures 0.192. Raised from 0.005 to sit about ten times under the nearest finished pair, a margin chosen by
+ * judgement, and to equal [MOTION_STILL], so a screen the motion rule calls still is the same picture here.
+ */
+export const DUPLICATE_LOOK = 0.01;
 
 /** Every 4th pixel's colour, the sample two shots are compared on. */
 function sampleOf({ data, width: w, height: h }) {

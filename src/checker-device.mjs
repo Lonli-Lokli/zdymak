@@ -253,7 +253,15 @@ export const primary = (tag) => {
  * A scene with no allowance of its own may change this share of the screen between its shot and a second shot taken
  * [MOTION_GAP_MS] later; more, and the shot was taken while the screen was still changing (a transition, a toast, a
  * scroll coming to rest). A scene that moves by design (a clock, a falling piece) is given its own allowance
- * (`--motion <state>=<share>`). The checker's own threshold, to be tuned on real store sets.
+ * (`--motion <state>=<share>`).
+ *
+ * Measured on a real 80-shot store run on iOS and Android, 2026-11-10 (16 store targets, phones, folds, flips,
+ * tablets, a Chromebook window, iPads, 5 scenes each, every scene still by design): 79 shots measured 0 and the
+ * highest 0.0000028, one sampled pixel of a folding iPhone's half-open home screen. The run had no moving scene; the
+ * motion fixture states 0.12 and the still fixtures 0.004. Kept at 0.01, thousands of times over the still scenes and
+ * twelve times under the moving fixture, a margin chosen by judgement so that a change over a hundredth of the
+ * screen in that second is refused, and equal to the duplicate rule's threshold (`DUPLICATE_LOOK`): a scene this
+ * still is the same picture a second later.
  */
 export const MOTION_STILL = 0.01;
 /** How long after the shot the second shot is taken. */

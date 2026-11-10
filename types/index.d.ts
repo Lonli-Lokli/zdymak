@@ -794,8 +794,6 @@ export declare const MOTION_STILL: number;
 export declare const LETTERBOX_BAR: number;
 /** The box between letterbox bars is at least this long against its short side. */
 export declare const LETTERBOX_BOX: number;
-/** A shot this long against its short side or longer is phone-shaped and has no letterbox. */
-export declare const LETTERBOX_SHOT: number;
 /** An Android screen this many dp across its smallest side or more is large, and the letterbox check is asked of it. */
 export declare const LARGE_SCREEN_DP: number;
 /** A phone's short side is under this many dp; a letterbox box at least this wide is a layout's column. */

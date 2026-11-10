@@ -220,9 +220,11 @@ test('the picture: letterbox bars, and the layouts that are not', () => {
   // A phone on its side in a portrait tablet, with the status strip drawn across the top bar.
   const sideways = pixels(300, 400, (x, y) => (y < 10 ? busy(x, y) : y >= 130 && y < 270 ? busy(x, y) : [40, 40, 40]));
   assert.equal(letterboxOf(sideways)?.sides, 'top and bottom');
-  // A readable-width column on a plain ground is wider than a phone; a phone's own shot with plain margins is phone-shaped.
+  // A readable-width column on a plain ground is wider than a phone.
   assert.equal(letterboxOf(pixels(400, 300, (x, y) => (x >= 80 && x < 320 ? busy(x, y) : [240, 240, 230]))), null);
-  assert.equal(letterboxOf(pixels(180, 390, (x, y) => (x >= 20 && x < 160 ? busy(x, y) : [240, 240, 230]))), null);
+  // A phone-shaped app on a 16:10 tablet held upright: the shot is as long as a phone's box, and still boxed.
+  const upright = pixels(200, 320, (x, y) => (x >= 26 && x < 174 ? busy(x, y) : [0, 0, 0]));
+  assert.equal(letterboxOf(upright)?.sides, 'left and right');
   // Bars of two colours are the app's own design, not the system's letterbox.
   assert.equal(letterboxOf(pixels(400, 300, (x, y) => (x < 130 ? [0, 0, 0] : x >= 270 ? [200, 0, 0] : busy(x, y)))), null);
   // Nothing at all is blank's to refuse, not a letterbox.
@@ -294,6 +296,10 @@ test('a phone turned on its side is never letterboxed: its own margins and a scr
     const r = await checkShot(pngOf(px, name), { facts: iosFactsOn('phone'), text: false });
     assert.deepEqual(rules(r.refusals), [], name);
   }
+  // Upright, a phone's own shot with plain margins either side reads as bars too, and is not asked either.
+  const upright = pixels(180, 390, (x, y) => (x >= 20 && x < 160 ? busy(x, y) : [240, 240, 230]));
+  assert.ok(letterboxOf(upright), 'upright: the picture alone reads as bars');
+  assert.deepEqual(rules((await checkShot(pngOf(upright, 'phone-upright'), { facts: iosFactsOn('phone'), text: false })).refusals), []);
 });
 
 test('a large screen keeps the letterbox check: an iPhone-only app on an iPad, and a shot whose screen is not known', async () => {
