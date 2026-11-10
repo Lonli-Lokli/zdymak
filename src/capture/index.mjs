@@ -403,6 +403,22 @@ export async function launchDifferences(states, waitMs) {
   return differences;
 }
 
+/**
+ * The launch check of a run, [launchDifferences], with `keepFrames()` called when it refuses, so the launch frames the
+ * shares were judged on stay beside the shots to be measured afterwards. Used by the iOS and the Android capture.
+ */
+export async function launchCheck(states, waitMs, keepFrames) {
+  try {
+    return await launchDifferences(states, waitMs);
+  } catch (e) {
+    keepFrames();
+    throw new Error(`${e.message}\n  The launch frames are kept beside the shots (.launch-<state>.png) to measure against them.`);
+  }
+}
+
+/** Whether the checker called any shot of `results` the launch screen: its frames are then kept, as on a launch refusal. */
+export const launchRefusedIn = (results) => results.some((r) => r.refusals.some((x) => x.rule === 'launch'));
+
 /** Remove the launch frames a run kept in `outDir` for [launchDifferences]. */
 function dropLaunchFrames(outDir) {
   for (const f of fs.readdirSync(outDir)) if (f.startsWith('.launch-') && f.endsWith('.png')) fs.rmSync(path.join(outDir, f), { force: true });
@@ -796,11 +812,9 @@ async function captureIos(flags) {
       console.log(`▸ ${shotTimes.length} shots of display ${on}, the slowest ${(Math.max(...shotTimes) / 1000).toFixed(1)} s`);
     }
     // The launch check is the run's, once every state is shot: what the launch screen looks like is learnt from them.
-    const differences = await launchDifferences(launches, readyWait * 1000).catch((e) => {
-      launchRefused = true;
-      throw new Error(`${e.message}\n  The launch frames are kept beside the shots (.launch-<state>.png) to measure against them.`);
-    });
+    const differences = await launchCheck(launches, readyWait * 1000, () => { launchRefused = true; });
     for (const [k, s] of shot.entries()) checked.push(await checkCaptured(s.out, { ...s.facts, launchDifference: differences[k] }, flags));
+    if (launchRefusedIn(checked)) launchRefused = true;
     await refuseShots(checked, flags);
     console.log(`Done → ${outDir}`);
     } finally {
@@ -970,6 +984,8 @@ async function captureAndroid(flags) {
   androidDemo(true, flags); // clean marketing status bar (Google convention)
   androidQuietCompat(); // no letterbox education dialog over the app
   const language = androidLanguage(flags); // per-app locale override; reset in the finally below
+  // A launch refusal keeps the launch frames, as on iOS, so the shares it judged can be measured from the files afterwards.
+  let launchRefused = false;
   try {
     // Full workflow: drive the app through screens via an intent-extra HANDLE (--component + --arg).
     if (flags.states) {
@@ -1011,8 +1027,9 @@ async function captureAndroid(flags) {
           console.log(`   ✓ ${st}${suffix}.png`);
           shot.push({ out, facts: { ...facts(), state: st, launchLook: LAUNCH_LOOK, motion, motionAllowed: motionAllowance(flags.motion, st) } });
         }
-        const differences = await launchDifferences(launches, readyWait * 1000);
+        const differences = await launchCheck(launches, readyWait * 1000, () => { launchRefused = true; });
         for (const [k, s] of shot.entries()) checked.push(await checkCaptured(s.out, { ...s.facts, launchDifference: differences[k] }, flags));
+        if (launchRefusedIn(checked)) launchRefused = true;
         await refuseShots(checked, flags);
       }
       console.log(`Done → ${outDir}`);
@@ -1032,7 +1049,7 @@ async function captureAndroid(flags) {
       await refuseShots([await checkCaptured(out, { ...facts(), motion, motionAllowed: motionAllowance(flags.motion, scene) }, flags)], flags);
     }
   } finally {
-    dropLaunchFrames(outDir);
+    if (!launchRefused) dropLaunchFrames(outDir);
     // Teardown in reverse: leave demo mode while the override is still on, THEN restore the display.
     // Resetting size first restarts SystemUI and takes demo mode with it, so the `exit` broadcast
     // lands on a bar that never entered — harmless today, but it leaves the emulator's demo state

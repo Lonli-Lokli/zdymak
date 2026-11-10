@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createCanvas } from '@napi-rs/canvas';
 import { fileURLToPath } from 'node:url';
-import { LAUNCH_LOOK, launchChange, launchDifferences, screenDifference } from '../src/capture/index.mjs';
+import { LAUNCH_LOOK, launchChange, launchCheck, launchDifferences, launchRefusedIn, screenDifference } from '../src/capture/index.mjs';
 
 // Written by scripts/make-bad-shots.mjs.
 const frames = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'launch');
@@ -94,6 +94,25 @@ test('a launch screen that stayed is refused, wherever it is in the run', async 
 test('a frame taken for the scene is refused once the run learns it is the launch screen', async () => {
   const early = { state: 'home', frame: launch2, moved: 0.01, atOnce: true };
   await assert.rejects(launchDifferences([early, { state: 'levels', frame: launch1, moved: 0.6, atOnce: false }], 30000), /home: /);
+});
+
+test('a launch refusal keeps the launch frames on iOS and Android alike, the run\'s and the checker\'s', async () => {
+  let kept = 0;
+  const stayed = { state: 'daily', frame: launch2, moved: 0.01, atOnce: false };
+  const left = { state: 'home', frame: launch1, moved: 0.6, atOnce: false };
+  await assert.rejects(launchCheck([left, stayed], 30000, () => { kept++; }), /daily: [\s\S]*launch frames are kept beside the shots/);
+  assert.equal(kept, 1);
+  assert.deepEqual(await launchCheck([left], 30000, () => { kept++; }), [0.6]);
+  assert.equal(kept, 1, 'a run the launch rule passes drops its frames');
+  assert.equal(launchRefusedIn([{ refusals: [] }, { refusals: [{ rule: 'launch', reason: '' }] }]), true);
+  assert.equal(launchRefusedIn([{ refusals: [{ rule: 'motion', reason: '' }] }]), false);
+  // Both capture paths drop the frames only when no launch refusal fired, and judge the run through launchCheck.
+  const src = fs.readFileSync(new URL('../src/capture/index.mjs', import.meta.url), 'utf8');
+  const drops = src.match(/(?<!function )dropLaunchFrames\(outDir\)/g) || [];
+  assert.equal(drops.length, 2, 'the iOS and the Android state captures');
+  assert.equal((src.match(/if \(!launchRefused\) dropLaunchFrames\(outDir\)/g) || []).length, drops.length);
+  assert.equal((src.match(/await launchCheck\(launches,/g) || []).length, 2);
+  assert.equal((src.match(/if \(launchRefusedIn\(checked\)\) launchRefused = true;/g) || []).length, 2);
 });
 
 test('with no launch screen seen to give way, a shot that never changed is refused', async () => {
