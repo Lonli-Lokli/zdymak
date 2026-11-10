@@ -10,8 +10,9 @@ import { createCanvas } from '@napi-rs/canvas';
 import {
   MOTION_STILL, STATUS_STRIP_FALLBACK, androidScreen, checkSet, checkShot, factRefusals, iosScreen, letterboxOf, motionAllowance,
   parseAndroidFocus, parseAndroidOverlays, parseAppLocales, parseIosDeviceType, parseIosRunning, parseKeyboardShown, parseStatusInset,
-  parseWmDensity, scriptOf, statusStripOf, textRefusals,
+  parseIosStatusTime, parseWmDensity, scriptOf, statusStripOf, textRefusals,
 } from '../src/checker.mjs';
+import { STATUS_BAR_KEPT, iosStatusBarOf } from '../src/checker-device.mjs';
 
 const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
@@ -89,6 +90,24 @@ test('iOS: the app not running, and a status bar without the override', () => {
   assert.deepEqual(factRefusals(ios), []);
   assert.deepEqual(rules(factRefusals({ ...ios, running: false })), ['wrong-app']);
   assert.deepEqual(rules(factRefusals({ ...ios, statusBar: '' })), ['status-bar']);
+});
+
+test('iOS: the status bar override\'s time is read from either listing form, and the listing is kept as printed', () => {
+  // The two forms `simctl status_bar <udid> list` is said to print across Xcode versions; tonight's capture keeps the
+  // pinned Xcode's own listing in the facts (statusBar), where its real form can be read.
+  const colon = 'Current Status Bar Overrides:\n=============================\nTime: 9:41\nDataNetworkType: wifi\nBatteryLevel: 100\n';
+  const equals = 'Current status bar overrides:\n  time=9:41 dataNetwork=wifi batteryState=charged batteryLevel=100\n';
+  assert.equal(parseIosStatusTime(colon), '9:41');
+  assert.equal(parseIosStatusTime(equals), '9:41');
+  assert.equal(parseIosStatusTime('Current Status Bar Overrides:\n=============================\n'), null);
+  const ios = { platform: 'ios', app: 'com.example.app', time: '9:41', running: true };
+  for (const statusBar of [colon, equals, colon.replace('9:41', '09:41')]) assert.deepEqual(factRefusals({ ...ios, statusBar }), [], statusBar);
+  for (const statusBar of [colon.replace('9:41', '19:41'), equals.replace('9:41', '10:30'), 'Current Status Bar Overrides:\n']) {
+    assert.deepEqual(rules(factRefusals({ ...ios, statusBar })), ['status-bar'], statusBar);
+  }
+  assert.equal(iosStatusBarOf({ status: 0, stdout: colon }), colon);
+  assert.equal(iosStatusBarOf({ status: 0, stdout: 'x'.repeat(STATUS_BAR_KEPT * 3) }).length, STATUS_BAR_KEPT);
+  assert.equal(iosStatusBarOf({ status: 1, stdout: '' }), null);
 });
 
 test('the picture: dialogs, a keyboard, a home screen, the real clock and battery', () => {

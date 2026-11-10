@@ -197,6 +197,30 @@ export function parseIosRunning(list, bundle) {
   return /^\s*\d+\s/.test(line);
 }
 
+/**
+ * The time the status bar is overridden to, from `simctl status_bar <udid> list`: a line such as `Time: 9:41` or a
+ * field such as `time=9:41` (the listing's form differs by Xcode version), or null when the listing names none.
+ */
+export function parseIosStatusTime(list) {
+  const m = /(?:^|[\s,;{])time\s*[:=]\s*["']?(\d{1,2}:\d{2})\b/im.exec(String(list || ''));
+  return m ? m[1] : null;
+}
+
+/** How much of the status bar listing the facts keep: the whole of a real one, with room to spare. */
+export const STATUS_BAR_KEPT = 2000;
+
+/** The status bar listing as the facts keep it: as printed, cut at [STATUS_BAR_KEPT]; null when the command failed. */
+export function iosStatusBarOf(result) {
+  return result?.status === 0 ? String(result.stdout || '').slice(0, STATUS_BAR_KEPT) : null;
+}
+
+/** The same clock, a leading zero aside: `09:41` is `9:41`. */
+const sameClock = (a, b) => {
+  const [ah, am] = String(a).split(':').map(Number);
+  const [bh, bm] = String(b).split(':').map(Number);
+  return ah === bh && am === bm;
+};
+
 /** Read an iOS simulator at the moment of a shot. `posture` is a folding iPhone's (fold.mjs), when one was set. */
 export function iosFacts({ udid, bundle, language, time, posture }) {
   const run = (args) => spawnSync('xcrun', ['simctl', ...args], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
@@ -212,7 +236,7 @@ export function iosFacts({ udid, bundle, language, time, posture }) {
     language: language || null,
     time: time || DEMO_TIME,
     running: bundle && list.status === 0 ? parseIosRunning(list.stdout, bundle) : null,
-    statusBar: bar.status === 0 ? bar.stdout : null,
+    statusBar: iosStatusBarOf(bar),
   };
 }
 
@@ -288,8 +312,11 @@ export function factRefusals(f) {
     if (f.app && f.running === false) {
       out.push({ rule: 'wrong-app', reason: `the device: ${f.app} is not running (it crashed or quit), so the home screen or another app is in front` });
     }
-    if (typeof f.statusBar === 'string' && !f.statusBar.includes(f.time || DEMO_TIME)) {
-      out.push({ rule: 'status-bar', reason: `the device: the status bar is not overridden to ${f.time || DEMO_TIME}, so it shows the real clock and battery` });
+    const want = f.time || DEMO_TIME;
+    const time = typeof f.statusBar === 'string' ? parseIosStatusTime(f.statusBar) : null;
+    // A listing in a form the parser does not know still passes when it shows the pinned time: no false refusal.
+    if (typeof f.statusBar === 'string' && (time ? !sameClock(time, want) : !f.statusBar.includes(want))) {
+      out.push({ rule: 'status-bar', reason: `the device: the status bar is not overridden to ${want}${time ? ` (it is to ${time})` : ''}, so it shows the real clock and battery` });
     }
   }
   return out;

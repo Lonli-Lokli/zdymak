@@ -29,7 +29,7 @@ export { OCR_CONFIDENCE, readText } from './ocr.mjs';
 
 export {
   DEMO_TIME, LARGE_SCREEN_DP, MOTION_GAP_MS, MOTION_STILL, PHONE_SHORT_DP, SCREENS, androidFacts, androidScreen, factRefusals, factsPath, iosFacts,
-  iosScreen, parseAndroidFocus, parseAndroidOverlays, parseAppLocales, parseIosDeviceType, parseIosRunning, parseKeyboardShown, parseStatusInset,
+  iosScreen, parseAndroidFocus, parseAndroidOverlays, parseAppLocales, parseIosDeviceType, parseIosRunning, parseIosStatusTime, parseKeyboardShown, parseStatusInset,
   parseWmDensity, pxPerDpOf, readFacts, writeFacts,
 } from './checker-device.mjs';
 
