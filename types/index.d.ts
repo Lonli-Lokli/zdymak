@@ -177,6 +177,42 @@ export declare function openIosSim(opts?: { udid?: string; device?: string; app?
 /** Shut down the simulator only if `openIosSim` booted it (deleting a device it created); `keep` leaves it up. True when it shut one down. */
 export declare function closeIosSim(sim: IosSim, opts?: { keep?: boolean }): boolean;
 
+/** The iPhone Duo's postures as `--posture` names them. */
+export type DuoPostureName =
+  | 'closed'
+  | 'closed-turned'
+  | 'closed-turned-right'
+  | 'open'
+  | 'open-upright'
+  | 'half-book'
+  | 'half-laptop';
+/** A posture's hinge angle, the device orientation, which screen is on, and whether a capture of it is wide. */
+export interface DuoPostureShape {
+  hinge: number;
+  orientation: 'portrait' | 'landscape-left' | 'landscape-right';
+  screen: 'outer' | 'inner';
+  wide: boolean;
+}
+/** A posture as `postureOf` returns it, ready for `enterPosture` and `shootPosture`. */
+export interface DuoPosture extends DuoPostureShape {
+  name: DuoPostureName;
+}
+/** Every posture of the iPhone Duo, by name. */
+export declare const POSTURES: Record<DuoPostureName, DuoPostureShape>;
+/** The default hinge angle of a half-open posture, in degrees. */
+export declare const HALF_OPEN: number;
+/** The posture a name gives, with `hinge` (35 to 130) moving a half-open one. Throws on an unknown name or angle. */
+export declare function postureOf(name: DuoPostureName | (string & {}), hinge?: number | string): DuoPosture;
+/**
+ * Put the iPhone Duo simulator `udid` (Xcode 27.1+) in a posture, closed first and opened as a hand does, the event
+ * Xcode's Device Hub sends. Returns the id of the display that is on; throws when the screen that should be on is not.
+ */
+export declare function enterPosture(udid: string, posture: DuoPosture): string;
+/** Hand the simulator back closed and upright, the way it boots. Never throws. */
+export declare function leavePosture(udid: string): void;
+/** Screenshot the screen that is on to `file`; throws when the shot's shape says the posture did not take. */
+export declare function shootPosture(udid: string, posture: DuoPosture, file: string): void;
+
 // ─── Config ─────────────────────────────────────────────────────────────────────────────────────
 
 /** Ken-Burns motion applied to a scene. Omit and zdymak rotates through a varied default sequence. */

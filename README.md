@@ -919,6 +919,21 @@ const sim = openIosSim({ device: 'iPhone 18 Pro Max', app: 'build/Debug-iphonesi
 try { /* simctl launch sim.udid sim.bundle … */ } finally { closeIosSim(sim); }
 ```
 
+A script that holds the iPhone Duo in each [posture](#--posture--every-way-an-iphone-duo-is-held-ios) itself gets
+`--posture`'s helpers too: `postureOf(name, hinge?)` gives a posture (`POSTURES` lists them), `enterPosture(udid,
+posture)` folds and turns the phone into it, `shootPosture(udid, posture, file)` photographs the screen that is on
+and refuses a shot of the wrong shape, and `leavePosture(udid)` hands the phone back closed and upright.
+
+```js
+import { openIosSim, closeIosSim, postureOf, enterPosture, shootPosture, leavePosture } from 'zdymak';
+const sim = openIosSim({ device: 'iPhone Duo', app: 'build/Debug-iphonesimulator/App.app' });
+try {
+  const posture = postureOf('half-laptop');
+  enterPosture(sim.udid, posture);
+  shootPosture(sim.udid, posture, 'shots/half-laptop.png');
+} finally { leavePosture(sim.udid); closeIosSim(sim); }
+```
+
 `zdymak specs` lists every image target and its exact dimensions. A device that only ships iPhone simply
 omits the others — that's the "use only part of it" contract.
 

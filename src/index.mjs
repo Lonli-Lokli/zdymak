@@ -19,6 +19,7 @@ export { buildDeviceScreenshots, localizeScenes, untranslatedScenes, localizeBra
 export { buildFeatureGraphic, buildCreativeGraphic, creativeLayout } from './graphic.mjs';
 export { renderStill } from './still.mjs';
 export { openIosSim, closeIosSim } from './capture/simulator.mjs';
+export { POSTURES, HALF_OPEN, postureOf, enterPosture, leavePosture, shootPosture } from './capture/fold.mjs';
 export { rgbPngBuffer } from './png.mjs';
 export { loadConfig } from './config.mjs';
 export { registerFonts } from './fonts.mjs';
