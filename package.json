@@ -40,7 +40,7 @@
     "check:fold": "node --test scripts/fold.test.mjs",
     "check:exports": "node --test scripts/exports.test.mjs",
     "check:fold3d": "node --test scripts/fold3d.test.mjs",
-    "check:captions": "node --test scripts/captions.test.mjs scripts/launch-look.test.mjs"
+    "check:captions": "node --test scripts/captions.test.mjs scripts/launch-look.test.mjs scripts/tagline.test.mjs"
   },
   "engines": {
     "node": ">=18"
