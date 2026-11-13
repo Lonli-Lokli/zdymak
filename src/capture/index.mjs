@@ -168,13 +168,14 @@ async function awaitSimulatorWindow() {
  * framebuffers is better than any fixed sleep here: it is as fast as the device is, and it does not
  * silently become too short on a slower machine or a heavier screen.
  */
-async function settleFrame(udid, outDir, maxMs = 9000) {
+async function settleFrame(udid, outDir, maxMs = 9000, display = []) {
   const probe = path.join(outDir, '.settle-probe.png');
   const t0 = Date.now();
   let last = null;
   try {
     while (Date.now() - t0 < maxMs) {
-      sh('xcrun', ['simctl', 'io', udid, 'screenshot', probe]);
+      // A folding phone has two displays, and simctl refuses a screenshot that names neither.
+      sh('xcrun', ['simctl', 'io', udid, 'screenshot', ...display, probe]);
       const now = fs.readFileSync(probe);
       if (last && last.equals(now)) return;
       last = now;
@@ -498,7 +499,7 @@ async function captureIos(flags) {
           if (waited > 0) {
             // It drew only now: let it come to rest, then take the shot again.
             console.log(`   … ${st} drew ${(waited / 1000).toFixed(1)} s after the settle`);
-            await settleFrame(udid, outDir);
+            await settleFrame(udid, outDir, 9000, posture ? [`--display=${postureDisplay(displays(udid), posture)}`] : []);
             pinStatusBar();
             await sleep(500);
             shoot(out);
