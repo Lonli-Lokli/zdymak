@@ -244,14 +244,23 @@ from the capture's own aspect, so a landscape screen already yields a landscape 
 
 Two things worth knowing, because both fail by producing a perfectly valid PNG:
 
-- **`simctl` cannot rotate**, and its screenshots ignore rotation. Orientation lives in the Simulator
-  *app*, so this drives its Device ▸ Orientation menu, which needs the terminal to have
-  **System Settings ▸ Privacy & Security ▸ Accessibility**. The framebuffer then comes back
-  portrait-shaped with the interface lying on its side; zdymak stands it back up.
+- **`simctl` cannot rotate**, and its screenshots ignore rotation. On Xcode 27 zdymak turns the device
+  with `xcrun devicectl device orientation set --device <udid>`, aimed at that simulator alone. On Xcode
+  26 and before orientation lives in the Simulator *app*, so it drives its Device ▸ Orientation menu,
+  which needs the terminal to have **System Settings ▸ Privacy & Security ▸ Accessibility**; that menu
+  acts on the window in front, so zdymak first raises the window titled with the device's name, which
+  matters when another simulator is booted beside it. The framebuffer then comes back portrait-shaped
+  with the interface lying on its side; zdymak stands it back up.
 - **iOS refuses an orientation the app does not declare**, and on iPad the key it reads is
   `UISupportedInterfaceOrientations~ipad`, not the plain one. Since every failure here leaves the
   device where it was — and would hand you a full set of good *portrait* screenshots filed as
   landscape — the turn is verified, and a device that did not move is an error, not a warning.
+  A turn asked for while a simulator is still finishing its boot can be dropped, so an unmoved device
+  is asked once more, from portrait, before the error; the error names any other simulator that was
+  booted at the time.
+
+A simulator that was already running, already turned, is fine: the turn starts from portrait, and the
+capture puts it back to portrait at the end, `--keep` or not.
 
 On **Android** there is no flag, because `--size` already does it better: relayouting to `1600x2560`
 gives the app a real upright tablet (800×1280dp at density 320), while rotating a 16:9 landscape
@@ -374,6 +383,11 @@ a simulator this run booted is shut down, and a throwaway device it created is d
 `finally`, so a failed build can't strand a booted sim (~1.7 GB resident) with a faked status bar. A
 simulator you already had running is left exactly as it was. On Android, SystemUI demo mode is switched
 back off. Pass **`--keep`** to skip teardown when you want to poke at the device afterwards.
+
+So a script that runs several captures on one device (every locale, both orientations) should boot that
+device itself before the first, or under whatever keeps a device up between jobs: each capture then finds
+it running and leaves it running, and the script shuts it down once at the end. `--keep` is for looking at
+the device, not for chaining captures: a simulator a run booted and kept has nobody left to shut it down.
 
 It does **not** build your app for Android or web — that's your toolchain; on iOS `--build` will do it.
 And a note on macOS: there is deliberately no `--platform macos` capture, because reading a specific
@@ -903,6 +917,46 @@ delete those.
 
 `--configuration <name>` (with `--build`) builds that Xcode configuration instead of `Debug`, for the build, the
 build-settings lookup and the install alike: any configuration the scheme defines works, such as `--configuration Release` or a Release-like one made for screenshots.
+
+**One build for a set of captures** (iOS `capture`): `--app-out <file>` (with `--build`) writes the built app's
+path and a newline to `<file>`, and every `--build` run prints it as `▸ app: <path>`. The other captures of the
+set install that app with **`--app <path.app>`** instead of building again: no xcodebuild, the simulator booted
+only if it is not running, the app installed over any older copy. `--bundle` may be left out with `--app`: the
+bundle id is read from the app's `Info.plist`, and a `--bundle` that names another app is an error. `--app` and
+`--build` are one or the other, and `--app` needs `--states`. A simulator build runs on any simulator of the same
+architecture, so the app built for an iPhone also installs on an iPad.
+
+```sh
+zdymak capture --platform ios --arg -screen --states a,b,c --device 'iPhone 18 Pro Max' --out shots/iphone \
+  --build --project App.xcodeproj --scheme App --app-out build/app-path.txt
+zdymak capture --platform ios --arg -screen --states a,b,c --device 'iPad Pro 13-inch (M5)' --out shots/ipad \
+  --app "$(cat build/app-path.txt)"
+```
+
+A script that drives the app itself rather than through `--states` gets the same two halves from the package:
+`openIosSim({ udid?, device?, app?, bundle? })` finds the simulator as `capture` does, boots it only when it is not
+running and installs the app; `closeIosSim(sim, { keep? })` shuts it down only if `openIosSim` booted it.
+
+```js
+import { openIosSim, closeIosSim } from 'zdymak';
+const sim = openIosSim({ device: 'iPhone 18 Pro Max', app: 'build/Debug-iphonesimulator/App.app' });
+try { /* simctl launch sim.udid sim.bundle … */ } finally { closeIosSim(sim); }
+```
+
+A script that holds the iPhone Duo in each [posture](#--posture--every-way-an-iphone-duo-is-held-ios) itself gets
+`--posture`'s helpers too: `postureOf(name, hinge?)` gives a posture (`POSTURES` lists them), `enterPosture(udid,
+posture)` folds and turns the phone into it, `shootPosture(udid, posture, file)` photographs the screen that is on
+and refuses a shot of the wrong shape, and `leavePosture(udid)` hands the phone back closed and upright.
+
+```js
+import { openIosSim, closeIosSim, postureOf, enterPosture, shootPosture, leavePosture } from 'zdymak';
+const sim = openIosSim({ device: 'iPhone Duo', app: 'build/Debug-iphonesimulator/App.app' });
+try {
+  const posture = postureOf('half-laptop');
+  enterPosture(sim.udid, posture);
+  shootPosture(sim.udid, posture, 'shots/half-laptop.png');
+} finally { leavePosture(sim.udid); closeIosSim(sim); }
+```
 
 `zdymak specs` lists every image target and its exact dimensions. A device that only ships iPhone simply
 omits the others — that's the "use only part of it" contract.

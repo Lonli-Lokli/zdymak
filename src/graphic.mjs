@@ -42,10 +42,14 @@ function ground(theme) {
   };
 }
 
-/** Split a tagline into ≤2 lines (on the first sentence break, else the whole thing). */
-function splitTagline(t) {
+/**
+ * Split a tagline into ≤2 lines (on the first sentence break, else the whole thing). A sentence ends with a
+ * Latin, Devanagari or Bengali (।), Urdu (۔) or Arabic (؟) stop followed by a space, or with a Chinese or
+ * Japanese stop (。！？), which takes no space after it.
+ */
+export function splitTagline(t) {
   if (!t) return ['', ''];
-  const m = t.match(/^(.*?[.!?])\s+(.*)$/);
+  const m = t.match(/^(.*?(?:[.!?।۔؟](?=\s)|[。！？]))\s*(\S.*)$/u);
   return m ? [m[1], m[2]] : [t, ''];
 }
 

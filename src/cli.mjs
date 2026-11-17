@@ -436,7 +436,8 @@ Usage:
   zdymak reject   <review dir> <id…>|--all
   zdymak specs
   zdymak capture  --platform ios --bundle <id> --arg <handle> --states <a,b,c> [--suffix -light]
-                  [--build --project <.xcodeproj> --scheme <name> [--configuration <name>] [--derived-data <dir>]] [--device <sim>] [--out <dir>] [--clean] [--keep]
+                  [--build --project <.xcodeproj> --scheme <name> [--configuration <name>] [--derived-data <dir>] [--app-out <file>]
+                   | --app <path.app>] [--device <sim>] [--out <dir>] [--clean] [--keep]
                   [--orientation portrait|landscape-left|landscape-right]
                   [--motion <share>|<state>=<share>,…]   # how much a scene may still move a second after its shot (default 0.01)
                   [--posture closed|closed-turned|closed-turned-right|open|open-upright|half-book|half-laptop [--hinge <deg>]]
@@ -447,9 +448,10 @@ Usage:
                   # "screenshots --locale" only translates the CAPTION — without this the picture under
                   # it stays in whatever language the device was in. --applelocale overrides the derived
                   # formatting locale (default: the tag with "-" as "_").
-                  # --orientation turns the DEVICE (via the Simulator's own menu — simctl has no such
-                  # command) and stands the framebuffer back up, since simctl's ignores rotation. It
-                  # fails loudly if the device does not actually turn; the usual cause is the app's
+                  # --orientation turns the DEVICE (Xcode 27: devicectl, aimed at its udid; Xcode 26 and before:
+                  # the Simulator's own menu, on the device's own window — simctl has no such command) and
+                  # stands the framebuffer back up, since simctl's ignores rotation. A device that did not
+                  # turn is asked once more, then it fails loudly; the usual cause is the app's
                   # Info.plist, and on iPad the key read is UISupportedInterfaceOrientations~ipad.
                   # --posture folds and turns an iPhone Duo simulator (Xcode 27.1+) with the events Device Hub sends
                   # (vendored duoctl helper, compiled on first use) and photographs the screen that is on. A
@@ -478,6 +480,9 @@ Defaults: --config ${DEFAULT_CONFIG}. Needs ffmpeg on PATH (or $FFMPEG).
 --build: iOS builds into Xcode's own DerivedData for the project (one per repo, shared with archives); pin another
 folder with --derived-data <dir>. --configuration <name> builds that Xcode configuration (default Debug;
 any configuration the scheme defines, such as --configuration Release). Older versions left a .dd build in every output folder: delete those.
+--app-out <file> (with --build) writes the built app's path to <file>; --app <path.app> installs that app instead of
+building, so a set of captures builds once (the bundle id is read from the app; --bundle, if given, must match).
+A simulator this run did not boot is left running; --keep also leaves one it booted.
 --clean: wipe the output folder first (capture clears stale PNGs and MOVs, never subfolders) — so the
 folder ends up holding ONLY this run's assets, never a stale screenshot from a removed target/scene.
 README.md documents the config (brand, scenes, targets, theme, music, devices, middleware); SKILL.md is for agents.

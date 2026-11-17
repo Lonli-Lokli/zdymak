@@ -8,6 +8,13 @@ import {
   buildDeviceScreenshots,
   IMAGE_TARGETS,
   videoTarget,
+  openIosSim,
+  closeIosSim,
+  postureOf,
+  enterPosture,
+  leavePosture,
+  shootPosture,
+  POSTURES,
   type Config,
   type ResolvedConfig,
   type ImageTargetId,
@@ -141,3 +148,21 @@ async function programmatic(): Promise<void> {
 }
 
 void programmatic;
+
+// A script driving the iPhone Duo itself, posture by posture.
+function duo(): void {
+  const sim = openIosSim({ device: 'iPhone Duo', app: 'build/App.app' });
+  try {
+    for (const name of Object.keys(POSTURES)) {
+      const posture = postureOf(name);
+      const display: string = enterPosture(sim.udid, posture);
+      shootPosture(sim.udid, posture, `shots/${posture.name}-${display}.png`);
+    }
+    console.log(postureOf('half-laptop', 95).hinge);
+  } finally {
+    leavePosture(sim.udid);
+    closeIosSim(sim);
+  }
+}
+
+void duo;

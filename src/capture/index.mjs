@@ -32,6 +32,7 @@ import {
   displays, enterPosture, iosLaunchReady, launchApp, leavePosture, postureDisplay, postureOf, screenshotArgs, shootDisplay, shootPosture, shotTimes,
 } from './fold.mjs';
 import { androidPostureOf, enterAndroidPosture, leaveAndroidPosture, pngFromScreencap, shapeMatches, turnAndroid } from './android-fold.mjs';
+import { bootedSims, provenTurn, raiseSimulatorWindow, recordBuiltApp, resolveIosSim, withPrebuiltApp } from './simulator.mjs';
 
 /** Flatten over black and rewrite as a NO-ALPHA RGB PNG (App Store & Play reject alpha on screenshots). */
 async function stripAlpha(file) {
@@ -51,7 +52,6 @@ function sh(cmd, args, opts = {}) {
 }
 const out2 = (cmd, args) => (spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).stdout || '');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const udidRe = /\(([0-9A-Fa-f-]{36})\)/;
 
 /* ── Capturing in a LANGUAGE other than the device's ───────────────────────────────────────────
  *
@@ -452,6 +452,8 @@ async function setSimOrientation(udid, orientation) {
     return;
   }
   await awaitSimulatorWindow();
+  // The menu acts on the window in front: with another simulator booted, that may not be this one.
+  raiseSimulatorWindow(udid);
   const r = spawnSync('osascript', [
     '-e', 'tell application "Simulator" to activate',
     '-e', 'delay 1',
@@ -475,26 +477,24 @@ async function setSimOrientation(udid, orientation) {
  * a complete set of perfectly valid PORTRAIT screenshots filed as landscape. That is this pipeline's
  * recurring failure shape: an asset wrong in a way nothing downstream can see. So the device is
  * driven to portrait first, then to the target, and the two framebuffers compared. Two orientations
- * of a real screen never match byte for byte.
+ * of a real screen never match byte for byte. An unmoved device is asked once more before it is an
+ * error (`provenTurn`): a turn asked for while a simulator finishes its boot can be dropped.
  */
 async function rotateSim(udid, orientation, outDir) {
   if (orientation === 'portrait') { await setSimOrientation(udid, 'portrait'); await settleFrame(udid, outDir); return; }
   const probe = path.join(outDir, '.orientation-probe.png');
   try {
-    await setSimOrientation(udid, 'portrait');
-    await settleFrame(udid, outDir);
-    sh('xcrun', ['simctl', 'io', udid, 'screenshot', probe]);
-    const before = fs.readFileSync(probe);
-    await setSimOrientation(udid, orientation);
-    await settleFrame(udid, outDir);
-    sh('xcrun', ['simctl', 'io', udid, 'screenshot', probe]);
-    if (before.equals(fs.readFileSync(probe))) {
-      throw new Error(
-        `the simulator did not turn — still portrait after asking for ${orientation}.\n`
-        + '  The usual cause is the APP, not the tooling: iOS refuses an orientation the Info.plist does\n'
-        + '  not list, and on iPad the key it reads is UISupportedInterfaceOrientations~ipad.',
-      );
-    }
+    await provenTurn({
+      orientation,
+      toPortrait: () => setSimOrientation(udid, 'portrait'),
+      toTarget: () => setSimOrientation(udid, orientation),
+      frame: async () => {
+        await settleFrame(udid, outDir);
+        sh('xcrun', ['simctl', 'io', udid, 'screenshot', probe]);
+        return fs.readFileSync(probe);
+      },
+      others: () => bootedSims(out2('xcrun', ['simctl', 'list', 'devices', 'booted'])).filter((s) => s.udid !== udid).map((s) => s.name),
+    });
   } finally {
     fs.rmSync(probe, { force: true });
   }
@@ -525,70 +525,6 @@ async function uprightCapture(file, orientation) {
   }
   ctx.drawImage(img, 0, 0);
   fs.writeFileSync(file, rgbPngBuffer(c));
-}
-
-/**
- * The UDID of the simulator named exactly `name` on the NEWEST runtime that has one. Installing a runtime gives
- * every model a second device of the same name, and simctl lists runtimes oldest first, so the first match was the
- * older iOS: a capture that should be on iOS 27 quietly ran on 26. Exact, because "iPhone 18 Pro" is a prefix of
- * "iPhone 18 Pro Max".
- */
-function newestSimNamed(name) {
-  let runtime = [];
-  let best = null;
-  for (const line of out2('xcrun', ['simctl', 'list', 'devices', 'available']).split('\n')) {
-    const header = line.match(/^-- \S+ ([\d.]+) --/);
-    if (header) {
-      runtime = header[1].split('.').map(Number);
-      continue;
-    }
-    const udid = line.trim().startsWith(`${name} (`) ? line.match(udidRe)?.[1] : null;
-    if (udid && (!best || compareVersions(runtime, best.runtime) > 0)) best = { udid, runtime };
-  }
-  return best?.udid ?? null;
-}
-
-const compareVersions = (a, b) => {
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const d = (a[i] ?? 0) - (b[i] ?? 0);
-    if (d) return d;
-  }
-  return 0;
-};
-
-/**
- * Find (or create) the iOS simulator a capture runs on, WITHOUT booting it: prefers --udid, then an already-booted
- * sim, then a device matching --device (default iPhone 18 Pro Max), creating one if needed. Returns
- * `{ udid, booted, created }` — the two booleans are the TEARDOWN receipt: they say what this process changes
- * (`booted`: whether it boots the sim, in `startIosSim`), so the cleanup can undo exactly that and leave a
- * simulator the user already had running exactly as they left it.
- *
- * Booting is a separate step so that `--build` runs first: a booted simulator holds ~1.7 GB, and beside a build
- * (Xcode, plus Gradle and Kotlin/Native for a Compose Multiplatform app) it ran an 8 GB Mac out of memory. The
- * build needs only the device's id.
- */
-function resolveIosSim(flags) {
-  if (flags.udid) {
-    const wasBooted = out2('xcrun', ['simctl', 'list', 'devices', 'booted']).includes(flags.udid);
-    return { udid: flags.udid, booted: !wasBooted, created: false };
-  }
-  if (!flags.device) {
-    const booted = out2('xcrun', ['simctl', 'list', 'devices', 'booted']).match(udidRe);
-    if (booted) return { udid: booted[1], booted: false, created: false }; // the user's own sim — leave it alone
-  }
-  const name = flags.device || 'iPhone 18 Pro Max';
-  let created = false;
-  let udid = newestSimNamed(name);
-  if (!udid) {
-    const devtype = out2('xcrun', ['simctl', 'list', 'devicetypes']).split('\n')
-      .find((l) => l.trim().startsWith(`${name} (`))?.match(/(com\.apple[^\s)]+)/)?.[1];
-    const runtime = out2('xcrun', ['simctl', 'list', 'runtimes', 'ios']).split('\n').reverse()
-      .find((l) => /com\.apple[^\s)]+/.test(l))?.match(/(com\.apple[^\s)]+)/)?.[1];
-    if (!devtype || !runtime) throw new Error(`Could not resolve a simulator for "${name}".`);
-    udid = sh('xcrun', ['simctl', 'create', 'zdymak-capture', devtype, runtime]).trim();
-    created = true;
-  }
-  return { udid, booted: true, created };
 }
 
 /** Boot what `resolveIosSim` found, unless it was already running, and wait until it has booted. */
@@ -715,7 +651,10 @@ async function captureIos(flags) {
       const built = settings.map((t) => t.buildSettings ?? {}).find((b) => b.WRAPPER_EXTENSION === 'app') ?? {};
       app = built.TARGET_BUILD_DIR && built.WRAPPER_NAME ? path.join(built.TARGET_BUILD_DIR, built.WRAPPER_NAME) : '';
       if (!app || !fs.existsSync(app)) throw new Error(`xcodebuild built ${flags.scheme} but reported no .app (looked for ${app || 'TARGET_BUILD_DIR/WRAPPER_NAME'})`);
+      recordBuiltApp(app, flags); // --app-out <file>: the next captures of the set install this build with --app
     }
+    // --app: an app an earlier run built, installed below like a fresh build (its bundle id was read in withPrebuiltApp).
+    if (flags.app) app = flags.app;
     // Only now, with the build's memory given back, does the simulator boot.
     startIosSim(sim);
     started = true;
@@ -1212,7 +1151,7 @@ async function recordAndroidStates(states, suffix, outDir, flags) {
  */
 export async function runCapture(flags) {
   const platform = flags.platform;
-  if (platform === 'ios') return captureIos(flags);
+  if (platform === 'ios') return captureIos(withPrebuiltApp(flags)); // --app / --app-out checked before anything runs
   if (platform === 'android') return captureAndroid(flags);
   if (platform === 'web') return captureWeb(flags, { stripAlpha, sleep });
   if (platform === 'macos' || platform === 'mac') {
